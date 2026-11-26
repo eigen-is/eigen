@@ -1,8 +1,8 @@
 // The Workbook: the sheet editor's root component and the context every part of the grid reads. It loads the host's
-// sheets once, as it mounts. Each edit runs as a recipe through setContextWithProduce, which applies it at the call,
-// records the tab's undo entry and sends the edit's ops through onOp before it returns. React only renders the result.
-// A host's hooks stay in a ref read at call time, so a host render writes nothing. It also owns undo and redo, the
-// clipboard listeners and the imperative API a host reaches through its ref.
+// sheets once, as it mounts. Each edit runs as a recipe through setContextWithProduce, which applies it, records the
+// tab's undo entry and sends its ops through onOp before it returns; React only renders the result. A host's hooks stay
+// in a ref read at call time, so a host render writes nothing. It also owns undo and redo, the clipboard listeners, the
+// imperative API a host reaches through its ref, and the menu bar over the grid with a host's pane, such as comments.
 
 import { formatWithLabels, matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { chartSpecTexts, isSketchCapped, newChartSpecParts, readChartSpec } from '@workspace/lib/charts';
@@ -84,6 +84,8 @@ type AdditionalProps = {
     onOp?: (op: Op[]) => void;
     toolbarLeftItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
+    // A host's pane, such as its comments, under the menu bar and beside the grid. Its keys are its own.
+    rightSlot?: React.ReactNode;
 };
 
 const CUT_BY_PEER_NOTICE = {
@@ -124,6 +126,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             onOp,
             toolbarLeftItems,
             toolbarRightItems,
+            rightSlot,
             data,
             allowEdit = true,
             hooks,
@@ -148,6 +151,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const cellArea = useRef<HTMLDivElement>(null);
         const workbookContainer = useRef<HTMLDivElement>(null);
         const menuBar = useRef<HTMLDivElement>(null);
+        const slot = useRef<HTMLDivElement>(null);
 
         const refs: RefValues = useMemo(
             () => ({
@@ -422,6 +426,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // A portalled menu, popover or dialog renders outside this div, but its keydown still bubbles here
                 // through the React tree, where it would move the selection and take the focus out of the menu.
                 if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
+                if (slot.current?.contains(e.target)) return;
                 const { nativeEvent } = e;
                 // Undo and redo are writes, and a write must not start inside another's recipe, so they run ahead of
                 // the grid's handler. An open cell editor leaves the keys to the browser, which undoes the typing.
@@ -585,16 +590,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 <li>Move left: Shift, Tab.</li>
                             </ul>
                         </section>
-                        <div className="w-full">
-                            <WorkbookMenuBar
-                                ref={menuBar}
-                                leftItems={toolbarLeftItems}
-                                rightItems={toolbarRightItems}
-                            />
-                            <FxEditor />
+                        <WorkbookMenuBar ref={menuBar} leftItems={toolbarLeftItems} rightItems={toolbarRightItems} />
+                        <div className="flex min-h-0 flex-1">
+                            <div className="flex min-w-0 flex-1 flex-col">
+                                <FxEditor />
+                                <Sheet />
+                                <SheetTab />
+                            </div>
+                            <div ref={slot} className="contents">
+                                {rightSlot}
+                            </div>
                         </div>
-                        <Sheet />
-                        <SheetTab />
                         <FilterMenu />
                     </div>
                 </ModalProvider>

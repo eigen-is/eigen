@@ -1,10 +1,10 @@
-// The Sheets editor page: the Workbook grid over its collab document, with the toolbar, comments, chat, find and
-// image and chart panels around it. SheetEditor is what the sheet route renders for one open workbook, and the grid
-// it mounts takes its data and op log from useSheet.
+// The Sheets editor page: the Workbook grid over its collab document, with the toolbar, find, and the comments column
+// or the image and chart panel in the workbook's right slot. SheetEditor is what the sheet route renders for one open
+// workbook, and the grid it mounts takes its data and op log from useSheet.
 
 import { useAuth } from '@workspace/lib/auth';
 import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
-import { useCommentFilter, useCommentHover, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentHover } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     useCopyToMediaFolder,
@@ -16,8 +16,7 @@ import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
-import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
+import type { CardAttachmentDraft, CardFormPatch, DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { ImageSize } from '@workspace/lib/vector';
@@ -27,23 +26,27 @@ import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
-    CommentCardDialog,
     CommentHoverCard,
     CommentLifecycleDialogs,
-    PanelColumn,
-    useCommentChatParam,
+    CommentsColumn,
+    useCommentsColumn,
 } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
-import { CollabDocumentGate, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
+import {
+    CollabDocumentGate,
+    PhoneDetail,
+    UnsyncedEditsGuard,
+    useColumnWidthPx,
+    useLayout,
+} from '@workspace/ui/components/layout/app';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { readImageSizeFromUrl } from '@workspace/ui/components/media';
 import type { TransformFields } from '@workspace/ui/components/properties-panel';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
-import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { anchoredComments, stripCommentCard } from './comment-anchors';
@@ -60,6 +63,8 @@ type SheetEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    // The route's ?panel= and ?chat=: the comments column's list and its open thread.
+    panel: DocumentPanel | undefined;
     chat: string | undefined;
     initialSearchTerm?: string;
 };
@@ -71,6 +76,7 @@ export function SheetEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    panel,
     chat,
     initialSearchTerm,
 }: SheetEditorProps) {
@@ -106,20 +112,7 @@ export function SheetEditor({
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrlByPath, startUpload } = useMediaResolver();
-    // On a phone the side panel would squeeze the workbook to about 130px, so the panel takes the whole
-    // editor area instead. The engine measures its canvas again when the workbook shows again.
     const { isMobile } = useLayout();
-    const {
-        panel,
-        commentPanelOpen,
-        activityPanelOpen,
-        mobilePanelOpen,
-        toggleComments,
-        toggleActivity,
-        openComments,
-        closePanels,
-        onSearchOpenChange,
-    } = useDocumentPanels(isMobile);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -133,7 +126,7 @@ export function SheetEditor({
     // runs again after each change to the document.
     const searchController = useSheetSearchController(workbookRef, sheets, canWrite);
     const activeComments = useMemo(() => anchoredComments(sheets, currentSheetId), [sheets, currentSheetId]);
-    const lifecycle = useCommentLifecycle({
+    const { lifecycle, column } = useCommentsColumn({
         ownerId,
         mountId: path.mountId,
         pathId: path.id,
@@ -141,47 +134,27 @@ export function SheetEditor({
         mediaFolderId,
         doc: docRef.current,
         activeCardIds: activeComments.ids,
-        ...useCommentChatParam(chat),
         // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then. A
         // failed load shows default cells that anchor nothing, so every comment would read as deleted.
         ready: sheets.length > 0 && !loadFailed,
+        panel,
+        chat,
+        // A list row, an activity row and a landing jump to the comment's first cell. The jump centers the cell, so it
+        // stays in view as a thread narrows the grid.
+        reveal: (cardId) => {
+            const cell = activeComments.firstCells.get(cardId);
+            if (cell) workbookRef.current?.revealSearchMatch(cell);
+            return !!cell;
+        },
     });
-    const {
-        allComments,
-        cards,
-        createCard,
-        assignComment,
-        members,
-        assignedCount,
-        setOpenCardId,
-        openChat: openLifecycleChat,
-        isCardDeleted,
-    } = lifecycle;
-    // The filter lives here, so it survives closing and opening the panel.
+    const { allComments, cards, createCard, assignComment, members, assignedCount } = lifecycle;
+    // The filter lives here, so it survives closing and opening the column.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const commentHover = useCommentHover();
     const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
-
-    // A pane row takes the focus from the grid, and the thread hands it back to whatever held it as it closes.
-    const openCard = (cardId: string) => {
-        const cell = activeComments.firstCells.get(cardId);
-        if (cell) workbookRef.current?.revealSearchMatch(cell);
-        workbookRef.current?.focusGrid();
-        setOpenCardId(cardId);
-    };
-    // The mobile pane hides the workbook, so a jump would go unseen there.
-    const openChat = isMobile ? openLifecycleChat : (chatName: string) => openLifecycleChat(chatName, openCard);
-
-    // A new object on each render, which the palette's publisher stabilizes, so reveal sees the current cards. A hit
-    // comes from the palette, not the pane, so it opens the pane first.
-    const commentSearch: DocCommentSearch = {
-        ...commentSearchHalf,
-        reveal: (chatName) => {
-            openComments();
-            openChat(chatName);
-        },
-    };
+    // A new object on each render, which the palette's publisher stabilizes, so a hit sees the current cards.
+    const commentSearch = { ...commentSearchHalf, reveal: column.openChat };
 
     const deleteCard = useCallback((cardId: string) => {
         if (workbookRef.current) stripCommentCard(workbookRef.current, cardId);
@@ -347,34 +320,62 @@ export function SheetEditor({
         [path, canWrite, onAccessDialogOpen],
     );
 
-    const rightItems = useMemo(
-        () => (
-            <DocumentShareCluster
-                canWrite={canWrite}
-                offline={offline}
-                storageUnavailable={storageUnavailable}
-                onAccessDialogOpen={onAccessDialogOpen}
-                onToggleCommentPanel={toggleComments}
-                commentPanelOpen={commentPanelOpen}
-                onToggleActivityPanel={toggleActivity}
-                activityPanelOpen={activityPanelOpen}
-                assignedCommentCount={assignedCount}
-                watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-            />
-        ),
-        [
-            canWrite,
-            offline,
-            storageUnavailable,
-            onAccessDialogOpen,
-            commentPanelOpen,
-            activityPanelOpen,
-            assignedCount,
-            path.ownerId,
-            path.mountId,
-            path.id,
-        ],
+    const rightItems = (
+        <DocumentShareCluster
+            canWrite={canWrite}
+            offline={offline}
+            storageUnavailable={storageUnavailable}
+            onAccessDialogOpen={onAccessDialogOpen}
+            onToggleCommentPanel={column.toggleComments}
+            commentPanelOpen={column.commentPanelOpen}
+            onToggleActivityPanel={column.toggleActivity}
+            activityPanelOpen={column.activityPanelOpen}
+            assignedCommentCount={assignedCount}
+            watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+        />
     );
+
+    const commentsColumn = column.open && (
+        <CommentsColumn
+            column={column}
+            lifecycle={lifecycle}
+            path={path}
+            canWrite={canWrite}
+            members={members}
+            currentUserEmail={auth.user?.email ?? ''}
+            filter={commentFilter}
+            activeComments={activeComments}
+            commentContextMenu={commentContextMenu}
+        />
+    );
+    // The column takes the floating-object panel's place while it is open. A phone has no room for the panel, and its
+    // column covers the workbook instead.
+    const rightSlot = isMobile
+        ? null
+        : commentsColumn ||
+          (activeObject && (
+              <FloatingObjectPanel
+                  item={activeObject}
+                  canWrite={canWrite}
+                  aspectLocked={aspectLocked}
+                  onAspectLockChange={setAspectLocked}
+                  onChange={handleObjectTransform}
+                  onArrange={(op) =>
+                      workbookRef.current?.reorderFloatingObject(
+                          { kind: activeObject.kind, id: activeObject.object.id },
+                          op,
+                      )
+                  }
+                  beginGesture={beginObjectGesture}
+                  history={objectHistory}
+              >
+                  {chartPanel && (
+                      <ChartPanelSections key={chartPanel.chart.id} panel={chartPanel} workbook={workbookRef} />
+                  )}
+              </FloatingObjectPanel>
+          ));
+    // The find bar floats clear of whatever holds the slot, plus its own 16px gutter.
+    const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
 
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
@@ -401,115 +402,79 @@ export function SheetEditor({
                     </div>
                 )}
                 <div className="flex min-h-0 w-full flex-1 overflow-hidden">
-                    {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
-                    <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
-                        <DocSearchProvider
-                            controller={searchController}
-                            commentSearch={commentSearch}
-                            initialSearchTerm={initialSearchTerm}
-                            onOpenChange={onSearchOpenChange}
-                            barClassName="top-20"
-                            onUndo={() => workbookRef.current?.undo()}
-                            onRedo={() => workbookRef.current?.redo()}
-                        >
-                            <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
-                                <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
-                                {/* Set by the same sync that latches `loaded`; the check only narrows the type. */}
-                                {initialData && (
-                                    <Workbook
-                                        ref={workbookRef}
-                                        data={initialData}
-                                        onChange={handleWorkbookChange}
-                                        onOp={handleOp}
-                                        allowEdit={canWrite && !loadFailed}
-                                        toolbarLeftItems={leftItems}
-                                        toolbarRightItems={rightItems}
-                                        aspectLocked={aspectLocked}
-                                        commentCards={cards}
-                                        hooks={{
-                                            afterSelectionChange: (sheetId, selection) => {
-                                                const r = selection.row_focus ?? selection.row?.[0];
-                                                const c = selection.column_focus ?? selection.column?.[0];
-                                                if (r != null && c != null) publishSelection(sheetId, r, c);
-                                            },
-                                            onActiveObjectChange: setActiveObject,
-                                            onChartPanelChange: setChartPanel,
-                                            ...(canWrite && mediaFolderId
-                                                ? {
-                                                      onInsertImage: () => setImagePickerOpen(true),
-                                                      onPasteEigenImage: handlePasteEigenImage,
-                                                      onPasteImageFile: handleImageFile,
-                                                      onPasteSvgFile: handlePasteSvgFile,
-                                                  }
-                                                : {}),
-                                            ...(canWrite && chatFolderId
-                                                ? {
-                                                      onAddComment: addComment,
-                                                  }
-                                                : {}),
-                                            commentLifecycle: lifecycle,
-                                            ...(canWrite ? { onDeleteComment: deleteCard } : {}),
-                                            getCommentInfo: (r: number, c: number) => {
-                                                const grid = workbookRef.current?.getFlowdata();
-                                                const cardId = grid?.[r]?.[c]?.commentCardIds?.[0];
-                                                const card = cardId ? cards[cardId] : undefined;
-                                                if (!card) return null;
-                                                const entry = card.chatName
-                                                    ? allComments.find((comment) => comment.chatName === card.chatName)
-                                                    : undefined;
-                                                return { card, entry };
-                                            },
-                                            onCommentHover: commentHover.report,
-                                        }}
-                                    />
-                                )}
-                            </div>
-                        </DocSearchProvider>
-                    </div>
-                    {panel && auth.user && (
-                        <PanelColumn
-                            activePanel={panel}
-                            onClose={closePanels}
-                            path={path}
-                            cards={cards}
-                            entries={allComments}
-                            members={members}
-                            currentUserEmail={auth.user.email}
-                            filter={commentFilter}
-                            activeComments={activeComments}
-                            isCardDeleted={isCardDeleted}
-                            commentContextMenu={commentContextMenu}
-                            onOpenCard={isMobile ? setOpenCardId : openCard}
-                            onOpenChat={openChat}
-                        />
-                    )}
-                    {/* The comment and activity panels take the place of the properties panel, as in Slides. A
-                        phone has no room for it. */}
-                    {activeObject && !panel && !isMobile && (
-                        <FloatingObjectPanel
-                            item={activeObject}
-                            canWrite={canWrite}
-                            aspectLocked={aspectLocked}
-                            onAspectLockChange={setAspectLocked}
-                            onChange={handleObjectTransform}
-                            onArrange={(op) =>
-                                workbookRef.current?.reorderFloatingObject(
-                                    { kind: activeObject.kind, id: activeObject.object.id },
-                                    op,
-                                )
-                            }
-                            beginGesture={beginObjectGesture}
-                            history={objectHistory}
-                        >
-                            {chartPanel && (
-                                <ChartPanelSections
-                                    key={chartPanel.chart.id}
-                                    panel={chartPanel}
-                                    workbook={workbookRef}
-                                />
-                            )}
-                        </FloatingObjectPanel>
-                    )}
+                    {/* On a phone the column covers the workbook, which stays mounted so its document survives the
+                        visit and the engine measures its canvas again as it shows. Hiding takes the find bar too: it
+                        floats in this wrapper. */}
+                    <PhoneDetail detail={commentsColumn}>
+                        <div className="flex-1 overflow-hidden">
+                            <DocSearchProvider
+                                controller={searchController}
+                                commentSearch={commentSearch}
+                                initialSearchTerm={initialSearchTerm}
+                                onOpenChange={column.onSearchOpenChange}
+                                barClassName="top-20"
+                                barStyle={rightSlot ? { right: slotPx + 16 } : undefined}
+                                onUndo={() => workbookRef.current?.undo()}
+                                onRedo={() => workbookRef.current?.redo()}
+                            >
+                                <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
+                                    <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
+                                    {/* Set by the same sync that latches `loaded`; the check only narrows the type. */}
+                                    {initialData && (
+                                        <Workbook
+                                            ref={workbookRef}
+                                            data={initialData}
+                                            onChange={handleWorkbookChange}
+                                            onOp={handleOp}
+                                            allowEdit={canWrite && !loadFailed}
+                                            toolbarLeftItems={leftItems}
+                                            toolbarRightItems={rightItems}
+                                            rightSlot={rightSlot}
+                                            aspectLocked={aspectLocked}
+                                            commentCards={cards}
+                                            hooks={{
+                                                afterSelectionChange: (sheetId, selection) => {
+                                                    const r = selection.row_focus ?? selection.row?.[0];
+                                                    const c = selection.column_focus ?? selection.column?.[0];
+                                                    if (r != null && c != null) publishSelection(sheetId, r, c);
+                                                },
+                                                onActiveObjectChange: setActiveObject,
+                                                onChartPanelChange: setChartPanel,
+                                                ...(canWrite && mediaFolderId
+                                                    ? {
+                                                          onInsertImage: () => setImagePickerOpen(true),
+                                                          onPasteEigenImage: handlePasteEigenImage,
+                                                          onPasteImageFile: handleImageFile,
+                                                          onPasteSvgFile: handlePasteSvgFile,
+                                                      }
+                                                    : {}),
+                                                ...(canWrite && chatFolderId
+                                                    ? {
+                                                          onAddComment: addComment,
+                                                      }
+                                                    : {}),
+                                                commentLifecycle: lifecycle,
+                                                ...(canWrite ? { onDeleteComment: deleteCard } : {}),
+                                                getCommentInfo: (r: number, c: number) => {
+                                                    const grid = workbookRef.current?.getFlowdata();
+                                                    const cardId = grid?.[r]?.[c]?.commentCardIds?.[0];
+                                                    const card = cardId ? cards[cardId] : undefined;
+                                                    if (!card) return null;
+                                                    const entry = card.chatName
+                                                        ? allComments.find(
+                                                              (comment) => comment.chatName === card.chatName,
+                                                          )
+                                                        : undefined;
+                                                    return { card, entry };
+                                                },
+                                                onCommentHover: commentHover.report,
+                                            }}
+                                        />
+                                    )}
+                                </div>
+                            </DocSearchProvider>
+                        </div>
+                    </PhoneDetail>
                 </div>
             </div>
 
@@ -533,11 +498,9 @@ export function SheetEditor({
                 cards={cards}
                 entries={allComments}
                 side="right"
-                isCardDeleted={isCardDeleted}
-                onOpenCard={setOpenCardId}
+                isCardDeleted={lifecycle.isCardDeleted}
+                onOpenCard={lifecycle.setOpenCardId}
             />
-
-            <CommentCardDialog lifecycle={lifecycle} path={path} canWrite={canWrite} />
 
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
