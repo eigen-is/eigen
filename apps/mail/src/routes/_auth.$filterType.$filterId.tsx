@@ -12,7 +12,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column, ColumnLayout, DetailColumn, EmptyState } from '@workspace/ui/components/layout/app';
+import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
@@ -260,6 +260,41 @@ function MailRoute() {
         />
     ) : null;
 
+    // Leaving compose is safe: EmailDraft saves the draft on unmount.
+    const detail = !showDetail ? null : isComposing ? (
+        <EmailDraft
+            // A compose session stays mounted across auto-save's URL update. An open
+            // draft keys on its id, because the editor reads its content on mount only.
+            key={mode === 'compose' ? `compose-${composeSessionKey ?? 'fresh'}` : (selectedEmail?.id ?? 'empty')}
+            email={isEmailDraft(selectedEmail) ? selectedEmail : null}
+            prefillDraft={prefillDraft}
+            forwardedParts={forwardedParts}
+            to={to}
+            initialDriveAttachments={initialDriveAttachments}
+            signatureHtml={signatureHtml}
+            sendDraft={actions.handleSendEmail}
+            onAutoSave={actions.saveDraft}
+            onDraftIdAssigned={actions.handleDraftIdAssigned}
+            onForwardedPartsSaved={actions.handleForwardedPartsSaved}
+            isSending={isSending}
+            onPreparingSendChange={setPreparingSend}
+            filePickerOpen={filePickerOpen}
+            onFilePickerOpenChange={setFilePickerOpen}
+        />
+    ) : selectedEmail ? (
+        <EmailDetail
+            email={selectedEmail}
+            toggleMailRead={actions.handleToggleMailRead}
+            highlightTerm={q}
+            remoteImagesLoaded={actions.imagesLoadedFor === selectedEmail.id}
+            onLoadRemoteImages={() => actions.loadRemoteImages(selectedEmail.id)}
+        />
+    ) : isEmailPending ? (
+        <LoadingState />
+    ) : (
+        <EmptyState message="Email not found" />
+    );
+
     return (
         <>
             <MailShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} enabled={shortcutsEnabled} />
@@ -291,81 +326,43 @@ function MailRoute() {
             )}
             {/* display:contents, so the ref hangs on a real node without changing the layout. */}
             <div ref={mailSurfaceRef} className="contents">
-                <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-                    <Column id="list" width={showDetail ? 'large' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
-                        <div className="flex flex-col h-full overflow-hidden">
-                            <EmailList
-                                // A new mailbox or search text scrolls the list to the top. A refined search
-                                // that shrinks the results would otherwise keep a scroll offset past the end.
-                                resetKey={`${filterId}:${searchQuery.trim()}`}
-                                orderedEmails={orderedEmails}
-                                selection={selection}
-                                cursorIndex={cursorIndex}
-                                setCursorIndex={setCursorIndex}
-                                isLoading={isListLoading}
-                                error={emailsError}
-                                // Paging only applies to the live mailbox; search returns a single capped set.
-                                hasMore={!isSearching && !!hasNextPage}
-                                isFetchingMore={isFetchingNextPage}
-                                onLoadMore={fetchNextPage}
-                                onRowClick={openEmail}
-                                activeRowId={mailId}
-                                // The same gate the shortcuts layer uses: while the inline composer owns
-                                // typing, the list must not grab or reclaim focus.
-                                isComposing={isComposing}
-                                mailboxes={mailboxes}
-                                currentFolderId={currentFolderId}
-                                onDelete={handleDeleteEmailsByIds}
-                                onArchive={actions.handleArchiveEmailsByIds}
-                                onReportSpam={actions.handleReportSpamByIds}
-                                onMoveToFolder={actions.handleMoveEmailsToFolderByIds}
-                                onReply={actions.handleReplyEmail}
-                                onReplyAll={actions.handleReplyAllEmail}
-                                onForward={actions.handleForwardEmail}
-                            />
-                        </div>
-                    </Column>
-                    {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
-                    {showDetail && (
-                        <DetailColumn width="flex" actions={detailToolbar} onClose={actions.closeDetail} fill>
-                            {isComposing ? (
-                                <EmailDraft
-                                    // A compose session stays mounted across auto-save's URL update. An open
-                                    // draft keys on its id, because the editor reads its content on mount only.
-                                    key={
-                                        mode === 'compose'
-                                            ? `compose-${composeSessionKey ?? 'fresh'}`
-                                            : (selectedEmail?.id ?? 'empty')
-                                    }
-                                    email={isEmailDraft(selectedEmail) ? selectedEmail : null}
-                                    prefillDraft={prefillDraft}
-                                    forwardedParts={forwardedParts}
-                                    to={to}
-                                    initialDriveAttachments={initialDriveAttachments}
-                                    signatureHtml={signatureHtml}
-                                    sendDraft={actions.handleSendEmail}
-                                    onAutoSave={actions.saveDraft}
-                                    onDraftIdAssigned={actions.handleDraftIdAssigned}
-                                    onForwardedPartsSaved={actions.handleForwardedPartsSaved}
-                                    isSending={isSending}
-                                    onPreparingSendChange={setPreparingSend}
-                                    filePickerOpen={filePickerOpen}
-                                    onFilePickerOpenChange={setFilePickerOpen}
-                                />
-                            ) : selectedEmail ? (
-                                <EmailDetail
-                                    email={selectedEmail}
-                                    toggleMailRead={actions.handleToggleMailRead}
-                                    highlightTerm={q}
-                                    remoteImagesLoaded={actions.imagesLoadedFor === selectedEmail.id}
-                                    onLoadRemoteImages={() => actions.loadRemoteImages(selectedEmail.id)}
-                                />
-                            ) : isEmailPending ? null : (
-                                <EmptyState message="Email not found" />
-                            )}
-                        </DetailColumn>
-                    )}
-                </ColumnLayout>
+                <ListDetailLayout
+                    listToolbar={listToolbar}
+                    detail={detail}
+                    detailToolbar={detailToolbar}
+                    onClose={actions.closeDetail}
+                    fillDetail
+                >
+                    <EmailList
+                        // A new mailbox or search text scrolls the list to the top. A refined search
+                        // that shrinks the results would otherwise keep a scroll offset past the end.
+                        resetKey={`${filterId}:${searchQuery.trim()}`}
+                        orderedEmails={orderedEmails}
+                        selection={selection}
+                        cursorIndex={cursorIndex}
+                        setCursorIndex={setCursorIndex}
+                        isLoading={isListLoading}
+                        error={emailsError}
+                        // Paging only applies to the live mailbox; search returns a single capped set.
+                        hasMore={!isSearching && !!hasNextPage}
+                        isFetchingMore={isFetchingNextPage}
+                        onLoadMore={fetchNextPage}
+                        onRowClick={openEmail}
+                        activeRowId={mailId}
+                        // The same gate the shortcuts layer uses: while the inline composer owns
+                        // typing, the list must not grab or reclaim focus.
+                        isComposing={isComposing}
+                        mailboxes={mailboxes}
+                        currentFolderId={currentFolderId}
+                        onDelete={handleDeleteEmailsByIds}
+                        onArchive={actions.handleArchiveEmailsByIds}
+                        onReportSpam={actions.handleReportSpamByIds}
+                        onMoveToFolder={actions.handleMoveEmailsToFolderByIds}
+                        onReply={actions.handleReplyEmail}
+                        onReplyAll={actions.handleReplyAllEmail}
+                        onForward={actions.handleForwardEmail}
+                    />
+                </ListDetailLayout>
             </div>
         </>
     );

@@ -14,9 +14,18 @@ type ListDetailLayoutProps = {
     // The detail's actions, at the right of its bar before the X.
     detailToolbar?: ReactNode;
     onClose: () => void;
+    // The detail fills the column's body and scrolls itself, such as Mail's reader and composer.
+    fillDetail?: boolean;
 };
 
-export function ListDetailLayout({ listToolbar, children, detail, detailToolbar, onClose }: ListDetailLayoutProps) {
+export function ListDetailLayout({
+    listToolbar,
+    children,
+    detail,
+    detailToolbar,
+    onClose,
+    fillDetail,
+}: ListDetailLayoutProps) {
     const open = !!detail;
     return (
         <ColumnLayout mobileColumn={open ? 'detail' : 'list'}>
@@ -24,7 +33,7 @@ export function ListDetailLayout({ listToolbar, children, detail, detailToolbar,
                 <div className="flex h-full flex-col overflow-y-auto">{children}</div>
             </Column>
             {open && (
-                <DetailColumn width="flex" actions={detailToolbar} onClose={onClose}>
+                <DetailColumn width="flex" actions={detailToolbar} onClose={onClose} fill={fillDetail}>
                     {detail}
                 </DetailColumn>
             )}

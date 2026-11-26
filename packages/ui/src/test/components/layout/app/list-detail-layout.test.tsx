@@ -1,7 +1,8 @@
 // A list page opens its detail only once something is selected. Without a selection the list takes the
 // whole width and there is no detail column at all; with one the list narrows to its fixed width beside
 // the detail. The detail is a detail column: its X and Esc close it, and on a phone, where only one of the
-// two shows, its lone back closes it instead of the X.
+// two shows, its lone back closes it instead of the X. The column scrolls the detail, unless the detail
+// fills the body and scrolls itself.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
@@ -17,7 +18,7 @@ afterEach(() => unmount());
 
 const onClose = mock(() => {});
 
-async function render(selected: boolean, isMobile = false) {
+async function render(selected: boolean, isMobile = false, fillDetail = false) {
     await unmount();
     onClose.mockClear();
     const layout = {
@@ -39,6 +40,7 @@ async function render(selected: boolean, isMobile = false) {
         detail: selected ? 'The detail' : undefined,
         detailToolbar: selected ? 'Detail toolbar' : undefined,
         onClose,
+        fillDetail,
         children: 'The list',
     });
     const rendered = await renderInDocument(createElement(LayoutContext.Provider, { value: layout }, page));
@@ -52,6 +54,7 @@ async function render(selected: boolean, isMobile = false) {
         listWidth: list instanceof HTMLElement ? list.style.width : '',
         listGrow: list instanceof HTMLElement ? list.style.flexGrow : '',
         close: container.querySelector<HTMLButtonElement>('button[aria-label="Close"]'),
+        scrolledBody: container.querySelector('[data-slot="detail-column"] .overflow-y-auto'),
         back: container.querySelector<HTMLButtonElement>('[data-slot="detail-column"] button[aria-label="Back"]'),
     };
 }
@@ -105,4 +108,9 @@ test('on a phone the list shows until a selection, then only the detail', async 
     const detail = await render(true, true);
     expect(detail.text).toContain('The detail');
     expect(detail.text).not.toContain('The list');
+});
+
+test('the column scrolls the detail, unless the detail fills the body itself', async () => {
+    expect((await render(true)).scrolledBody).not.toBeNull();
+    expect((await render(true, false, true)).scrolledBody).toBeNull();
 });
