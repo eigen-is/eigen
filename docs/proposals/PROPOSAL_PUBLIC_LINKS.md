@@ -116,7 +116,7 @@ A document refers to its pictures by name in its own `media/` folder ([MEDIA-REF
 
 ## The socket
 
-A socket that opens with a user is untouched, a signed-in reader of a public document included. A socket without a user differs in five ways:
+A socket that opens with a user is untouched, a signed-in reader of a public document included. A socket without a user differs in six ways:
 
 - **The upgrade is refused unless the rule admits the path.** The route's `beforeHandle` asks `LinkDrive.canRead` for a connection without a user and answers 403, so an unauthenticated upgrade to a path no link opens never reaches `open`. The open asks again, since the access can change while the document loads.
 - **The server greets it with nothing.** `CollabDocument.greetMember` sends a connection without a user neither the server's sync step 1 nor the awareness states. A visitor's answer to that step 1 would be its whole state, which a reader's socket drops unread. So the visitor syncs from its own step 1.

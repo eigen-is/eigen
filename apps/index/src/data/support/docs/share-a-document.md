@@ -45,9 +45,7 @@ To share more widely, pick another choice from the dropdown under **General acce
 - **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the document. Choose **Can view** or **Can edit** beside it.
 - **Anyone with the link**: anyone who has the link can view the document, with no account and no sign-in ([Share with a public link](/support/drive/share-with-a-public-link)).
 
-Then click **Save**.
-
-To copy the link, click the link icon next to **People with access**.
+To copy the link, click the link icon next to **People with access**. Then click **Save**, which closes the dialog.
 
 <div class="eigen-callout">
 

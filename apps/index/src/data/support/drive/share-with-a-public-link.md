@@ -15,8 +15,8 @@ A public link lets anyone who has it view a file, a folder or a document, withou
 
 1. Open the **Share** dialog for the file, folder or document, as in [Share a file or folder](/support/drive/share-a-file).
 2. Under **General access**, open the dropdown and choose **Anyone with the link**. The line under it reads "Anyone on the internet with the link can view".
-3. Click **Save**.
-4. Click **Copy link** next to **People with access**, and send the link to whoever you like.
+3. Click **Copy link** next to **People with access**.
+4. Click **Save**, and send the link to whoever you like.
 
 You can do this on a file, a folder or a document in Docs, Sheets, Slides, Vector or Stickies. A chat room can't have a public link.
 
