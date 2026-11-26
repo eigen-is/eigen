@@ -1,7 +1,8 @@
 // Deletes the parts of a document that its current state does not name, such as an image deleted from a doc or the
 // thread of a deleted comment. It runs only when a change asks for it, such as Delete history or a copy. Inside each
 // thread it keeps, a file no message names goes too. A part younger than the grace stays, because an upload lands
-// before the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes no more.
+// before the edit that names it. A copy deletes only parts it wrote itself. A failure is logged and deletes nothing
+// more in that document.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, DRIVE_TYPE_FILE, isCollabType } from '@workspace/lib/types/drive';
@@ -19,22 +20,24 @@ import type { Drive } from './drive';
 // Runs on an open document as well as a closed one, as both read the same data.db. The grace is how old a part must
 // be to go.
 export async function sweepDocument(drive: Drive, mount: Mount, document: DrivePath, graceMs: number): Promise<void> {
-    try {
-        await sweepParts(drive, mount, document, Date.now() - graceMs, null);
-    } catch (error) {
-        console.warn(`[sweep] stopped in ${document.id}:`, error instanceof Error ? error.message : error);
-    }
+    await sweepLogged(document.id, () => sweepParts(drive, mount, document, Date.now() - graceMs, null));
 }
 
 // Sweeps each document a copy made, with no grace. Someone may add a part to the copy while it lands, so only the
-// paths the copy made may go. The copy itself succeeded, so a failure only logs.
+// paths the copy made may go. The copy itself succeeded, so a failure only logs, and stops only that document.
 export async function sweepCopy(drive: Drive, mount: Mount, copy: Copied): Promise<void> {
+    for (const id of copy.documentIds) {
+        await sweepLogged(id, async () =>
+            sweepParts(drive, mount, await mount.getActivePath(id), Date.now(), copy.createdIds),
+        );
+    }
+}
+
+async function sweepLogged(documentId: string, sweep: () => Promise<void>): Promise<void> {
     try {
-        for (const id of copy.documentIds) {
-            await sweepParts(drive, mount, await mount.getActivePath(id), Date.now(), copy.createdIds);
-        }
+        await sweep();
     } catch (error) {
-        console.warn(`[sweep] stopped in ${copy.path.id}:`, error instanceof Error ? error.message : error);
+        console.warn(`[sweep] stopped in ${documentId}:`, error instanceof Error ? error.message : error);
     }
 }
 

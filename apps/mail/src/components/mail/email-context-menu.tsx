@@ -31,7 +31,7 @@ type EmailContextMenuProps = {
     onReportSpam?: (emailIds: string[]) => void;
     onDelete?: (emailIds: string[]) => void;
     onMoveToFolder?: (emailIds: string[], folderId: string) => void;
-    onClose: () => void;
+    onClose?: () => void;
     onPrint?: (emailId: string) => void;
 };
 
@@ -55,7 +55,7 @@ export function EmailContextMenu({
 
     const run = (fn: () => void) => () => {
         fn();
-        onClose();
+        onClose?.();
     };
 
     return (

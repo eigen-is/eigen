@@ -8,7 +8,6 @@ import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import { useCanWriteFolder, useFolderContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
@@ -43,7 +42,7 @@ function FolderRoute() {
                 params: { ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id },
             });
         }
-    }, [pathId, rootPath, navigate, ownerId]);
+    }, [pathId, rootPath, navigate]);
 
     const skipDataFetch = pathId === 'root';
     const {
@@ -53,7 +52,7 @@ function FolderRoute() {
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
     const { data: selectedPath = null, isLoading: isSelectedPathLoading } = usePathInfo(ownerId, mountId, pid);
     const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
-    const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
+    const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId);
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
     // This listing needs the parent folder; a viewer shared only ?pid= can still open that item.
@@ -66,58 +65,35 @@ function FolderRoute() {
     // One capability set for menus, detail column and quick look.
     const capabilities = browseCapabilities(useCanWriteFolder(ownerId, mountId, pathId));
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
-        onOpenFolder: (path: DrivePath) =>
+        onOpenFolder: (path) =>
             navigate({
                 to: Route.fullPath,
                 params: { ownerId, mountId, pathId: path.id },
                 search: { pid: undefined },
             }),
-        onSelectItem: (path: DrivePath) => {
-            if (currentPath?.parentId === path.id) {
-                navigate({
-                    to: Route.fullPath,
-                    params: { ownerId, mountId, pathId: path.id },
-                    search: { pid: undefined },
-                });
-            } else {
-                navigate({
-                    to: Route.fullPath,
-                    params: { ownerId, mountId, pathId },
-                    search: { pid: path.id },
-                });
-            }
-        },
+        pid,
+        setSelectedItem: (path, { replace, state }) =>
+            navigate({
+                to: Route.fullPath,
+                params: { ownerId, mountId, pathId },
+                search: (prev) => ({ ...prev, pid: path?.id }),
+                replace,
+                state,
+            }),
     });
 
+    // A replace, so back after closing it never lands on the link that opened it.
     const handleShareDialogClose = (open: boolean) => {
         if (!open) {
             navigate({
                 to: Route.fullPath,
                 params: { ownerId, mountId, pathId },
-                search: { pid, sharePathId: undefined, shareEmail: undefined },
-            });
-        }
-    };
-
-    // The back button a narrow screen shows over an open item.
-    const handleBackToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { ownerId, mountId, pathId },
-            search: { pid: undefined },
-        });
-    };
-
-    // A deleted item that was open closes with it.
-    const handleAfterAction = (actionType: string, data: Record<string, unknown>) => {
-        if (actionType === 'delete' && pid === data.id) {
-            navigate({
-                to: Route.fullPath,
-                params: { ownerId, mountId, pathId },
-                search: { pid: undefined },
+                search: (prev) => ({ ...prev, sharePathId: undefined, shareEmail: undefined }),
+                replace: true,
+                state: true,
             });
         }
     };
@@ -145,8 +121,8 @@ function FolderRoute() {
                 onRowSelect={onRowSelect}
                 onRowActivate={onRowActivate}
                 onOpenSharedWithMe={() => navigate({ to: '/shared/$to', params: { to: 'with-me' } })}
-                onBackToList={handleBackToList}
-                onAfterAction={handleAfterAction}
+                onClose={onClose}
+                onAfterAction={onAfterAction}
                 capabilities={capabilities}
                 onQuickLook={onQuickLook}
                 pid={pid}

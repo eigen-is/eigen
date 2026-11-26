@@ -1,5 +1,5 @@
-// The storage section of a team's admin page: the team's Drive mounts, each with its storage, size and an on/off
-// switch, and the dialogs that add and edit one.
+// The Mounts section of a team's detail in the Admin app: the team's Drive mounts, each with its storage, size and
+// an on/off switch, and the dialogs that add and edit one.
 
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
@@ -8,7 +8,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import type { MountSettings } from '@workspace/lib/types/settings';
 import { mapStorageType } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
-import { EmptyState } from '@workspace/ui/components/layout/app';
+import { DetailSection, EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import type { MountFormValues } from '@workspace/ui/components/mount';
 import { Switch } from '@workspace/ui/components/switch';
@@ -53,15 +53,15 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
         s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Mounts ({entries.length})</h3>
+        <DetailSection
+            label={`Mounts (${entries.length})`}
+            action={
                 <Button variant="ghost" size="sm" onClick={() => setShowAddMount(true)}>
                     <HardDrive className="h-4 w-4 mr-1" />
                     Add
                 </Button>
-            </div>
-
+            }
+        >
             <MountDialog
                 open={showAddMount}
                 onOpenChange={setShowAddMount}
@@ -125,6 +125,6 @@ export function TeamMountsSection({ teamId }: TeamMountsSectionProps) {
                     ))}
                 </div>
             )}
-        </div>
+        </DetailSection>
     );
 }

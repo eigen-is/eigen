@@ -6,6 +6,7 @@
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import type { DragEvent, HTMLAttributes, MouseEvent, PointerEvent } from 'react';
 import { useRef, useState } from 'react';
+import { prefersReducedMotion } from './prefers-reduced-motion';
 
 const GLIDE_MS = 400;
 
@@ -53,7 +54,7 @@ export function useDragScroll(): DragScroll {
         const scroller = e.currentTarget;
         const from = scroller.scrollLeft;
         const to = nextSnap(scroller, e.clientX < at.x);
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const reduceMotion = prefersReducedMotion();
         const start = performance.now();
         const step = (now: number) => {
             const t = reduceMotion ? 1 : Math.min(1, (now - start) / GLIDE_MS);

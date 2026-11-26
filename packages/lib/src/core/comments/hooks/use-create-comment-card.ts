@@ -28,7 +28,7 @@ export function writeCardToDoc(doc: Y.Doc, mapName: CommentMapName, card: Commen
     y.set('title', card.title);
     y.set('description', card.description);
     if (card.color) y.set('color', card.color);
-    if (card.chatName) y.set('chatName', card.chatName);
+    y.set('chatName', card.chatName);
     if (card.creator) y.set('creator', card.creator);
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
     if (card.attachments?.length) y.set('attachments', card.attachments);

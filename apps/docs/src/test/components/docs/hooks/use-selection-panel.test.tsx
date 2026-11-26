@@ -19,7 +19,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 let state: ReturnType<typeof useSelectionPanel> | undefined;
-const closePanels = mock(() => {});
+const closeColumn = mock(() => {});
 
 // "a" at 1, an empty equation at 2, "b" at 3, the caret after "a".
 async function mount(isMobile = false) {
@@ -42,7 +42,7 @@ async function mount(isMobile = false) {
     });
     editor.commands.setTextSelection(2);
     function Host() {
-        state = useSelectionPanel(editor, isMobile, closePanels);
+        state = useSelectionPanel(editor, isMobile, closeColumn);
         editEquation = state.editEquation;
         return state.selectionPanel === 'equation'
             ? createElement(EquationPropertiesPanel, { editor, fieldRef: state.equationFieldRef })
@@ -70,7 +70,7 @@ test('Insert › Equation puts an equation at the caret and focuses its panel’
         for (const callback of frames) callback(0);
     });
 
-    expect(closePanels).toHaveBeenCalled();
+    expect(closeColumn).toHaveBeenCalled();
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
     expect(editor.state.doc.nodeAt(3)?.type.name).toBe('equation');
     expect(state?.selectionPanel).toBe('equation');
@@ -165,7 +165,7 @@ test('a body selection never carries into a band: the panel reads the editor it 
     function Host() {
         const [editor, set] = useState(body);
         setEditor = set;
-        state = useSelectionPanel(editor, false, closePanels);
+        state = useSelectionPanel(editor, false, closeColumn);
         return null;
     }
     const rendered = await renderInDocument(createElement(Host));
@@ -211,7 +211,7 @@ test.each([
         content: { type: 'doc', content: [...content, { type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] },
     });
     function Host() {
-        state = useSelectionPanel(editor, false, closePanels);
+        state = useSelectionPanel(editor, false, closeColumn);
         return null;
     }
     const rendered = await renderInDocument(createElement(Host));

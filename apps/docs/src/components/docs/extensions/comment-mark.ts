@@ -1,8 +1,8 @@
 // The Docs comment anchor: the mark a card holds on a run of text, and the attribute it holds on a node the Yjs binding
 // keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
-// anchored text for the card, tells the hover card which anchor the pointer is on, and paints each card's color from
-// the comment panel's state as decorations, which the editor component updates and a figure's node view draws as its
-// corner mark.
+// anchored text for the card, tells the hover card which anchor the pointer is on, and paints each card's color, until
+// it is resolved, as decorations, which the editor component updates and a figure's node view draws as its corner
+// mark.
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/core';
@@ -32,17 +32,17 @@ type CommentMarkOptions = {
     // A right-click off a card's anchor. True when it opened a menu; false leaves the browser's own.
     onSelectionContextMenu?: (event: MouseEvent) => boolean;
     onAddComment?: () => void;
-    onToggleCommentPanel?: () => void;
+    onToggleComments?: () => void;
 };
 
-type CommentPanelState = {
+type CommentColors = {
     resolvedIds: ReadonlySet<string>;
     colorMap: ReadonlyMap<string, string>;
 };
 
 declare module '@tiptap/core' {
     interface Storage {
-        comment: CommentPanelState;
+        comment: CommentColors;
     }
 }
 
@@ -129,13 +129,15 @@ export function removeCommentAnchors(editor: Editor, cardId: string): void {
     editor.view.dispatch(tr);
 }
 
-export function selectCommentAnchor(editor: Editor, cardId: string): void {
+// Says whether the card had an anchor to select. It scrolls nothing: the caller places the anchor in the view. It takes
+// no focus, because Tiptap's focus lands a frame later and would take it from the thread's reply box.
+export function selectCommentAnchor(editor: Editor, cardId: string): boolean {
     const anchors = findCommentAnchors(editor.state.doc, cardId);
-    if (anchors.length === 0) return;
+    if (anchors.length === 0) return false;
     const { node, pos } = anchors[0];
-    const chain = editor.chain().focus();
-    const selected = anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
-    selected.scrollIntoView().run();
+    const chain = editor.chain();
+    (anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos)).run();
+    return true;
 }
 
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart', textBox: 'Text box' };
@@ -157,18 +159,18 @@ export function commentAnchorText(doc: Node, from: number, to: number): string {
     ).slice(0, 100);
 }
 
-function buildDecorations(state: EditorState, panel: CommentPanelState): DecorationSet {
+function buildDecorations(state: EditorState, colors: CommentColors): DecorationSet {
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
         const cardId = nodeCommentCardId(node);
         if (cardId) {
             const end = pos + node.nodeSize;
-            const color = panel.colorMap.get(cardId);
+            const color = colors.colorMap.get(cardId);
             // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
             // from this spec, resolved or not, like a commented canvas element.
             if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
-            // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
-            if (!isFigureFrameNode(node.type.name) && !panel.resolvedIds.has(cardId) && color) {
+            // Text, and an equation among it, is highlighted until resolved; the comments column shows a resolved one.
+            if (!isFigureFrameNode(node.type.name) && !colors.resolvedIds.has(cardId) && color) {
                 decorations.push(
                     Decoration.inline(pos, end, {
                         class: 'comment-colored',
@@ -181,7 +183,7 @@ function buildDecorations(state: EditorState, panel: CommentPanelState): Decorat
     return DecorationSet.create(state.doc, decorations);
 }
 
-export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentPanelState>({
+export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentColors>({
     addOptions() {
         return {};
     },
@@ -197,8 +199,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentP
                     this.options.onAddComment();
                     return true;
                 }
-                if (this.options.onToggleCommentPanel) {
-                    this.options.onToggleCommentPanel();
+                if (this.options.onToggleComments) {
+                    this.options.onToggleComments();
                     return true;
                 }
                 return false;

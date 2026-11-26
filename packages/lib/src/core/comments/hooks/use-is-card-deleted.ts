@@ -11,7 +11,5 @@ export function useIsCardDeleted(activeCardIds: ReadonlySet<string>, ready: bool
     const { resolveChatId, isChatMissing } = useMediaResolver();
     // resolveChatId runs first: a name the listing lacks asks for the refetch that isChatMissing waits on.
     return (card) =>
-        ready &&
-        (!activeCardIds.has(card.id) ||
-            (!!card.chatName && !resolveChatId(card.chatName) && isChatMissing(card.chatName)));
+        ready && (!activeCardIds.has(card.id) || (!resolveChatId(card.chatName) && isChatMissing(card.chatName)));
 }

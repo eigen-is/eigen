@@ -1,6 +1,7 @@
 export { ActivityPanel } from './activity-panel';
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
+export { CommentCardDialog } from './comment-card-dialog';
 export { CommentCardTile } from './comment-card-tile';
 export { CommentContextMenu } from './comment-context-menu';
 export { CommentFilterMenuItems } from './comment-filter-menu-items';
@@ -12,7 +13,9 @@ export { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
+export { CommentsColumn, THREAD_BLOCK_TOP_PX } from './comments-column';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
-export { PanelColumn } from './panel-column';
+export { type CommentLifecycleBundle, useCommentHost } from './use-comment-host';
+export { type CommentsColumnState, useCommentsColumn } from './use-comments-column';

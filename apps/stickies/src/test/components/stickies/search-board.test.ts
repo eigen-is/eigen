@@ -19,8 +19,8 @@ const board: BoardData = {
     },
 };
 const cards: Record<string, CommentCard> = {
-    t1: { id: 't1', title: 'Buy milk', description: '<p>and <strong>eggs</strong></p>' },
-    t2: { id: 't2', title: 'Walk dog', description: '' },
+    t1: { id: 't1', title: 'Buy milk', description: '<p>and <strong>eggs</strong></p>', chatName: 't1.eigenchat' },
+    t2: { id: 't2', title: 'Walk dog', description: '', chatName: 't2.eigenchat' },
 };
 
 describe('searchBoard', () => {

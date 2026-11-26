@@ -47,10 +47,8 @@ import {
     updateMetaInDoc,
 } from './frame-writes';
 
-// The origin of a write the UndoManager must ignore. It tracks only the null origin, because useCollabDoc gives it no
-// tracked origins, so a write under any other origin is never captured. The provider still sends it to peers. An
-// example is the swap of a pasted image's pending name for its real one: the paste stays one undo step, and ⌘Z takes
-// back the insert, not the swap.
+// The UndoManager tracks only the null origin, so a write under this one, such as a pasted image's real name, still
+// reaches peers but is never an undo step of its own.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 
 export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, defaults: StyleDefaults) => {
@@ -96,9 +94,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         },
     });
 
-    // Adds the whole set in one transaction, so a paste is one undo step. The keys run on above the current top, so
-    // the caller's order becomes the pasted stack's order. Returns the new ids in that order, so a paste can select
-    // them.
+    // One transaction, so a paste is one undo step. The keys run on above the current top in the caller's order, and
+    // the ids come back in it, so a paste can select them.
     const addElements = useCallback((partials: readonly NewVectorElement[]): string[] => {
         const doc = docRef.current;
         if (!doc || partials.length === 0) return [];
@@ -117,9 +114,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [addElements],
     );
 
-    // Patches the whole set in one transaction, so a group move or a nudge is one undo step and one broadcast. An id
-    // that is gone writes nothing, because a peer may delete an element during a gesture. The null origin is tracked,
-    // so the write can be undone.
+    // One transaction, so a group move is one undo step and one broadcast. An id a peer deleted mid-gesture writes
+    // nothing.
     const updateElements = useCallback(
         (patches: readonly { id: string; fields: VectorElementPatch }[], origin: unknown = null) => {
             const doc = docRef.current;
@@ -149,7 +145,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [updateElements],
     );
 
-    // A fixup the user never undoes as a step of their own, such as an arrow label's measured width. Peers still get it.
+    // A fixup the user never undoes as a step of its own, such as an arrow label's measured width. Peers still get it.
     const updateElementsUntracked = useCallback(
         (patches: readonly { id: string; fields: VectorElementPatch }[]) => updateElements(patches, UNTRACKED_ORIGIN),
         [updateElements],
@@ -280,8 +276,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         undoManager,
         // For awareness: the cursors and the remote selections.
         provider,
-        // The live Y.Doc, for the comments, which live in its `comments` map. It is null until the effect runs, and the
-        // editor reads comments only once `synced` is true, like the rest of the panel.
+        // The live Y.Doc, for the comments in its `comments` map. It is null until the effect runs, before `loaded`.
         yjsDoc,
         synced,
         offline,
@@ -298,11 +293,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
 // whole rather than as a prop per writer.
 export type CanvasDoc = ReturnType<typeof useCanvasDoc>;
 
-// After a patch, runs followBindings again for every arrow bound to a patched shape, and for every patched arrow that
-// is bound, and writes their geometry in the same transaction. So a nudge, align or rotate of a bound arrow alone glues
-// its ends back to the shape that stayed put. Without it they would hang loose until the shape's next move jumped them
-// back. Bound ends stay glued, as in Excalidraw, and only a drag past the unbind threshold detaches one. A shape and its
-// arrow moved together write nothing, because followBindings returns null for them.
+// Glues every bound arrow a patch touched back to its shapes in the same transaction, so a nudge or rotate of a bound
+// arrow alone doesn't leave its ends loose until the shape next moves.
 function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: ReadonlySet<string>): void {
     const touched = [...patchedIds].some((id) => {
         const m = elementsMap.get(id);

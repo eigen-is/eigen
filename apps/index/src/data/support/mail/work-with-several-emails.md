@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, select, organize]
 related: [mail/archive-delete-spam, mail/move-email-between-folders, mail/get-started]
 order: 60
-updated: 2026-10-28
+updated: 2026-11-26
 ---
 
 When you have a stack of messages to tidy, you don't have to handle them one at a time. Select several in the message list, then act on all of them together. This page shows how to pick the messages and what you can do with them.
@@ -21,7 +21,7 @@ The message list in the middle column is where you choose messages. The way you 
 
 Selected messages are highlighted, so you can see at a glance what's in the set.
 
-To select every message in the list, press **Cmd+A** (Mac) or **Ctrl+A** (Windows). Press **Escape** to clear the selection and start over. These keys work while the message list has focus, so click a message first if nothing happens.
+To select every message in the list, press **Cmd+A** (Mac) or **Ctrl+A** (Windows). Press **Esc** to clear a selection of two or more and start over. With only the open message selected, **Esc** closes the message instead. These keys work while the message list has focus, so click a message first if nothing happens.
 
 ## Act on the selection
 

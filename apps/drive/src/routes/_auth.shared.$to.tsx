@@ -2,14 +2,13 @@
 // shared, laid out by DriveLayout. Items shared with the viewer belong to other people, so the page
 // offers nothing that writes there, and a delete leaves the share.
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
-import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 
 export const Route = createFileRoute('/_auth/shared/$to')({
     component: SharedRoute,
@@ -18,7 +17,7 @@ export const Route = createFileRoute('/_auth/shared/$to')({
 
 function SharedRoute() {
     const { to } = Route.useParams();
-    const navigate = useNavigate();
+    const navigate = Route.useNavigate();
     const { uid, pid, mid } = Route.useSearch();
     const { user } = Route.useRouteContext();
     const ownerId = user.id;
@@ -38,25 +37,17 @@ function SharedRoute() {
         canWrite: to === 'by-me',
     };
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
-        onOpenFolder: (path: DrivePath) =>
+        onOpenFolder: (path) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
-        onSelectItem: (path: DrivePath) =>
-            navigate({
-                to: Route.fullPath,
-                params: { to },
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
-            }),
+        pid,
+        setSelectedItem: selectInSearch(navigate),
     });
-
-    const handleBackToList = () => {
-        navigate({ to: Route.fullPath, params: { to } });
-    };
 
     return (
         <DriveLayout
@@ -69,7 +60,8 @@ function SharedRoute() {
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
+            onClose={onClose}
+            onAfterAction={onAfterAction}
             capabilities={capabilities}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}

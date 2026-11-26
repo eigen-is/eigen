@@ -53,7 +53,7 @@ The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A 
 
 ## Revealing an element goes to its slide first
 
-The comment pane and ⌘F span the whole deck while the canvas shows one slide. So both reveal through one callback: activate the element's slide, then select the element. An element whose slide is gone is selected in place, because switching to a missing frame would empty the canvas. ⌘F labels each match with its slide and rings the thumbnails that hold one, in the rail or the phone strip ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), [COMMENTS.md](COMMENTS.md)). Presence carries the frame, so a peer's cursor shows only on the slide they are on.
+The comments column and ⌘F span the whole deck while the canvas shows one slide. So both reveal through one callback: activate the element's slide, then select the element. An element whose slide is gone is selected in place, because switching to a missing frame would empty the canvas. ⌘F labels each match with its slide and rings the thumbnails that hold one, in the rail or the phone strip ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), [COMMENTS.md](COMMENTS.md)). Presence carries the frame, so a peer's cursor shows only on the slide they are on.
 
 ## Present mode replaces the editor
 

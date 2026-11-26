@@ -4,28 +4,53 @@
 // bar sits above the form. Leaving the edit, by Cancel, Discard or Save, puts the focus on the card's Edit action.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
+import type { ReactNode } from 'react';
 import { expectFormContract, type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const realAuth = await import('@workspace/lib/auth');
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
-afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
-
 const { act, createElement, useState } = await import('react');
+const realAuth = await import('@workspace/lib/auth');
+const realThread = { ...(await import('../../../components/comments/comment-thread')) };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
+// The thread's chat room fetches, so it shows only the card above it.
+mock.module('../../../components/comments/comment-thread', () => ({
+    CommentThread: ({ lead }: { lead: ReactNode }) => createElement('div', null, lead),
+}));
+afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
+    mock.module('../../../components/comments/comment-thread', () => realThread);
+});
+
+const router = await import('@tanstack/react-router');
 const { CardDialog } = await import('../../../components/cards/card-dialog');
 const { PreviewProvider } = await import('../../../components/preview-provider');
 
-// No thread, so the view is the card and its line.
-const card: CommentCard = { id: 'card-1', title: 'Audit card', description: '', color: '#fde68a' };
+const card: CommentCard = {
+    id: 'card-1',
+    title: 'Audit card',
+    description: '',
+    color: '#fde68a',
+    chatName: 'audit.eigenchat',
+};
 const update = mock(async (_patch: CardFormPatch) => {});
 
 // The card's open state, as its host last set it.
 let cardOpen = true;
 
+// The dialog on a page, as every host renders it: its edit form's leave guard needs the router.
 function EditCard() {
+    const [memory] = useState(() => {
+        const root = router.createRootRoute({ component: router.Outlet });
+        const page = router.createRoute({ getParentRoute: () => root, path: '/', component: EditCardDialog });
+        return router.createRouter({ routeTree: root.addChildren([page]), history: router.createMemoryHistory() });
+    });
+    return createElement(router.RouterProvider, { router: memory });
+}
+
+function EditCardDialog() {
     const [open, setOpen] = useState(true);
     cardOpen = open;
     const [editing, setEditing] = useState(true);

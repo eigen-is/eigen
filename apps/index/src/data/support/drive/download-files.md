@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, download, export]
 related: [drive/get-started, drive/preview-a-file, drive/upload-files]
 order: 50
-updated: 2026-10-28
+updated: 2026-11-26
 ---
 
 You can download any uploaded file from Drive to your computer. Documents, spreadsheets, presentations, and drawings created in Eigen can be exported as standard formats such as Word, Excel, or PDF.
@@ -18,7 +18,7 @@ You can download any uploaded file from Drive to your computer. Documents, sprea
 
 The file saves to your computer's default downloads folder.
 
-You can also download a file from the detail panel. Click the file to open the panel on the right, then click the **Download** button (the download icon next to the **Share** button).
+You can also download a file from the detail panel. Click the file to open the panel on the right, then click the **Download** button (the download icon next to the **Open** button, under the file's name).
 
 ## Download from a preview
 

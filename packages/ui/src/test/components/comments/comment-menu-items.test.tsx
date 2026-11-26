@@ -16,7 +16,7 @@ const [first, second] = EIGEN_STICKIES_COLORS[0];
 
 test("Card color checks the card's color and a pick recolors the card", async () => {
     const onChangeColor = mock((_id: string, _color: string) => {});
-    const card = { id: 'card-1', title: 'Plan', description: '', color: second.value };
+    const card = { id: 'card-1', title: 'Plan', description: '', color: second.value, chatName: 'plan.eigenchat' };
     ({ unmount } = await renderOpenMenu(
         createElement(CommentMenuItems, { item: { card, entry: undefined }, noun: 'card', onChangeColor }),
     ));

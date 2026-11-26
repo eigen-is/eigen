@@ -214,6 +214,27 @@ describe('useKeyboardListNavigation Space and Enter', () => {
     });
 });
 
+// Esc is the list's only while it clears a selection of two or more rows. With one row selected, the open one, the
+// list leaves the key alone, so the detail column beside it closes on it.
+describe('useKeyboardListNavigation Esc', () => {
+    async function pressEscape(ids: string[]) {
+        const cleared: string[] = [];
+        const selection = { ...selectionOf(ids), clearSelection: () => cleared.push('clear') };
+        const { list, keydown, unmount } = await mountList(0, selection);
+        const event = await keydown(list, 'Escape');
+        await unmount();
+        return { prevented: event.defaultPrevented, cleared };
+    }
+
+    test('with one row selected it keeps the selection and leaves the key to the page', async () => {
+        expect(await pressEscape(['a'])).toEqual({ prevented: false, cleared: [] });
+    });
+
+    test('with two rows selected it clears them and claims the key', async () => {
+        expect(await pressEscape(['a', 'b'])).toEqual({ prevented: true, cleared: ['clear'] });
+    });
+});
+
 // The list takes the focus a moment after it mounts, so its keys work without a click, but never from a field the user
 // types in, such as a picker's name while the picker's folder list opens.
 describe('useKeyboardListNavigation focus on mount', () => {

@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, waitlist, onboarding, invitations]
 related: [admin/get-started, admin/manage-members]
 order: 110
-updated: 2026-11-13
+updated: 2026-11-26
 ---
 
 When the waitlist is enabled, your Eigen landing page shows a sign-up form where people can submit their email address and a short note. You review each request in the admin panel and decide whether to invite them or reject their application.
@@ -33,20 +33,20 @@ Click **Waitlist** in the sidebar. The list has four tabs:
 - **Registered**: people who accepted an invitation and created an account.
 - **Rejected**: applications you have declined.
 
-Click any row to open its detail panel on the right. You can see the email address, status, any notes the person left, the date they submitted, and, for invited entries, when the invite was sent and when it expires.
+Click any row to open its detail panel on the right. You can see the email address, status, any notes the person left, the date they submitted, and, for invited entries, when the invite was sent and when it expires. To close the panel, click **Close** (the **X**) at the right of its toolbar, or press **Esc**.
 
-To filter the list, type in the **Filter by email...** bar at the top.
+To search the list by email address or note, type in the **Search waitlist...** box at the top.
 
 ## Accept and invite
 
 1. Select the application in the **Pending** tab.
-2. Click **Accept & invite** in the toolbar.
+2. Click **Accept and invite** (the check mark) in the toolbar.
 
-Eigen marks the entry as **Invited** and sends an invitation email immediately. The email contains a sign-up link that expires after seven days.
+Eigen marks the entry as **Invited**, moves it to the **Invited** tab, and sends an invitation email immediately. The email contains a sign-up link that expires after seven days.
 
 ## Reject an application
 
-Select the entry and click **Reject** in the toolbar. The entry moves to the **Rejected** tab. You can change your mind later: select a rejected entry and click **Re-accept & Invite** to send an invitation.
+Select the entry and click **Reject** (the circle with a line through it) in the toolbar. The entry moves to the **Rejected** tab. You can change your mind later: select a rejected entry and click **Re-accept and invite** to send an invitation.
 
 ## Resend an invitation
 

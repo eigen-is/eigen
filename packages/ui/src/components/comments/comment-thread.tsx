@@ -23,10 +23,12 @@ type CommentThreadProps = {
     chatName: string;
     // The card the thread belongs to, drawn above the messages.
     lead?: ReactNode;
+    // Whether the reply box takes the focus as the thread shows, as it does in a dialog.
+    autoFocus?: boolean;
     className?: string;
 };
 
-export function CommentThread({ ownerId, mountId, pathId, chatName, lead, className }: CommentThreadProps) {
+export function CommentThread({ ownerId, mountId, pathId, chatName, lead, autoFocus, className }: CommentThreadProps) {
     const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
@@ -49,6 +51,7 @@ export function CommentThread({ ownerId, mountId, pathId, chatName, lead, classN
             pathId={pathId}
             chatId={chatId}
             lead={lead}
+            autoFocus={autoFocus}
             className={className}
         />
     );
@@ -60,6 +63,7 @@ function CommentThreadInner({
     pathId,
     chatId,
     lead,
+    autoFocus,
     className,
 }: { chatId: string } & Omit<CommentThreadProps, 'chatName'>) {
     const chat = useChatRoom(ownerId, mountId, chatId, pathId);
@@ -76,7 +80,7 @@ function CommentThreadInner({
                     <>
                         {lead}
                         {chat.messages.some((message) => !message.deletedAt) && (
-                            <div className="app-gutter-x">
+                            <div className="app-gutter-x mt-6">
                                 <DetailSection label="Activity" />
                             </div>
                         )}
@@ -104,11 +108,12 @@ function CommentThreadInner({
                 placeholder="Reply..."
                 roomMembers={chat.roomMembers}
                 currentUserEmail={chat.currentUserEmail}
-                messageCount={chat.messages.length + editing.focusTrigger}
+                focusTrigger={editing.focusTrigger}
                 onKeyDown={editing.onKeyDown}
                 onAttachClick={() => setFilePickerOpen(true)}
                 driveAttachments={chat.driveAttachments}
                 onRemoveDriveAttachment={chat.removeDriveAttachment}
+                autoFocus={autoFocus}
             />
             <ConfirmDialog
                 open={!!editing.deleteTarget}

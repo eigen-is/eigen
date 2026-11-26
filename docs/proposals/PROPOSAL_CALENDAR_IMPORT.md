@@ -283,8 +283,8 @@ the message in a tooltip.
 
 ### Event detail for subscribed events
 
-When an event in a subscribed calendar is opened
-(`../../apps/calendar/src/components/event-detail-dialog.tsx` / `edit-event-dialog.tsx`), render title,
+When an event in a subscribed calendar is opened in the event column
+(`../../apps/calendar/src/components/event-detail.tsx` / `edit-event-dialog.tsx`), render title,
 time, location, attendees, recurrence as read-only text. Color and reminder fields stay editable —
 the local overrides that survive refresh.
 
@@ -408,7 +408,7 @@ Thunderbird. Users coming from any of those products will have correct expectati
 | SSE | — | **No new event type**; existing `CALENDAR_*` events + handlers suffice. |
 | Sidebar UI | `../../apps/calendar/src/components/calendar-sidebar.tsx` | "+" dropdown; Globe icon + error dot; context-menu items. |
 | Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx` *(new)* | Shared Dialog system, modeled on `calendar-config-dialog.tsx`. |
-| Event detail | `../../apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; color/reminders stay editable. |
+| Event detail | `../../apps/calendar/src/components/event-detail.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; color/reminders stay editable. |
 
 ## What's deferred
 

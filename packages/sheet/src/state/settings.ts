@@ -1,11 +1,11 @@
 // What a host passes the Workbook: the sheets, whether the person may edit, the comment cards the grid marks, and the
 // hooks it calls back on a selection, a comment or a chart.
 
-import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { Sheet as LibSheet, SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
+import type { CommentLifecycleBundle } from '@workspace/ui/components/comments';
 import type { Selection } from './types';
 
 export type CommentInfo = {
@@ -27,7 +27,7 @@ export type Hooks = {
     afterSelectionChange?: (sheetId: string, selection: Selection) => void;
     onAddComment?: (row: number, column: number) => void;
     onDeleteComment?: (cardId: string) => void;
-    commentLifecycle?: ReturnType<typeof useCommentLifecycle>;
+    commentLifecycle?: CommentLifecycleBundle;
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onCommentHover?: (target: CommentHoverTarget | null) => void;
     onInsertImage?: () => void;

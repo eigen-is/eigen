@@ -269,6 +269,12 @@ describe('documentReferences', () => {
         expect(() => documentReferences('doc', doc)).toThrow();
     });
 
+    test('a card without a thread, which no editor writes, throws', () => {
+        const doc = buildStickies();
+        addCard(doc, 'tasks', 'on-board', { attachments: ['note.pdf'] });
+        expect(() => documentReferences('stickies', doc)).toThrow();
+    });
+
     // Reading the mark as no mark only keeps more, where a throw would stop every sweep of the document.
     test('a deleted mark that is no time reads as not deleted', () => {
         const doc = buildCanvas();
@@ -285,7 +291,7 @@ describe('documentReferences', () => {
         ['a Drive reference of no Drive type', { ...DRIVE_DOCUMENT, driveType: 'spreadsheet' }],
     ])('an attachment that is %s throws', (_, attachment) => {
         const doc = buildStickies();
-        addCard(doc, 'tasks', 'on-board', { attachments: [attachment] });
+        addCard(doc, 'tasks', 'on-board', { chatName: 'thread-on-board', attachments: [attachment] });
         expect(() => documentReferences('stickies', doc)).toThrow();
     });
 

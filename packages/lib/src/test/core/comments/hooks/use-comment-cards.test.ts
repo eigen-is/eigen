@@ -28,6 +28,7 @@ async function cardWithDescription(html: string): Promise<CommentCard> {
         c.set('id', 'c1');
         c.set('title', 'Card');
         c.set('description', html);
+        c.set('chatName', 'c1.eigenchat');
         tasks.set('c1', c);
     });
     return (await readCards(doc, 'tasks'))['c1'];
@@ -97,6 +98,7 @@ describe('useCommentCards', () => {
             withAttachments.set('id', 'a1');
             withAttachments.set('title', 'Has attachments');
             withAttachments.set('description', '');
+            withAttachments.set('chatName', 'withAttachments.eigenchat');
             withAttachments.set('attachments', ['photo.png', reference]);
             tasks.set('a1', withAttachments);
 
@@ -104,6 +106,7 @@ describe('useCommentCards', () => {
             malformed.set('id', 'a2');
             malformed.set('title', 'Malformed');
             malformed.set('description', '');
+            malformed.set('chatName', 'malformed.eigenchat');
             malformed.set('attachments', 'not-an-array');
             tasks.set('a2', malformed);
 
@@ -111,6 +114,7 @@ describe('useCommentCards', () => {
             dirtyElements.set('id', 'a3');
             dirtyElements.set('title', 'Dirty elements');
             dirtyElements.set('description', '');
+            dirtyElements.set('chatName', 'dirtyElements.eigenchat');
             dirtyElements.set('attachments', [
                 null,
                 42,
@@ -135,8 +139,28 @@ describe('useCommentCards', () => {
             const card = new Y.Map<unknown>();
             card.set('id', 'ok');
             card.set('title', 'Fine');
+            card.set('chatName', 'ok.eigenchat');
             tasks.set('ok', card);
             tasks.set('scalar', 'not-a-card');
+        });
+
+        expect(Object.keys(await readCards(doc, 'tasks'))).toEqual(['ok']);
+    });
+
+    test('skips a card without a thread, which no editor writes', async () => {
+        const doc = new Y.Doc();
+        const tasks = doc.getMap<unknown>('tasks');
+        doc.transact(() => {
+            for (const [id, chatName] of [
+                ['ok', 'ok.eigenchat'],
+                ['none', undefined],
+                ['number', 7],
+            ] as const) {
+                const card = new Y.Map<unknown>();
+                card.set('title', id);
+                if (chatName !== undefined) card.set('chatName', chatName);
+                tasks.set(id, card);
+            }
         });
 
         expect(Object.keys(await readCards(doc, 'tasks'))).toEqual(['ok']);
@@ -216,6 +240,7 @@ describe('the canvas delete mark', () => {
             const card = new Y.Map<unknown>();
             card.set('id', 'c1');
             card.set('title', 'Card');
+            card.set('chatName', 'c1.eigenchat');
             if (deletedAt !== undefined) card.set('deletedAt', deletedAt);
             doc.getMap<unknown>('comments').set('c1', card);
         });

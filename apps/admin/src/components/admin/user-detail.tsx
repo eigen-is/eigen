@@ -13,6 +13,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
 import { StorageUsageBars } from '@workspace/ui/components/home';
+import { DetailSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
@@ -94,7 +95,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
     };
 
     return (
-        <div className="app-gutter space-y-6 h-full overflow-y-auto">
+        <div className="space-y-6">
             <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
 
             <div className="space-y-4">
@@ -154,10 +155,9 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
             {!guest && (
                 <>
                     <Separator />
-                    <div className="space-y-3">
-                        <h3 className="text-sm font-medium">Storage</h3>
-                        {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
-                    </div>
+                    <DetailSection label="Storage">
+                        {usage ? <StorageUsageBars data={usage} /> : <p className="text-muted-foreground">—</p>}
+                    </DetailSection>
 
                     {canManagePasswordAndBackups(user, me?.id) && (
                         <>

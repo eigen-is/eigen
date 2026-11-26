@@ -1,14 +1,13 @@
-// The Teams section of a user's detail in the Admin app: the teams the user belongs to, each with a
-// button that takes the user out of it after a confirmation, and an "Add to team" button that opens the team picker. It
-// is the user-side twin of a team's Members section, laid out the same way, and changes membership
-// through the same team-member mutations. The organization's default team, which every user joins,
-// is listed with no remove button, as it is in that team's Members section.
+// The Teams section of a user's detail in the Admin app: the teams the user is in, each with a remove button that asks
+// first, and an Add to team button that opens the team picker. It is the user-side twin of a team's Members section and
+// changes membership through the same mutations. The organization's default team, which every user joins, has no
+// remove button.
 
 import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { Button } from '@workspace/ui/components/button';
-import { EmptyState } from '@workspace/ui/components/layout/app';
+import { DetailSection, EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { Plus, UsersRound, X } from 'lucide-react';
@@ -25,15 +24,15 @@ export function UserTeamsSection({ user }: { user: AdminUserRow }) {
     const teams = [...user.teams].sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Teams ({teams.length})</h3>
+        <DetailSection
+            label={`Teams (${teams.length})`}
+            action={
                 <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
                     <Plus className="h-4 w-4 mr-1" />
                     Add to team
                 </Button>
-            </div>
-
+            }
+        >
             <AddToTeamDialog open={showAddDialog} onOpenChange={setShowAddDialog} users={[user]} />
 
             {teams.length === 0 ? (
@@ -66,6 +65,6 @@ export function UserTeamsSection({ user }: { user: AdminUserRow }) {
                 team={removing}
                 member={{ userId: user.id, name: user.name }}
             />
-        </div>
+        </DetailSection>
     );
 }

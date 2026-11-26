@@ -23,7 +23,7 @@ Each guest appears below the field with a **Pending** badge. Once they respond, 
 ## Add guests to an existing event
 
 1. Open the event by clicking it in the calendar view.
-2. Click the pencil icon in the dialog footer to open the **Edit event** dialog.
+2. Click **Edit event** (the pencil icon) in the bar at the top of the event's panel to open the **Edit event** dialog.
 3. Add guests the same way as above, then click **Save**.
 
 <div class="eigen-callout">
@@ -38,7 +38,7 @@ In the **Edit event** dialog, hover over the person you want to remove. An **×*
 
 ## See the full guest list
 
-Open the event. If the event has guests, the detail dialog shows them under **Guests**, each with their current response status. The list opens with a summary of the replies so far, such as "2 accepted, 3 pending". Above three people it starts collapsed. Click the header to open it. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard at once.
+Open the event. If the event has guests, its details panel shows them under **Guests**, each with their current response status. The list opens with a summary of the replies so far, such as "2 accepted, 3 pending". Above three people it starts collapsed. Click the header to open it. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard at once.
 
 ::: grid columns="1"
 ![An event opened on its guests, each with their answer](/data/about/media/calendar-still-build.webp)

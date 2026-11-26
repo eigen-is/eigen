@@ -227,7 +227,7 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     entry.set('title', card.title);
     entry.set('description', card.description);
     if (card.color) entry.set('color', card.color);
-    if (card.chatName) entry.set('chatName', card.chatName);
+    entry.set('chatName', card.chatName);
     if (card.creator) entry.set('creator', card.creator);
     if (card.createdAt !== undefined) entry.set('createdAt', card.createdAt);
     if (card.attachments) entry.set('attachments', card.attachments);
@@ -587,7 +587,7 @@ async function main(): Promise<void> {
     const seedCommentThread = async (
         chatFolder: DrivePath,
         comment: Omit<CanvasComment, 'element' | 'start'> & { start: SeededTime | Date; attach?: string[] },
-    ): Promise<CommentCard & { chatName: string; createdAt: number }> => {
+    ): Promise<CommentCard & { createdAt: number }> => {
         const author = lookup(userByKey, comment.author);
         const chat = await teamDrive.create(teamMountId, chatFolder.id, comment.card, 'chat', author);
         const startedAt = await postThread(chat, comment.start, [
@@ -618,7 +618,7 @@ async function main(): Promise<void> {
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, CONTAINER_CHAT_FOLDER);
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
         const docJson = htmlToDocJson(docSchema(), doc.html);
-        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard & { chatName: string } }[] = [];
+        const cards: { spec: (typeof doc.comments)[number]; card: CommentCard }[] = [];
         for (const comment of doc.comments) {
             // The title is the anchored text, as the editor makes it.
             const card = await seedCommentThread(chatFolder, { ...comment, title: comment.anchor.slice(0, 100) });

@@ -46,9 +46,9 @@ type InsertMenuProps = {
     editor: Editor;
     active: ToolbarState;
     keepEditorFocus: (e: Event) => void;
-    // The comments or activity panel would hold the slot the new chart's or table of contents' panel needs. Left out
+    // The comments or activity column would hold the slot the new chart's or table of contents' panel needs. Left out
     // on a phone, where the panel is a sheet that leaves the comments column alone.
-    closePanels?: () => void;
+    closeColumn?: () => void;
     onLink: () => void;
     onInsertImage?: () => void;
     onAddComment?: () => void;
@@ -71,7 +71,7 @@ export function InsertMenu({
     editor,
     active,
     keepEditorFocus,
-    closePanels,
+    closeColumn,
     onLink,
     onInsertImage,
     onAddComment,
@@ -117,7 +117,7 @@ export function InsertMenu({
                         <DropdownMenuItem
                             key={option.value}
                             onClick={() => {
-                                closePanels?.();
+                                closeColumn?.();
                                 editor.chain().focus().insertChart(option.value, pageWidths(editor).column).run();
                             }}
                         >
@@ -225,7 +225,7 @@ export function InsertMenu({
             <DropdownMenuItem
                 disabled={inStory || !active.canInsertTableOfContents}
                 onClick={() => {
-                    closePanels?.();
+                    closeColumn?.();
                     editor.chain().focus().insertTableOfContents().run();
                 }}
             >

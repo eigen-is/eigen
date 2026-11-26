@@ -81,7 +81,6 @@ export function EmailDetailToolbar({
                             onMoveToFolder={(ids, folderId) => {
                                 for (const id of ids) onMoveToFolder(id, folderId);
                             }}
-                            onClose={() => {}}
                             onPrint={() => printDocument()}
                         />
                     </DropdownMenuContent>

@@ -19,7 +19,13 @@ describe('elementForCommentCard', () => {
 });
 
 describe('activeCommentCardIds', () => {
-    const card = (id: string, deletedAt?: number): CommentCard => ({ id, title: id, description: '', deletedAt });
+    const card = (id: string, deletedAt?: number): CommentCard => ({
+        id,
+        title: id,
+        description: '',
+        chatName: `${id}.eigenchat`,
+        deletedAt,
+    });
     const cards = {
         anchored: card('anchored'),
         documentLevel: card('documentLevel'),

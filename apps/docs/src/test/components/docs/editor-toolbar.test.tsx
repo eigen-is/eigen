@@ -54,7 +54,7 @@ const onLink = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 const onToggleOutline = mock(() => {});
-const closePanels = mock(() => {});
+const closeColumn = mock(() => {});
 const onPageSetupChange = mock((_from: PageSetup, _to: PageSetup) => {});
 
 async function render(
@@ -105,7 +105,7 @@ async function render(
         onTextWidthChange: () => {},
         onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
-        closePanels,
+        closeColumn,
         onImageUpload: () => {},
         onReplaceImage,
         onLink,
@@ -1675,11 +1675,11 @@ test.each([
 ])('at %ipx Insert › Table of contents closes the side panels %i times', async (width, closed) => {
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
-    closePanels.mockClear();
+    closeColumn.mockClear();
     await render(width, true);
     await openMenu('Insert');
     await clickItem('Table of contents');
-    expect(closePanels).toHaveBeenCalledTimes(closed);
+    expect(closeColumn).toHaveBeenCalledTimes(closed);
 });
 
 // The row names the shortcut the comment mark binds, as Google's Insert › Comment does.

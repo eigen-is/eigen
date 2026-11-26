@@ -1,3 +1,7 @@
+// Mail's Gmail-style keyboard shortcuts, such as `j`/`k`, `e` to archive and `g i` for Inbox. The mail route calls
+// it, so every key acts on the rows, cursor and selection the list shows. The set is off unless the user turned it
+// on, and while composing or with the help open, except Delete and Backspace, which always delete.
+
 import { useHotkey, useHotkeySequence } from '@tanstack/react-hotkeys';
 import {
     MAILBOX_ARCHIVE,
@@ -48,7 +52,7 @@ type UseMailShortcutsOptions = {
     shortcutsEnabled: boolean;
     openEmailId: string | undefined;
     onRowClick: (emailId: string) => void;
-    navigateToList: () => void;
+    closeDetail: () => void;
     navigateToMailbox: (filterId: string) => void;
     onCompose: () => void;
     focusSearch: () => void;
@@ -72,13 +76,8 @@ type UseMailShortcutsOptions = {
     undoLast: () => void | Promise<void>;
 };
 
-// The Gmail keyboard layer for mail. Pure registration, called from MailRoute so every key acts on
-// the same rows/cursor/selection the list renders. Inert unless opted in, and while composing or the
-// help overlay is open — except Delete/Backspace, which delete whether or not the set is on. The lib
-// auto-suppresses keys (and Shift combos) in inputs. Target priority is open conversation >
-// selection > cursor, except for the keys with a batch form (destructive, flag, mark), where a
-// selection naming anything but the open message outranks it (`openWins`); `[`/`]` and the reply
-// keys have no batch form and stay open-first.
+// A key acts on the open message first, then the selection, then the cursor, except a key with a batch form, such
+// as archive, flag or mark, where a selection naming anything but the open message wins (`openWins`).
 export function useMailShortcuts({
     orderedEmails,
     cursorIndex,
@@ -91,7 +90,7 @@ export function useMailShortcuts({
     shortcutsEnabled,
     openEmailId,
     onRowClick,
-    navigateToList,
+    closeDetail,
     navigateToMailbox,
     onCompose,
     focusSearch,
@@ -222,7 +221,7 @@ export function useMailShortcuts({
         'U',
         () => {
             if (starTail.current) return;
-            navigateToList();
+            closeDetail();
         },
         { enabled },
     );
@@ -298,7 +297,7 @@ export function useMailShortcuts({
             const neighbourId = idx < 0 ? undefined : orderedEmails[idx + delta]?.id;
             void moveEmailByIdOnly(openEmailId, MAILBOX_ARCHIVE);
             if (neighbourId) onRowClick(neighbourId);
-            else navigateToList();
+            else closeDetail();
             return;
         }
         if (cursorIndex >= 0 && cursorIndex < orderedEmails.length) {

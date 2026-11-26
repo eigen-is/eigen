@@ -1,42 +1,31 @@
+// The frame every properties panel shares, such as Slides' or Docs' selection panel: a small fixed-width column at
+// the right with an optional title bar and one scroller, and the section and row grammar the panels are written in.
+
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar/toolbar-title';
 import { ScrollArea } from '@workspace/ui/components/scroll-area';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
-
-// The w-64 below, for hosts that have to lay out around this panel.
-export const PROPERTIES_PANEL_WIDTH_PX = 256;
-
-// Section order is a cross-app convention, not a runtime sort — every host (vector, slides, docs,
-// sheets) authors its sections in this sequence so the panel reads the same everywhere:
-//
-//   1. geometry     Transform / Layout
-//   2. content      Text · Spacing · Image
-//   3. paint        Fill / Color / Background · Stroke / Border · Shape · Arrowheads · Sketch
-//   4. appearance   Appearance
-//   5. actions      Arrange · Align
-//   6. destructive  Delete
-//
-// Titles are literals and the host guards only filter, so authored order IS rendered order — which
-// keeps DOM order (and with it tab order) matched to what the eye sees. A new section slots into its
-// group; a group a panel doesn't have is simply absent.
+import { columnWidthPx } from '../layout/app/column-widths';
 
 type PropertiesPanelProps = {
     children: ReactNode;
     // Fixed title bar, pixel-matched to the comments/activity Column toolbar (h-12 + ToolbarTitle).
     title?: ReactNode;
-    className?: string;
 };
 
-export function PropertiesPanel({ title, children, className }: PropertiesPanelProps) {
+export function PropertiesPanel({ title, children }: PropertiesPanelProps) {
     return (
-        <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
+        <div
+            className="border-l bg-background shrink-0 h-full flex flex-col overflow-hidden"
+            style={{ width: columnWidthPx('small') }}
+        >
             {title && (
                 <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
                     <ToolbarTitle>{title}</ToolbarTitle>
                 </div>
             )}
-            {/* min-h-0: the auto minimum would otherwise hold this at the full panel height, hanging the title bar's worth of content below the clip. */}
-            {/* Radix wraps viewport children in display:table (min-width:100%), which sizes to content and defeats truncate in this fixed-width panel — force block. */}
+            {/* min-h-0, or the auto minimum holds this at the panel's full height below the title bar. Radix wraps the
+                viewport's children in display: table, which sizes to content and defeats truncate, so force block. */}
             <ScrollArea className="flex-1 min-h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
                 {children}
             </ScrollArea>

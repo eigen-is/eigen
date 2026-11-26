@@ -28,6 +28,20 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Cards in Stickies** — the items on a board are called cards in every button, menu, notification, activity row and help article, such as **Add card** and **Delete card**
 - **New events in Calendar** — start an hour long, as in Google Calendar, from **Create event** and the **c** key too
 - **Event colors in Calendar** — in light mode, events are lighter, the same shade as a Stickies card of that color
+- **Event details in Calendar** — open in a panel beside the grid instead of over it, with a ring around the event. The panel stays open when you reload or change week, a copied link opens it, and back closes it
+- **Comments in Docs, Sheets, Slides and Vector** — open in a column beside the page, grid, slide or drawing, which widens for a thread, with **Comments** at its top back to the list. A link or a reload keeps it open
+- **Closed comments stay closed** — in every editor, a reload doesn't reopen a comment you closed
+- **Comments in Docs** — the column lies over the page's margin. Clicking a comment's highlighted text opens its thread with the reply box ready to type in
+- **Panels in Sheets** — the comments column and the image and chart panel open under the toolbar, so its formatting buttons stay in view
+- **Activity in Stickies** — opens in a column at the right, on a phone too
+- **Searching comments in Sheets, Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its cell, slide or shape
+- **Back buttons** — the back at the top left is a "‹" in every app on a phone, and Drive's text editor goes back with **‹ Files**
+- **Calendar's toolbar** — the previous and next arrows sit at the right, beside the view choice (the ⋮ menu on a phone), away from the back at the top left
+- **Messages in Mail** — an open message, draft or new message has a **Close** (X) at the right of its toolbar, and Esc closes it too. Closing keeps your search, and back after closing doesn't open the message again. A new message or reply started over an open message closes back to the list
+- **Details in Contacts and Admin** — Esc closes an open contact, user, team or waitlist entry, and back after closing one doesn't open it again. A contact's details sit under small headings, in Drive's preview of a contact file too
+- **Details in Drive** — Share, the watch bell and the ⋮ menu sit at the top of a file's details, beside **Close** (X). Esc closes the details, and the arrow keys no longer fill your back history
+- **Waitlist in Admin** — **Reject** has its own button instead of an X, which now only closes the entry. With no entry open the list fills the page
+- **Lists in Contacts and Admin** — the list beside an open contact, user or team is wider on a computer. On a tablet these lists, Admin's waitlist and Drive's details panel are narrower, leaving more room beside them
 - **Cards and events** — events in Calendar are square, with the same flat shadow as cards in Stickies and comments in Docs, Sheets, Slides and Vector. Opened, a card, comment or event shows its title on top, then its details under small headings
 
 ### Fixed
@@ -43,6 +57,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
+- **Message box in Chat and comments** — a new message or coming back to the window no longer pulls the focus into the box, so it stays in a search field or on the slide you were editing
+- **Share links in Drive** — closing the Share dialog a link opened no longer opens it again when you go back
+- **Open in Drive's details** — the button shows its label again
 - **Saving a contact twice** — pressing Enter twice on New contact or Edit contact no longer creates the contact twice
 - **Change password in Space** — it can't be sent twice, a refused change leaves no error behind, and the "at least 8 characters" message clears once the password is long enough
 - **Drafts in Mail** — closing or reloading the tab before the last change of a draft is saved asks first

@@ -1,5 +1,5 @@
-// The actions the mail route offers on messages: open, move, delete, flag and read, with a one-step
-// undo, plus reply, reply all and forward, which open the composer prefilled through history state.
+// The actions the mail route offers on messages: open and close through useMailDetail, move, delete, flag and read,
+// with a one-step undo, plus reply, reply all and forward, which open the composer prefilled through history state.
 // The route and its keyboard shortcuts both call them, so a button and a key do the same thing.
 
 import { useNavigate } from '@tanstack/react-router';
@@ -20,23 +20,58 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
-import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
+import type { DraftUpdateOptions, Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import { isListedFile } from '@workspace/lib/types/mail';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
+import { useMailDetail } from './use-mail-detail';
 
 // Undo has one slot, as in Gmail: only the latest reversible action is kept. `done` stops one action from being
 // reversed twice, such as by `z` and then its toast's Undo.
 type Undoable = { done?: boolean } & (
-    | { kind: 'move'; items: { emailId: string; from: string }[]; to: string }
+    | { kind: 'move'; items: { emailId: string; from: string }[] }
     | { kind: 'read'; items: { emailId: string; prevIsRead: boolean }[] }
     | { kind: 'flag'; items: { emailId: string; prevIsFlagged: boolean }[] }
 );
 
-export function useMailActions() {
+// A delete from Trash is for good, so it asks first, with the emails it would remove.
+type DeleteResult = { needsConfirmation: true; emails: Email[] } | { needsConfirmation: false };
+
+type MailActions = {
+    closeDetail: () => void;
+    handleRowClick: (emailId: string) => void;
+    openCompose: () => void;
+    handleDeleteEmail: (mail: Email) => Promise<DeleteResult>;
+    confirmDeleteEmails: (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => Promise<void>;
+    handleDeleteEmailsByIds: (emailIds: string[]) => Promise<DeleteResult>;
+    handleMoveEmailToFolderById: (emailId: string, folderId: string) => Promise<void>;
+    handleMoveEmailsToFolderByIds: (emailIds: string[], folderId: string) => Promise<void>;
+    handleArchiveEmailsByIds: (emailIds: string[]) => Promise<void>;
+    handleReportSpamByIds: (emailIds: string[]) => Promise<void>;
+    moveEmailByIdOnly: (emailId: string, mailbox: string) => Promise<void>;
+    deleteEmailByIdOnly: (emailId: string) => Promise<DeleteResult>;
+    setReadById: (emailId: string, isRead: boolean, currentIsRead: boolean) => Promise<void>;
+    setFlaggedById: (emailId: string, flagged: boolean, currentFlagged: boolean) => Promise<void>;
+    setReadByIds: (rows: EmailSummary[], isRead: boolean) => void;
+    setFlaggedByIds: (rows: EmailSummary[], flagged: boolean) => void;
+    undoLast: () => Promise<void>;
+    handleReplyEmail: (emailId: string) => Promise<void>;
+    handleReplyAllEmail: (emailId: string) => Promise<void>;
+    handleForwardEmail: (emailId: string) => Promise<void>;
+    handleSendEmail: (mail: NewDraft, grantAccessRefIds?: string[]) => Promise<void>;
+    handleToggleMailRead: (email: Email, isRead: boolean) => void;
+    saveDraft: (draft: NewDraft, options?: DraftUpdateOptions) => Promise<EmailDraft>;
+    handleDraftIdAssigned: (id: string) => void;
+    handleForwardedPartsSaved: () => void;
+    isSendPending: boolean;
+    imagesLoadedFor: string | null;
+    loadRemoteImages: (emailId: string | null) => void;
+};
+
+export function useMailActions(): MailActions {
     const { filterType, filterId } = Route.useParams();
+    const { mailId } = Route.useSearch();
     const navigate = useNavigate();
     const { user } = useAuth();
     const deleteMail = useDeleteEmail();
@@ -51,31 +86,25 @@ export function useMailActions() {
     // The one message whose remote images the reader shows, until another is loaded.
     const [imagesLoadedFor, setImagesLoadedFor] = useState<string | null>(null);
 
-    // Reverses the passed snapshot with the raw mutations, or the undo would record itself, so an old toast undoes the action
-    // it was shown for. The {...email, isRead/isFlagged: !prev} spread defeats each mutation's own no-op guard.
+    const emailsByIds = async (emailIds: readonly string[]) =>
+        (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+
+    // Reverses the passed snapshot with the raw mutations, or the undo would record itself, so an old toast undoes the
+    // action it was shown for. The {...email, isRead/isFlagged: !prev} spread defeats each mutation's own no-op guard.
     const reverse = async (action: Undoable) => {
         if (action.done) return;
         action.done = true;
-        if (action.kind === 'move') {
-            for (const item of action.items) {
-                const email = await getEmailById(item.emailId);
-                if (email) moveMail.mutate({ email, mailbox: item.from });
-            }
-        } else if (action.kind === 'read') {
-            for (const item of action.items) {
-                const email = await getEmailById(item.emailId);
-                if (email)
-                    toggleMailRead.mutate({ email: { ...email, isRead: !item.prevIsRead }, isRead: item.prevIsRead });
-            }
-        } else {
-            for (const item of action.items) {
-                const email = await getEmailById(item.emailId);
-                if (email)
-                    toggleMailFlagged.mutate({
-                        email: { ...email, isFlagged: !item.prevIsFlagged },
-                        isFlagged: item.prevIsFlagged,
-                    });
-            }
+        for (const item of action.items) {
+            const email = await getEmailById(item.emailId);
+            if (!email) continue;
+            if ('from' in item) moveMail.mutate({ email, mailbox: item.from });
+            else if ('prevIsRead' in item)
+                toggleMailRead.mutate({ email: { ...email, isRead: !item.prevIsRead }, isRead: item.prevIsRead });
+            else
+                toggleMailFlagged.mutate({
+                    email: { ...email, isFlagged: !item.prevIsFlagged },
+                    isFlagged: item.prevIsFlagged,
+                });
         }
         toast.success('Undone');
     };
@@ -88,8 +117,8 @@ export function useMailActions() {
         await reverse(action);
     };
 
-    // For the destructive moves. The button reverses this snapshot, and the slot clears only when it still holds this action,
-    // so `z` won't undo twice.
+    // For the destructive moves. The button reverses this snapshot, and the slot clears only when it still holds this
+    // action, so `z` won't undo twice.
     const undoToast = (message: string, action: Undoable) => {
         toast.success(message, {
             action: {
@@ -102,55 +131,19 @@ export function useMailActions() {
         });
     };
 
-    const navigateToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: {},
-        });
-    };
-
-    const handleRowClick = (emailId: string) => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: (prev) => ({ ...prev, mailId: emailId, mode: undefined, to: undefined }),
-        });
-    };
-
-    // A fresh composeSessionKey remounts any open composer.
-    const openCompose = () => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: { mode: 'compose' },
-            state: { composeSessionKey: crypto.randomUUID() },
-        });
-    };
-
-    const handleMoveEmail = async (mail: Email, mailbox: string) => {
-        await moveMail.mutateAsync({ email: mail, mailbox });
-        navigateToList();
+    const detail = useMailDetail();
+    // A batch closes the open message only when it is among the emails that went.
+    const closeIfAmong = (emails: readonly Email[]) => {
+        if (emails.some((e) => e.id === mailId)) detail.close();
     };
 
     const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[]) => {
         await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds });
-        navigateToList();
+        detail.close();
     };
 
-    // The composer reads the history state at mount and the first save fires only on an edit. The fresh composeSessionKey
-    // remounts any open composer, so Reply while typing another message gives a clean one.
-    const openPrefilledCompose = (prefillDraft: NewDraft, forwardedParts?: FileSubject[]) => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: { mode: 'compose' },
-            state: { prefillDraft, forwardedParts, composeSessionKey: crypto.randomUUID() },
-        });
-    };
-
-    // Adds ?mailId=... so a reload lands on the same draft. Mode and history state stay, or the EmailDraft remount key would
-    // flip and lose the typing. The forwarded parts stay too: that save may have run while one still uploaded.
+    // Adds ?mailId=... so a reload lands on the same draft. Mode and history state stay, or the EmailDraft remount key
+    // would flip and lose the typing. The forwarded parts stay too: that save may have run while one still uploaded.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
@@ -172,20 +165,20 @@ export function useMailActions() {
         });
     };
 
-    const handleDeleteEmail = async (mail: Email) => {
+    const handleDeleteEmail = async (mail: Email): Promise<DeleteResult> => {
         if (mail.mailbox === MAILBOX_TRASH) {
-            return { needsConfirmation: true as const, emails: [mail] };
+            return { needsConfirmation: true, emails: [mail] };
         }
         await deleteMail.mutateAsync(mail);
-        navigateToList();
-        return { needsConfirmation: false as const };
+        detail.close();
+        return { needsConfirmation: false };
     };
 
-    // On a failure, `keepFailed` narrows the dialog to the emails worth another try and the first failure is rethrown. Its
-    // mutation already toasted it, so the dialog shows no second message.
+    // On a failure, `keepFailed` narrows the dialog to the emails worth another try and the first failure is rethrown.
+    // Its mutation already toasted it, so the dialog shows no second message.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
-        if (results.some((r) => r.status === 'fulfilled')) navigateToList();
+        closeIfAmong(pendingEmails.filter((_, i) => results[i].status === 'fulfilled'));
         const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
         if (failures.length === 0) return;
         // A refused email, such as one already gone, gets the same no again, so only the others stay for a retry. A
@@ -198,10 +191,10 @@ export function useMailActions() {
         throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 
-    // Built from the fulfilled results only: each mutation reports its own failure, so a partial failure must not claim the
-    // full count nor offer to undo what never moved.
-    const handleDeleteEmailsByIds = async (emailIds: string[]) => {
-        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+    // Built from the fulfilled results only: each mutation reports its own failure, so a partial failure must not claim
+    // the full count nor offer to undo what never moved.
+    const handleDeleteEmailsByIds = async (emailIds: string[]): Promise<DeleteResult> => {
+        const emails = await emailsByIds(emailIds);
         const trashEmails = emails.filter((e) => e.mailbox === MAILBOX_TRASH);
         const nonTrashEmails = emails.filter((e) => e.mailbox !== MAILBOX_TRASH);
 
@@ -213,49 +206,47 @@ export function useMailActions() {
                 const action: Undoable = {
                     kind: 'move',
                     items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                    to: MAILBOX_TRASH,
                 };
                 lastAction.current = action;
                 undoToast(`${moved.length} moved to Trash`, action);
             }
         }
         if (trashEmails.length > 0) {
-            return { needsConfirmation: true as const, emails: trashEmails };
+            return { needsConfirmation: true, emails: trashEmails };
         }
-        if (moved.length > 0) {
-            navigateToList();
-        }
-        return { needsConfirmation: false as const };
+        closeIfAmong(moved);
+        return { needsConfirmation: false };
     };
 
     const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
         const email = await getEmailById(emailId);
-        if (email) await handleMoveEmail(email, folderId);
+        if (!email) return;
+        await moveMail.mutateAsync({ email, mailbox: folderId });
+        detail.close();
     };
 
     const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
-        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        const emails = await emailsByIds(emailIds);
         const results = await Promise.allSettled(
             emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: folderId })),
         );
-        if (results.some((r) => r.status === 'fulfilled')) navigateToList();
+        closeIfAmong(emails.filter((_, i) => results[i].status === 'fulfilled'));
     };
 
     // An archive or a spam report: one toast and one Undoable for every message that moved.
     const moveEmailsByIdsWithUndo = async (emailIds: string[], mailbox: string, toastWording: string) => {
-        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        const emails = await emailsByIds(emailIds);
         const results = await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox })));
         const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
         if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
                 items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: mailbox,
             };
             lastAction.current = action;
             undoToast(`${moved.length} ${toastWording}`, action);
-            navigateToList();
         }
+        closeIfAmong(moved);
     };
 
     const handleArchiveEmailsByIds = (emailIds: string[]) =>
@@ -264,31 +255,31 @@ export function useMailActions() {
     const handleReportSpamByIds = (emailIds: string[]) =>
         moveEmailsByIdsWithUndo(emailIds, MAILBOX_JUNK, 'reported as spam');
 
-    // With no navigation, for the open-conversation and cursored-row paths, whose callers advance at once and must not block
-    // on the round-trip. Errors surface via the mutation's onMutationError.
+    // With no navigation, for the open-conversation and cursored-row paths, whose callers advance at once and must not
+    // block on the round-trip. Errors surface via the mutation's onMutationError.
     const moveEmailByIdOnly = async (emailId: string, mailbox: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
         moveMail.mutate({ email, mailbox });
-        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: mailbox };
+        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }] };
         lastAction.current = action;
         if (mailbox === MAILBOX_ARCHIVE) undoToast('Archived', action);
         else if (mailbox === MAILBOX_JUNK) undoToast('Reported as spam', action);
     };
 
-    const deleteEmailByIdOnly = async (emailId: string) => {
+    const deleteEmailByIdOnly = async (emailId: string): Promise<DeleteResult> => {
         const email = await getEmailById(emailId);
-        if (!email) return { needsConfirmation: false as const };
-        if (email.mailbox === MAILBOX_TRASH) return { needsConfirmation: true as const, emails: [email] };
+        if (!email) return { needsConfirmation: false };
+        if (email.mailbox === MAILBOX_TRASH) return { needsConfirmation: true, emails: [email] };
         deleteMail.mutate(email);
-        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }], to: MAILBOX_TRASH };
+        const action: Undoable = { kind: 'move', items: [{ emailId, from: email.mailbox }] };
         lastAction.current = action;
         undoToast('Moved to Trash', action);
-        return { needsConfirmation: false as const };
+        return { needsConfirmation: false };
     };
 
-    // The detail can carry a stale flag (staleTime: Infinity), which would make the mutation's own no-op guard skip a real
-    // change. So this pre-guards on the fresh value and overwrites the detail's field with it.
+    // The detail can carry a stale flag (staleTime: Infinity), which would make the mutation's own no-op guard skip a
+    // real change. So this pre-guards on the fresh value and overwrites the detail's field with it.
     const setReadById = async (emailId: string, isRead: boolean, currentIsRead: boolean) => {
         if (currentIsRead === isRead) return;
         const email = await getEmailById(emailId);
@@ -305,8 +296,8 @@ export function useMailActions() {
         lastAction.current = { kind: 'flag', items: [{ emailId, prevIsFlagged: currentFlagged }] };
     };
 
-    // Records one Undoable holding every changed item, so `z` reverts all of them. The rows are what the mutation wants, so a
-    // select-all fetches nothing.
+    // Records one Undoable holding every changed item, so `z` reverts all of them. The rows are what the mutation
+    // wants, so a select-all fetches nothing.
     const setReadByIds = (rows: EmailSummary[], isRead: boolean) => {
         const undoItems: { emailId: string; prevIsRead: boolean }[] = [];
         for (const row of rows) {
@@ -327,51 +318,28 @@ export function useMailActions() {
         if (undoItems.length > 0) lastAction.current = { kind: 'flag', items: undoItems };
     };
 
-    // In-Reply-To points at the original's Message-ID and References appends it to its chain. Skipped when it has none.
-    const replyThreadingHeaders = (email: Email): Pick<DraftInput, 'inReplyTo' | 'references'> => {
-        if (!email.messageId) return {};
-        const prior = email.references ? (Array.isArray(email.references) ? email.references : [email.references]) : [];
-        return { inReplyTo: email.messageId, references: [...prior, email.messageId] };
-    };
-
-    const handleReplyEmail = async (emailId: string) => {
+    // flattenAddresses expands RFC 2822 groups: a bare group container has no address, and would reach the composer as
+    // `Team <>` and fail the send-path canonicaliser.
+    const reply = async (emailId: string, all: boolean) => {
         const email = await getEmailById(emailId);
         if (!email) return;
-        openPrefilledCompose({
-            ...createDraftEmail({
-                to: email.replyTo || email.from,
-                subject: replySubject(email.subject),
-                html: formatEmailQuote(email),
-                ...replyThreadingHeaders(email),
-            }),
-            repliedToId: email.id,
-        });
-    };
-
-    const handleReplyAllEmail = async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (!email) return;
+        const sender = email.replyTo || email.from;
         const myEmail = user?.email?.toLowerCase();
-        // Expand RFC 2822 groups: a bare group container carries a name but no address, and would
-        // reach the composer as `Team <>` and fail the send-path canonicaliser.
-        const toValues = Array.isArray(email.to)
-            ? email.to.flatMap((t) => flattenAddresses(t.value))
-            : flattenAddresses(email.to?.value);
-        const ccValues = Array.isArray(email.cc)
-            ? email.cc.flatMap((c) => flattenAddresses(c.value))
-            : flattenAddresses(email.cc?.value);
-        const replyTo = flattenAddresses((email.replyTo || email.from)?.value);
-        const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
-            (addr) => addr.address.toLowerCase() !== myEmail,
-        );
-        openPrefilledCompose({
-            ...createDraftEmail({
-                to: { value: allRecipients, text: '' },
-                subject: replySubject(email.subject),
-                html: formatEmailQuote(email),
-                ...replyThreadingHeaders(email),
-            }),
-            repliedToId: email.id,
+        const everyone = [sender, email.to, email.cc]
+            .flatMap((field) => (Array.isArray(field) ? field : [field]))
+            .flatMap((field) => flattenAddresses(field?.value))
+            .filter((addr) => addr.address.toLowerCase() !== myEmail);
+        const prior = email.references ? (Array.isArray(email.references) ? email.references : [email.references]) : [];
+        detail.open({
+            prefillDraft: {
+                ...createDraftEmail({
+                    to: all ? { value: everyone, text: '' } : sender,
+                    subject: replySubject(email.subject),
+                    html: formatEmailQuote(email),
+                    ...(email.messageId && { inReplyTo: email.messageId, references: [...prior, email.messageId] }),
+                }),
+                repliedToId: email.id,
+            },
         });
     };
 
@@ -379,17 +347,14 @@ export function useMailActions() {
         const email = await getEmailById(emailId);
         if (!email || !user) return;
         // Every part the reader shows as a chip goes along, an inline image included: the quote drops images.
-        openPrefilledCompose(
-            createDraftEmail({
-                subject: `FW: ${email.subject}`,
-                html: formatEmailQuote(email),
-            }),
-            email.attachments
+        detail.open({
+            prefillDraft: createDraftEmail({ subject: `FW: ${email.subject}`, html: formatEmailQuote(email) }),
+            forwardedParts: email.attachments
                 .filter(isListedFile)
                 .map(({ index, filename, contentType, size }) =>
                     subjectFromMailAttachment(user.id, email.id, index, { filename, contentType, size }),
                 ),
-        );
+        });
     };
 
     const handleToggleMailRead = (email: Email, isRead: boolean) => {
@@ -397,13 +362,12 @@ export function useMailActions() {
     };
 
     return {
-        navigateToList,
-        handleRowClick,
-        openCompose,
+        closeDetail: detail.close,
+        handleRowClick: detail.open,
+        openCompose: () => detail.open({}),
         handleDeleteEmail,
         confirmDeleteEmails,
         handleDeleteEmailsByIds,
-        handleMoveEmail,
         handleMoveEmailToFolderById,
         handleMoveEmailsToFolderByIds,
         handleArchiveEmailsByIds,
@@ -415,8 +379,8 @@ export function useMailActions() {
         setReadByIds,
         setFlaggedByIds,
         undoLast,
-        handleReplyEmail,
-        handleReplyAllEmail,
+        handleReplyEmail: (emailId: string) => reply(emailId, false),
+        handleReplyAllEmail: (emailId: string) => reply(emailId, true),
         handleForwardEmail,
         handleSendEmail,
         handleToggleMailRead,
@@ -436,7 +400,7 @@ function formatEmailQuote(email: Email): string {
     // The server sanitizes the HTML when it parses the message, and the plain text is escaped here, so both are
     // safe in the blockquote.
     const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
-    return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, new Date(email.date), content);
+    return formatReplyQuote({ name: from?.name || '', address: from?.address || '' }, email.date, content);
 }
 
 function replySubject(subject: string): string {

@@ -159,8 +159,8 @@ describe('the sweep', () => {
 
     test("a card's attachment stays while the card is in use", async () => {
         const { path, collab } = await openDoc(mount, M, 'Card', [paragraph(marked('c1'))]);
-        addCard(collab.doc, 'c1', { attachments: ['card.pdf'] });
-        addCard(collab.doc, 'c-loose', { attachments: ['loose.pdf'] });
+        addCard(collab.doc, 'c1', { chatName: 'thread-c1', attachments: ['card.pdf'] });
+        addCard(collab.doc, 'c-loose', { chatName: 'thread-c-loose', attachments: ['loose.pdf'] });
         await addMedia(mount, path.id, 'card.pdf', { mimeType: 'application/pdf' });
         await addMedia(mount, path.id, 'loose.pdf', { mimeType: 'application/pdf' });
 
@@ -392,6 +392,25 @@ describe('a copy', () => {
         const copiedDoc = await mount.getChildByName(copied.id, path.name);
         if (!copiedDoc) throw new Error('no copied document');
         await expectOnlyNamed(copiedDoc, kept);
+        await close(M, path);
+    });
+
+    test('of a folder sweeps every document after one whose state cannot be read', async () => {
+        const folder = await drive.createFolder(M, rootId, `CopyOneBad-${crypto.randomUUID()}`, home.user);
+        const bad = await openDoc(mount, M, 'A-Unreadable', [paragraph()]);
+        addCard(bad.collab.doc, 'c-odd', { chatName: 42 });
+        await addMedia(mount, bad.path.id, 'loose.png');
+        const { path, kept } = await sourceDoc('B-Readable');
+        await drive.movePath(M, bad.path.id, folder.id, home.user);
+        await drive.movePath(M, path.id, folder.id, home.user);
+
+        const copied = await drive.copyPath(M, folder.id, intoRoot(), `${folder.name} copy`, home.user);
+        const copiedBad = await mount.getChildByName(copied.id, bad.path.name);
+        const copiedDoc = await mount.getChildByName(copied.id, path.name);
+        if (!copiedBad || !copiedDoc) throw new Error('no copied document');
+        expect(await mediaNames(mount, copiedBad.id)).toEqual(['loose.png']);
+        await expectOnlyNamed(copiedDoc, kept);
+        await close(M, bad.path);
         await close(M, path);
     });
 

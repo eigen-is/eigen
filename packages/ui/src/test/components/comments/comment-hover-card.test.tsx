@@ -25,7 +25,7 @@ const { CommentHoverCard } = await import('../../../components/comments');
 
 const cards: Record<string, CommentCard> = {
     a: { id: 'a', title: 'The title', description: '<p>The description</p>', chatName: 'thread-a.eigenchat' },
-    b: { id: 'b', title: '', description: '<p>Another description</p>' },
+    b: { id: 'b', title: '', description: '<p>Another description</p>', chatName: 'thread-b.eigenchat' },
 };
 const entries: CommentEntry[] = [
     {

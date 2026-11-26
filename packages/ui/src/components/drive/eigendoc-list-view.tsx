@@ -7,7 +7,6 @@ import { openDocument } from '@workspace/lib/api';
 import type { validateDriveSearch } from '@workspace/lib/drive';
 import { useAggregateMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
 import type { AuthUser } from '@workspace/lib/types/auth';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
@@ -15,16 +14,17 @@ import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
-import { useDriveListRoute } from './use-drive-list-route';
+import type { DriveSearchNavigate } from './use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from './use-drive-list-route';
 
 // An app route typed by its shape, as each app has its own route tree; a search without validateDriveSearch fails to
-// compile through `types`. Its navigate keeps the route and its params, so it changes only the search.
+// compile through `types`.
 export type EigenDocListRoute<TParams> = {
     types: { searchValidator: typeof validateDriveSearch };
     useParams: () => TParams;
     useSearch: () => DriveSearchParams;
     useRouteContext: () => { user: AuthUser };
-    useNavigate: () => (options: { search?: DriveSearchParams }) => Promise<void>;
+    useNavigate: () => DriveSearchNavigate;
 };
 
 type EigenDocListViewProps = {
@@ -38,7 +38,6 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
     const { pid, uid, mid } = route.useSearch();
     const viewerId = route.useRouteContext().user.id;
     const navigate = route.useNavigate();
-    const clearSelection = () => navigate({});
     const { rootPath } = useContext(EigenDocDriveContext);
     const effectiveOwnerId = ownerId ?? viewerId;
     const isMountScoped = !!mountId;
@@ -59,11 +58,12 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
     const mountScoped = useMountMimeContent(ownerId ?? '', mountId ?? '', config.mimeType);
     const { data: folderContents = [], isLoading, error } = isMountScoped ? mountScoped : aggregate;
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: openDocument,
-        onSelectItem: (path: DrivePath) => navigate({ search: { pid: path.id, uid: path.ownerId, mid: path.mountId } }),
+        pid,
+        setSelectedItem: selectInSearch(navigate),
     });
 
     return (
@@ -78,8 +78,8 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
-            onBackToList={clearSelection}
-            onAfterAction={clearSelection}
+            onClose={onClose}
+            onAfterAction={onAfterAction}
             capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}

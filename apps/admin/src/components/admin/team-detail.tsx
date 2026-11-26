@@ -63,7 +63,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: config } = usePublicConfig();
 
     return (
-        <div className="app-gutter space-y-6 h-full overflow-y-auto">
+        <div className="space-y-6">
             <TeamSettingsSection team={team} organizationId={organizationId} />
 
             {team.id === config?.defaultTeamId && (

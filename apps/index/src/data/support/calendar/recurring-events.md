@@ -30,7 +30,7 @@ A recurring event is one that repeats on a schedule. You set it up once and Cale
 ## Change the recurrence on an existing event
 
 1. Click the recurring event in the calendar.
-2. Click the pencil icon in the detail panel.
+2. Click **Edit event** (the pencil icon) in the bar at the top of the details panel.
 3. In the **Edit event** dialog, open the recurrence dropdown and choose a different option.
 4. Click **Save**. Calendar asks which occurrences to update:
 
@@ -43,7 +43,7 @@ A recurring event is one that repeats on a schedule. You set it up once and Cale
 ## Edit one occurrence without changing the others
 
 1. Click the specific occurrence you want to change.
-2. Click the pencil icon and make your changes (you can adjust the time, title, location, or any other field).
+2. Click **Edit event** (the pencil icon) and make your changes (you can adjust the time, title, location, or any other field).
 3. Click **Save**, then choose **This event** when Calendar asks which occurrences to update.
 4. Click **OK**.
 
@@ -56,7 +56,7 @@ If you remove every guest from that one occurrence, it has no guests, and the gu
 ## Remove an occurrence or cancel the whole series
 
 1. Click the occurrence you want to delete.
-2. Click the trash icon in the detail panel.
+2. Click **Delete event** (the trash icon) in the bar at the top of the details panel.
 3. Confirm the deletion scope:
 
    - **This event**: removes this occurrence only.

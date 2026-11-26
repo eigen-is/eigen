@@ -5,7 +5,6 @@
 
 import { openDocument } from '@workspace/lib/api';
 import { usePathInfo, useSharedPaths } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
@@ -14,7 +13,7 @@ import type { EigenDocAppConfig } from './eigendoc-config';
 import { eigenDocSharedTitle } from './eigendoc-config';
 import type { EigenDocListRoute } from './eigendoc-list-view';
 import { EigenDocDriveContext } from './eigendoc-root';
-import { useDriveListRoute } from './use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from './use-drive-list-route';
 
 type EigenDocSharedViewProps = {
     config: EigenDocAppConfig;
@@ -26,7 +25,6 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
     const { pid, uid, mid } = route.useSearch();
     const viewerId = route.useRouteContext().user.id;
     const navigate = route.useNavigate();
-    const clearSelection = () => navigate({});
     const { rootPath } = useContext(EigenDocDriveContext);
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
     // As in Drive's shared view, a row shared with the viewer belongs to someone else, and this listing
@@ -42,11 +40,12 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
     const { data: shared = [], isLoading, error } = useSharedPaths(viewerId, byMe ? 'by-me' : 'with-me');
     const folderContents = shared.filter((path) => path.type === config.type);
 
-    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: openDocument,
-        onSelectItem: (path: DrivePath) => navigate({ search: { pid: path.id, uid: path.ownerId, mid: path.mountId } }),
+        pid,
+        setSelectedItem: selectInSearch(navigate),
     });
 
     return (
@@ -61,8 +60,8 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
-            onBackToList={clearSelection}
-            onAfterAction={clearSelection}
+            onClose={onClose}
+            onAfterAction={onAfterAction}
             capabilities={capabilities}
             title={eigenDocSharedTitle(byMe ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}

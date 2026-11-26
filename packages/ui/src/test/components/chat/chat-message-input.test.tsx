@@ -26,7 +26,7 @@ const inputProps = {
     placeholder: 'Reply...',
     roomMembers,
     currentUserEmail: 'me@example.com',
-    messageCount: 0,
+    focusTrigger: 0,
     onAttachClick: () => {},
     driveAttachments: [],
     onRemoveDriveAttachment: () => {},

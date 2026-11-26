@@ -1,10 +1,12 @@
-// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and the
-// hook opens the doc, seeds a new board for someone who may write it, runs the shared ref repair on sync, and adds a
-// column. The board component calls it; the cards themselves go through the shared comment-card code.
+// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their card ids, and
+// the hook opens the doc, runs the shared ref repair on sync, and adds a column. For someone who may write the board it
+// also seeds a new board and gives each card stored without a thread its own. The board component calls it; the cards
+// themselves go through the shared comment-card code.
 
 import { useAuth } from '@workspace/lib/auth';
+import type { CollabDoc } from '@workspace/lib/collab';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
-import { writeCardToDoc } from '@workspace/lib/comments';
+import { isCommentCard, writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useCreateDriveItem } from '@workspace/lib/drive';
 import { nanoid } from 'nanoid';
@@ -13,6 +15,8 @@ import * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
 import type { BoardData, ColumnItem } from '../types';
 
+// Not the undo manager's null origin, so ⌘Z never takes a card's thread back.
+const THREAD_REPAIR_ORIGIN = Symbol('card-thread-repair');
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
     title: 'Welcome to stickies!',
@@ -28,7 +32,8 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     );
 }
 
-// Lists only the columns and cards it could read: the board looks up every listed id.
+// Lists only the columns it could read and the card ids that name a map, as the server's in-use rule does. The board
+// joins those ids with the cards it reads, so a card that read skips drops out there.
 export function readBoard(doc: Y.Doc): BoardData {
     const tasksMap = getItemMapRoot(doc, 'tasks');
     const columns: Record<string, ColumnItem> = {};
@@ -50,17 +55,29 @@ export function readBoard(doc: Y.Doc): BoardData {
     return { columns, columnOrder };
 }
 
+type UseBoardResult = Pick<
+    CollabDoc,
+    'provider' | 'undoManager' | 'offline' | 'loaded' | 'storageUnavailable' | 'storageGone' | 'unsyncedEdits'
+> & {
+    board: BoardData;
+    yjsDoc: Y.Doc | null;
+    isAddColumnDialogOpen: boolean;
+    setIsAddColumnDialogOpen: (open: boolean) => void;
+    handleAddColumn: (title: string) => void;
+    deleteCardFromBoard: (cardId: string) => void;
+};
+
 export const useBoard = (
     ownerId: string,
     mountId: string,
     pathId: string,
     chatFolderId: string | null,
     canWrite: boolean,
-) => {
+): UseBoardResult => {
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
-    // Normalize and seed run once per doc, not on every reconnect's 'sync'.
+    // The sync-time repairs and the seed run once per doc, not on every reconnect's 'sync'.
     const initializedRef = useRef(false);
 
     const { user } = useAuth();
@@ -83,7 +100,7 @@ export const useBoard = (
                 ownerId,
                 mountId,
                 parentId: folderId,
-                fileName: `task-${nanoid(10)}`,
+                fileName: `comment-${Date.now()}-${nanoid(6)}`,
             })
             .catch(() => undefined);
         return result?.name;
@@ -92,11 +109,9 @@ export const useBoard = (
     const initializeDefaultBoard = useCallback(
         async (doc: Y.Doc, userEmail: string) => {
             const columnsMap = getItemMapRoot(doc, 'columns');
-            if (columnsMap.size > 0) return;
-
             const chatName = await createCardChat();
-
-            if (columnsMap.size > 0) return;
+            // Every card has its thread, so a board whose first thread failed stays empty until it opens again.
+            if (!chatName || columnsMap.size > 0) return;
 
             doc.transact(() => {
                 const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
@@ -132,12 +147,31 @@ export const useBoard = (
         [createCardChat],
     );
 
+    // A card without a thread shows nowhere, so a writer's open gives it one.
+    const repairCardThreads = useCallback(
+        async (doc: Y.Doc) => {
+            const tasksMap = getItemMapRoot(doc, 'tasks');
+            const threadless = [...tasksMap]
+                .filter(([, task]) => task instanceof Y.Map && !isCommentCard(task))
+                .map(([id]) => id);
+            const chatNames = await Promise.all(threadless.map(() => createCardChat()));
+            // A peer may have given a card its thread meanwhile, and that one stays.
+            doc.transact(() => {
+                for (const [i, id] of threadless.entries()) {
+                    const task = tasksMap.get(id);
+                    const chatName = chatNames[i];
+                    if (chatName && task instanceof Y.Map && !isCommentCard(task)) task.set('chatName', chatName);
+                }
+            }, THREAD_REPAIR_ORIGIN);
+        },
+        [createCardChat],
+    );
+
     const {
         docRef,
         provider,
         undoManager,
         doc: yjsDoc,
-        synced: isSynced,
         offline,
         loaded,
         storageUnavailable,
@@ -165,7 +199,7 @@ export const useBoard = (
                 });
             };
 
-            // tasks shallow: a card's own edits don't change which ids the board can read.
+            // tasks shallow: a card's own edits don't change which ids the board lists.
             columnsMap.observeDeep(updateReactState);
             tasksMap.observe(updateReactState);
             columnOrderArray.observe(updateReactState);
@@ -181,8 +215,10 @@ export const useBoard = (
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
             normalizeBoard(doc);
-            // A reader can't write the seed or create its thread in the sharer's drive.
-            if (canWriteRef.current && doc.getMap('columns').size === 0) {
+            // A reader can't write the board or create a thread in the sharer's drive.
+            if (!canWriteRef.current) return;
+            repairCardThreads(doc).catch(console.error);
+            if (doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
             }
         },
@@ -236,7 +272,6 @@ export const useBoard = (
 
     return {
         board,
-        isSynced,
         offline,
         loaded,
         storageUnavailable,

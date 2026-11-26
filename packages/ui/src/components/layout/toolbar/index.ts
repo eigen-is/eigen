@@ -1,4 +1,5 @@
 export * from './app-bar-menu';
+export * from './back-button';
 export * from './document-mode-button';
 export * from './document-share-cluster';
 export * from './edit-menu';

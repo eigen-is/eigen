@@ -1,7 +1,8 @@
 // A document app's list routes, its index, a team drive and Shared by me, hand their own route to the view.
 // The view lists what the route's params name, shows the selection from its URL, and a selected row or the
-// way back changes only the search, on the same route with the same params.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+// way back changes only the search, on the same route with the same params. A row opens on a new entry, another
+// row replaces it, and closing goes back to the entry before.
+import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -13,18 +14,20 @@ const VIEWER = 'viewer-1';
 const row = drivePath({
     id: 'row-1',
     name: 'Plan',
+    type: 'doc',
     mimeType: 'application/eigendoc',
     ownerId: 'owner-2',
     mountId: 'team-1',
 });
+const otherRow = drivePath({ ...row, id: 'row-2', name: 'Budget' });
 
 // Which listing each hook was asked for, and the props the view handed the layout.
 const asked: { mount: string[]; aggregate: string[]; shared: string[] } = { mount: [], aggregate: [], shared: [] };
 type LayoutProps = {
     pid?: string;
     onRowSelect: (path: DrivePath) => void;
-    onBackToList: () => void;
-    onAfterAction: () => void;
+    onClose: () => void;
+    onAfterAction: (actionType: string, data: Record<string, unknown>) => void;
 };
 let layout: LayoutProps | undefined;
 
@@ -32,7 +35,7 @@ let layout: LayoutProps | undefined;
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realLayout = { ...(await import('../../../components/drive/drive-layout')) };
 const realQuickLook = { ...(await import('../../../components/drive/use-drive-quick-look')) };
-const listing = { data: [row], isLoading: false, error: null };
+const listing = { data: [row, otherRow], isLoading: false, error: null };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     usePathInfo: () => ({ data: null }),
@@ -118,15 +121,22 @@ afterEach(async () => {
 });
 
 async function open(url: string) {
-    const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [url] }) });
+    const history = createMemoryHistory({ initialEntries: [url] });
+    const router = createRouter({ routeTree, history });
     await router.load();
     const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: false };
     ({ unmount } = await renderInDocument(
         createElement(PreviewContext.Provider, { value: preview }, createElement(RouterProvider, { router })),
     ));
     if (!layout) throw new Error('the view drew no layout');
-    return { router, layout };
+    return { router, history, layout, index: () => history.location.state.__TSR_index };
 }
+
+// The props of the layout's last render, since each navigation renders the view again.
+const current = () => {
+    if (!layout) throw new Error('the view drew no layout');
+    return layout;
+};
 
 const where = (router: { state: { location: { pathname: string; search: object } } }) => ({
     pathname: router.state.location.pathname,
@@ -142,7 +152,7 @@ test('a team drive lists the mount its params name, and a selection stays on tha
     await act(async () => layout.onRowSelect(row));
     expect(where(router)).toEqual({ pathname: '/drive/owner-2/team-1', search: SELECTED });
 
-    await act(async () => layout.onBackToList());
+    await act(async () => layout.onClose());
     expect(where(router)).toEqual({ pathname: '/drive/owner-2/team-1', search: {} });
 });
 
@@ -154,6 +164,21 @@ test('the index lists every doc of the viewer, and a selection stays on the inde
     expect(where(router)).toEqual({ pathname: '/', search: SELECTED });
 });
 
+test('a row opens on a new entry, another row replaces it, and close goes back to the list', async () => {
+    const { router, layout, index } = await open('/');
+    await act(async () => layout.onRowSelect(row));
+    expect(index()).toBe(1);
+    await act(async () => current().onRowSelect(otherRow));
+    expect(where(router).search).toEqual({ ...SELECTED, pid: 'row-2' });
+    expect(index()).toBe(1);
+    await act(async () => {
+        current().onClose();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(where(router)).toEqual({ pathname: '/', search: {} });
+    expect(index()).toBe(0);
+});
+
 test('Shared by me lists the viewer’s shared side its param names, and a selection stays on it', async () => {
     const { router, layout } = await open('/shared/by-me');
     expect(asked.shared).toContain(`${VIEWER}/by-me`);
@@ -161,13 +186,25 @@ test('Shared by me lists the viewer’s shared side its param names, and a selec
     await act(async () => layout.onRowSelect(row));
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: SELECTED });
 
-    await act(async () => layout.onBackToList());
+    await act(async () => layout.onClose());
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
 });
 
-// A rename or a delete from the detail leaves the list as it was, without the stale selection.
-test('an action on a shared row clears the selection and stays on the shared list', async () => {
-    const { router, layout } = await open('/shared/by-me?pid=row-1&uid=owner-2&mid=team-1');
-    await act(async () => layout.onAfterAction());
+// A delete reports every item it removed, one call each, so only the open one's closes the detail, and only once: a
+// second back would leave the page.
+test('a delete closes the open row once, however many rows go with it, and leaves another row open', async () => {
+    const { router, history, layout, index } = await open('/shared/by-me');
+    await act(async () => layout.onRowSelect(row));
+    await act(async () => current().onAfterAction('delete', otherRow));
+    expect(where(router)).toEqual({ pathname: '/shared/by-me', search: SELECTED });
+
+    const back = spyOn(history, 'back');
+    await act(async () => {
+        current().onAfterAction('delete', row);
+        current().onAfterAction('delete', otherRow);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(back).toHaveBeenCalledTimes(1);
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
+    expect(index()).toBe(0);
 });

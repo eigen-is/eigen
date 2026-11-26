@@ -1,7 +1,8 @@
 // The contacts page lists the book, or a label's cards alone, sorted by first or last name, and a label that is gone
 // goes back to the book. A contact URL opens that contact beside the list; one whose contact is gone, deleted or never
 // there, says so in the detail, as Admin's users and teams do. The detail's Delete confirms first, keeps naming the card while its
-// dialog closes and sends the card's etag, and your own card offers no Delete at all.
+// dialog closes and sends the card's etag, and your own card offers no Delete at all. A delete of other cards leaves
+// the open one open.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import { closingDialog, holdClosingDialogs } from '@workspace/ui/test/closing-dialog';
@@ -77,12 +78,10 @@ beforeEach(() => {
     deleteContact.mutateAsync.mockClear();
 });
 
-async function open(url: string) {
-    const router = createRouter({
-        routeTree,
-        history: createMemoryHistory({ initialEntries: [url] }),
-        context: { auth },
-    });
+// More than one URL starts the history at the last, as a link opened after the others.
+async function open(...urls: string[]) {
+    const history = createMemoryHistory({ initialEntries: urls, initialIndex: urls.length - 1 });
+    const router = createRouter({ routeTree, history, context: { auth } });
     await router.load();
     const rendered = await renderInDocument(createElement(RouterProvider, { router }));
     unmount = rendered.unmount;
@@ -90,8 +89,17 @@ async function open(url: string) {
         text: () => rendered.container.textContent ?? '',
         search: () => router.state.location.search,
         pathname: () => router.state.location.pathname,
+        index: () => history.location.state.__TSR_index,
+        back: () => settle(() => history.back()),
     };
 }
+
+// A back settles on the history's next tick, then the router loads the entry it lands on.
+const settle = (action: () => void) =>
+    act(async () => {
+        action();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
 
 const click = (element: Element | null | undefined) =>
     act(async () => {
@@ -147,6 +155,29 @@ test('a contact the URL names opens beside the list', async () => {
     expect(page.search()).toEqual({ contactId: 'c1' });
 });
 
+test('a row opens its contact on a new entry, another row replaces it, and X goes back to the list', async () => {
+    const page = await open('/book/all');
+    await click(document.querySelectorAll('.eigen-list-item')[0]);
+    expect(page.search()).toEqual({ contactId: 'c1' });
+    expect(page.index()).toBe(1);
+    await click(document.querySelectorAll('.eigen-list-item')[1]);
+    expect(page.search()).toEqual({ contactId: 'c2' });
+    expect(page.index()).toBe(1);
+    await settle(() => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(0);
+});
+
+test('X on a contact a link opened replaces it, so back after it does not reopen the contact', async () => {
+    const page = await open('/book/all', '/book/all?contactId=c1');
+    await settle(() => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(1);
+    await page.back();
+    expect(page.index()).toBe(0);
+    expect(page.search()).toEqual({});
+});
+
 test('a contact that is gone says so and keeps its id in the URL', async () => {
     const page = await open('/all/all?contactId=gone');
     expect(page.text()).toContain('Contact not found');
@@ -177,6 +208,34 @@ test('Delete asks first, then deletes the card with the etag it was read with an
     } finally {
         release();
     }
+});
+
+test('deleting other cards from the list leaves the open contact open', async () => {
+    const linus: Contact = { id: 'c4', firstName: 'Linus', lastName: 'Pauling', email: [], phone: [], etag: 'e4' };
+    contacts.data = [grace, ada, me, linus];
+    const page = await open('/book/all');
+    const row = (name: string) =>
+        [...document.querySelectorAll('.eigen-list-item')].find((r) => r.textContent === name);
+    const metaClick = (name: string) =>
+        act(async () => {
+            row(name)?.dispatchEvent(new MouseEvent('click', { bubbles: true, metaKey: true }));
+        });
+    await click(row('Ada Lovelace'));
+    expect(page.search()).toEqual({ contactId: 'c1' });
+    await metaClick('Ada Lovelace');
+    await metaClick('Grace Hopper');
+    await metaClick('Linus Pauling');
+    await act(async () => {
+        document
+            .querySelector('[tabindex="0"]')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true }));
+    });
+    const dialog = document.querySelector('[role="dialog"]');
+    const confirm = [...(dialog?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Delete');
+    await settle(() => confirm?.click());
+    expect(deleteContact.mutateAsync.mock.calls).toEqual([[{ id: 'c2', etag: 'e2' }], [{ id: 'c4', etag: 'e4' }]]);
+    expect(page.search()).toEqual({ contactId: 'c1' });
+    expect(page.index()).toBe(1);
 });
 
 test('your own card offers no Delete', async () => {

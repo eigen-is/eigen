@@ -1,7 +1,7 @@
-// The Location row of the Drive details panel: the drive and the folders down to the item's parent, read from the
-// item's own breadcrumb, the one its sharing list reads, as a link to that folder. A plain click opens the folder
-// the way a row does, and a modified click is the browser's. A sharee who can't read the folders above sees the
-// owner as the drive, as plain text.
+// The Drive details panel is a detail column: X and Esc close it. Its Location row shows the drive and the folders
+// down to the item's parent, read from the item's own breadcrumb, the one its sharing list reads, as a link to that
+// folder. A plain click opens the folder the way a row does, and a modified click is the browser's. A sharee who can't
+// read the folders above sees the owner as the drive, as plain text.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -84,15 +84,17 @@ afterAll(() => {
     });
 });
 
-const { createElement } = await import('react');
+const { act, createElement } = await import('react');
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
 const { DriveDetail } = await import('../../../components/drive/drive-detail');
 
+const onClose = mock(() => {});
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     breadcrumbReads.length = 0;
     runs.length = 0;
+    onClose.mockClear();
 });
 
 // The actions the panel ran, by id and the items' ids.
@@ -108,7 +110,7 @@ const actions = {
 };
 
 async function location(path: DrivePath): Promise<Element> {
-    ({ unmount } = await renderInDocument(createElement(DriveDetail, { path, siblings: [path], actions })));
+    ({ unmount } = await renderInDocument(createElement(DriveDetail, { path, siblings: [path], actions, onClose })));
     const label = [...document.querySelectorAll('dt')].find((dt) => dt.textContent === 'Location');
     if (!label?.nextElementSibling) throw new Error('no Location row');
     return label.nextElementSibling;
@@ -142,4 +144,15 @@ test('a file shared without its folders shows its owner as the drive, and no lin
     const value = await location(memo);
     expect(value.textContent).toBe('Alice Example');
     expect(value.querySelector('a')).toBeNull();
+});
+
+test('X and Esc close the panel', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(DriveDetail, { path: plan, siblings: [plan], actions, onClose }),
+    ));
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="Close"]')?.click());
+    await act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(2);
 });

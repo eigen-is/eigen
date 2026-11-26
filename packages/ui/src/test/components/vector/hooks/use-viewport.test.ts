@@ -156,4 +156,17 @@ describe('useViewport on the infinite canvas', () => {
         expect(h.state.viewportRef.current).toEqual({ zoom, scrollX: 800 / zoom - 300, scrollY: 500 / zoom + 200 });
         h.unmount();
     });
+
+    test('centerOn with a right inset centers the point in the room left of it, even one already in view', () => {
+        const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
+        // The room is 1536 wide, so its center is at 768, where the origin sat at 800.
+        act(() => h.state.centerOn(0, 0, 64));
+        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 768, scrollY: 500 });
+
+        h.wheel({ deltaY: -200, ctrlKey: true, clientX: 800, clientY: 500 });
+        const { zoom } = h.state.viewportRef.current;
+        act(() => h.state.centerOn(300, -200, 64));
+        expect(h.state.viewportRef.current).toEqual({ zoom, scrollX: 768 / zoom - 300, scrollY: 500 / zoom + 200 });
+        h.unmount();
+    });
 });

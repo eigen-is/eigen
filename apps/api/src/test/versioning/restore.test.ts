@@ -152,6 +152,7 @@ describe('a canvas comment deleted after a version', () => {
                 id,
                 title: '',
                 description: '',
+                chatName: `${id}.eigenchat`,
                 deletedAt: typeof deletedAt === 'number' ? deletedAt : undefined,
             };
         }
