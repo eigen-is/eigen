@@ -22,7 +22,7 @@ import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
-import { getLinkDrive, getSharedDrive } from '../lib/drive';
+import { getLinkDrive, getReadDrive, getSharedDrive, readPermissions } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import type { LinkDrive } from '../lib/drive/link-drive';
 import { recordOpened } from '../lib/drive/recent';
@@ -56,27 +56,12 @@ export const collabRouter = new Elysia({
     .get(
         '/collab/:ownerId/:mountId/:pathId/info',
         async ({ params, user }): Promise<CollabDocumentInfo> => {
-            if (!user) {
-                const drive = await getLinkDrive(params.ownerId);
-                if (!(await drive.canRead(params.mountId, params.pathId))) {
-                    return { canRead: false, canWrite: false, path: null, folderContents: null };
-                }
-                const path = await drive.getPath(params.mountId, params.pathId);
-                const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-                return { canRead: true, canWrite: false, path, folderContents };
-            }
-            const drive = await getSharedDrive(params.ownerId, user);
-            const canRead = await drive.canRead(params.mountId, params.pathId, user);
-            const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
-
-            if (!canRead) {
-                return { canRead, canWrite, path: null, folderContents: null };
-            }
-
+            const permissions = await readPermissions(params.ownerId, params.mountId, params.pathId, user);
+            if (!permissions.canRead) return { ...permissions, path: null, folderContents: null };
+            const drive = await getReadDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-
-            return { canRead, canWrite, path, folderContents };
+            return { ...permissions, path, folderContents };
         },
         { linkAuth: true },
     )
