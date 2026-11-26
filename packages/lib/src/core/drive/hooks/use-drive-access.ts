@@ -5,12 +5,8 @@
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type {
-    DirectAccessItem,
-    DriveACL,
-    DriveAccessItem,
-    InheritedAccessItem,
-} from '@workspace/lib/types/drive-access';
+import type { DirectAccessItem, DriveAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
+import { holdsByName } from '@workspace/lib/types/drive-access';
 import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { PublicUser } from '@workspace/lib/types/public';
@@ -169,30 +165,17 @@ export function useCanWriteFolder(ownerId: string, mountId: string, pathId: stri
     return isOwner || permissions?.canWrite === true;
 }
 
-// Whether the user holds write by name on an item in or at a folder, as the server decides it: an owner, or someone an
-// entry on the item or a folder above it lets write, by email or team. Write from "Anyone signed in can edit" changes
-// the content only, so it neither moves the item nor shares it. In the trash only an owner holds it. Until the folder's
-// chain loads, only the item's own entries count.
+// Whether the user holds write by name on an item in or at a folder, as the server decides it. Write from "Anyone signed
+// in can edit" changes the content only, so it neither moves the item nor shares it. Until the folder's chain loads,
+// only the item itself counts.
 export function useWritesByName(ownerId: string, mountId: string, folderId: string): (item: DrivePath) => boolean {
     const { user } = useAuth();
     const { data: myTeams } = useMyTeams();
-    const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const { data: chain } = useBreadcrumb(ownerId, mountId, folderId);
+    const teamIds = useMemo(() => myTeams?.map((team) => team.id) ?? [], [myTeams]);
     return useCallback(
-        (item: DrivePath) => {
-            if (!user) return false;
-            if (isEffectiveOwnerOf(item.ownerId)) return true;
-            const crumbs = [...(chain ?? []), item];
-            if (crumbs.some((crumb) => crumb.trashedAt)) return false;
-            const email = user.email.toLowerCase();
-            const holdsWrite = (entry: DriveACL) => {
-                const parsed = parseOwnerId(entry.id);
-                if (parsed.type === 'team') return !!myTeams?.some((team) => team.id === parsed.id);
-                return entry.id.toLowerCase() === email;
-            };
-            return crumbs.some((crumb) => !!crumb.acl?.some((entry) => entry.write && holdsWrite(entry)));
-        },
-        [user, myTeams, isEffectiveOwnerOf, chain],
+        (item: DrivePath) => !!user && holdsByName([...(chain ?? []), item], user, teamIds, 'write'),
+        [user, teamIds, chain],
     );
 }
 

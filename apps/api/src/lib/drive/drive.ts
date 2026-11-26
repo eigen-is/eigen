@@ -29,6 +29,7 @@ import type {
     EffectiveMember,
     InviteResult,
 } from '@workspace/lib/types/drive-access';
+import { aclGrants, holdsByName } from '@workspace/lib/types/drive-access';
 import type {
     ClientFileEventRecord,
     FileEvent,
@@ -64,14 +65,12 @@ import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
 import {
-    canReadByNameFromAncestors,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
     findContainerFromAncestors,
     isInsideDocument,
     isTrashedChain,
-    matchesACL,
     mergeACLDelta,
     normalizeACL,
     refuseDocumentWrite,
@@ -127,6 +126,12 @@ export class Drive {
         this.home = home;
         this.owner = home.user;
         this.documents = new CollabRegistry(this.owner.id);
+    }
+
+    // Whether the server's public links are on, which every signed-in read counts. It is asked anew each time, as the
+    // owner can switch it while the server runs.
+    public get publicLinks(): boolean {
+        return arePublicLinksEnabled();
     }
 
     public async init(): Promise<void> {
@@ -842,7 +847,7 @@ export class Drive {
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
-        return canReadFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
+        return canReadFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)), this.publicLinks);
     }
 
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
@@ -857,8 +862,9 @@ export class Drive {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         const memberships = await getMemberships(user.id);
         return (
-            canReadByNameFromAncestors(ancestors, user, memberships) ||
-            (canWriteFromAncestors(ancestors, user, memberships) && canReadFromAncestors(ancestors, user, memberships))
+            holdsByName(ancestors, user, memberships.teamIds, 'read') ||
+            (canWriteFromAncestors(ancestors, user, memberships) &&
+                canReadFromAncestors(ancestors, user, memberships, this.publicLinks))
         );
     }
 
@@ -882,7 +888,7 @@ export class Drive {
             const ancestors = await mount.getBreadcrumb(pathId);
             // The share dialog sends the visibility on every Save, so a link saved while the switch was on still saves.
             if (visibility === 'link' && item.visibility !== 'link') {
-                if (!arePublicLinksEnabled()) {
+                if (!this.publicLinks) {
                     throw new ApiError(403, 'Public links are turned off on this server');
                 }
                 if (!canHaveLink(item.type) || isInsideDocument(ancestors)) {
@@ -953,7 +959,7 @@ export class Drive {
         pathId: string,
         emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
-        return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails);
+        return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails, this.publicLinks);
     }
 
     public async emailCollaborators(
@@ -986,9 +992,7 @@ export class Drive {
     // included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
     public async getAllSharedWith(user: User): Promise<DrivePath[]> {
         const memberships = await getMemberships(user.id);
-        return (await this.pathsWithACL()).filter(
-            (path) => path.acl && matchesACL(path.acl, user, memberships, 'read'),
-        );
+        return (await this.pathsWithACL()).filter((path) => aclGrants(path.acl, user, memberships.teamIds, 'read'));
     }
 
     // Every live path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
@@ -1053,7 +1057,7 @@ export class Drive {
                 const path = chain.at(-1);
                 if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
                 if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
-                if (!canReadFromAncestors(chain, user, memberships)) continue;
+                if (!canReadFromAncestors(chain, user, memberships, this.publicLinks)) continue;
                 found.push(path);
             }
         }
@@ -1228,7 +1232,9 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             // Each breadcrumb ends in the watched path. A path that no longer exists has an empty one.
             for (const ancestors of await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))) {
-                if (canReadFromAncestors(ancestors, user, memberships)) watched.push(...ancestors.slice(-1));
+                if (canReadFromAncestors(ancestors, user, memberships, this.publicLinks)) {
+                    watched.push(...ancestors.slice(-1));
+                }
             }
         }
         return watched;

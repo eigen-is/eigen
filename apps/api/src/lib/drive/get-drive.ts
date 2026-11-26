@@ -5,11 +5,11 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DrivePathPermissions } from '@workspace/lib/types/drive-access';
+import { holdsByName } from '@workspace/lib/types/drive-access';
 import type { TransformPriority } from '../document/transform/runner';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getMemberships } from '../user';
-import { canReadByNameFromAncestors } from './acl';
 import type { Drive } from './drive';
 import { LinkDrive } from './link-drive';
 import { SharedDrive } from './shared-drive';
@@ -79,5 +79,6 @@ export async function transformPriorityFor(
 ): Promise<TransformPriority> {
     if (!user) return 'background';
     const chain = await drive.breadCrumb(path.mountId, path.id);
-    return canReadByNameFromAncestors(chain, user, await getMemberships(user.id)) ? 'foreground' : 'background';
+    const { teamIds } = await getMemberships(user.id);
+    return holdsByName(chain, user, teamIds, 'read') ? 'foreground' : 'background';
 }

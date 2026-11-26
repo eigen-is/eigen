@@ -11,6 +11,7 @@ import type {
     EffectiveMember,
     InviteResult,
 } from '@workspace/lib/types/drive-access';
+import { holdsByName } from '@workspace/lib/types/drive-access';
 import type { ClientFileEventRecord, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -24,7 +25,7 @@ import type { Mount } from '../mount';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { canonicalACLId, canReadFromAncestors, canWriteByNameFromAncestors } from './acl';
+import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -131,7 +132,7 @@ export class SharedDrive {
     ): Promise<DrivePath> {
         const chain = await this.drive.breadCrumb(mountId, pathId);
         const path = chain.at(-1);
-        if (!path || !canWriteByNameFromAncestors(chain, this.user, memberships)) throw new ApiError(403, message);
+        if (!path || !holdsByName(chain, this.user, memberships.teamIds, 'write')) throw new ApiError(403, message);
         return path;
     }
 
@@ -190,7 +191,8 @@ export class SharedDrive {
         const crumbs = await this.drive.breadCrumb(mountId, pathId);
         const memberships = await getMemberships(this.user.id);
         let start = crumbs.length;
-        while (start > 0 && canReadFromAncestors(crumbs.slice(0, start), this.user, memberships)) start--;
+        const publicLinks = this.drive.publicLinks;
+        while (start > 0 && canReadFromAncestors(crumbs.slice(0, start), this.user, memberships, publicLinks)) start--;
         return crumbs.slice(start);
     }
 
@@ -440,7 +442,8 @@ export class SharedDrive {
         if (!path) throw new ApiError(404, 'Path not found');
 
         const canShare =
-            canWriteByNameFromAncestors(chain, this.user, memberships) && !this.sharingRestrictedFor(path, memberships);
+            holdsByName(chain, this.user, memberships.teamIds, 'write') &&
+            !this.sharingRestrictedFor(path, memberships);
         const { recipients } = await this.drive.checkAccessForEmails(mountId, pathId, emails);
         return { canShare, recipients };
     }

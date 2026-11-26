@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2491 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2493 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1214,7 +1214,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1313)
+## Utilities & constants (1315)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1978,6 +1978,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `previewCountLines` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `remainingLine` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
+| `aclGrants` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CALENDAR_SHARE_PERMISSIONS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CALENDAR_VIEW_MODES` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -2019,6 +2020,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `findContactByEmail` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `holdsByName` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `ICS_CONTENT_TYPE` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
