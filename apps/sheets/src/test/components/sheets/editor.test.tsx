@@ -225,16 +225,12 @@ async function renderEditor(entries = ['/'], { isMobile = false, rows = [] as Co
         drivePath({ id: 'chat-a', ownerId: 'owner-1', mountId: 'm1', name: 'chat-1.eigenchat', mimeType: 'x' }),
     ]);
     function Page() {
-        const { chat, card, panel } = router.useSearch({ strict: false });
         return createElement(SheetEditor, {
             path,
             canWrite: true,
             mediaFolderId: null,
             chatFolderId: 'chats',
             onAccessDialogOpen: () => {},
-            panel,
-            chat,
-            card,
         });
     }
     const root = router.createRootRoute({ component: router.Outlet });

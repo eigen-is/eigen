@@ -185,9 +185,6 @@ async function renderShell({
             canWrite: true,
             mediaFolderId: null,
             chatFolderId: null,
-            panel: undefined,
-            chat: undefined,
-            card: undefined,
             doc: canvas,
             onReveal: (el) => reveal(el.id),
         });

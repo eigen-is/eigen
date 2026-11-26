@@ -1,22 +1,18 @@
 // The comment half of every editor that shows comments, such as Docs or a Stickies board: the comment lifecycle, and
 // its open state in the page's URL, the list level as ?panel= and the open thread as ?chat=, under the detail history
-// rule. Every open and close writes the URL here, and a landing's ?card= becomes its card's ?chat=. A comments column
-// builds on it, and a board uses it as it is. It hands the components the bundle they take, the lifecycle with its
-// opens.
+// rule. It reads that search itself and writes every open and close, and a landing's ?card= becomes its card's ?chat=.
+// A caller such as the comments column builds on it. It hands the components the bundle they take, the lifecycle with
+// its opens.
 
 import { useNavigate } from '@tanstack/react-router';
 import { findCardIdByChatName, useCommentLifecycle } from '@workspace/lib/comments';
 import type { DocumentPanel } from '@workspace/lib/types/comments';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useDetailHistory } from '../../hooks/use-detail-history';
-
-type CommentUrl = { panel?: DocumentPanel; chat?: string; card?: string };
+import type { EigenDocEditorSearch } from '../drive/eigendoc-config';
+import { useEigenDocEditorSearch } from '../drive/eigendoc-config';
 
 export type CommentHostArgs = Omit<Parameters<typeof useCommentLifecycle>[0], 'chat'> & {
-    // The route's ?panel=, ?chat= and ?card=.
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     // The list a closed thread goes back to, or none to close.
     listPanel: DocumentPanel | undefined;
 };
@@ -40,12 +36,13 @@ export type CommentHost = {
     close: () => void;
 };
 
-export function useCommentHost({ panel, chat, card, listPanel, ...lifecycleArgs }: CommentHostArgs): CommentHost {
+export function useCommentHost({ listPanel, ...lifecycleArgs }: CommentHostArgs): CommentHost {
+    const { panel, chat, card } = useEigenDocEditorSearch();
     const navigate = useNavigate();
-    const history = useDetailHistory<CommentUrl>(!!panel || !!chat, (next, { replace, state }) =>
+    const history = useDetailHistory<EigenDocEditorSearch>(!!panel || !!chat, (next, { replace, state }) =>
         navigate({
             to: '.',
-            search: (prev: CommentUrl) => ({ ...prev, panel: next?.panel, chat: next?.chat }),
+            search: (prev: EigenDocEditorSearch) => ({ ...prev, panel: next?.panel, chat: next?.chat }),
             replace,
             state,
         }),
@@ -85,7 +82,7 @@ export function useCommentHost({ panel, chat, card, listPanel, ...lifecycleArgs 
     const resolveCard = useEffectEvent((cardId: string) =>
         navigate({
             to: '.',
-            search: (prev: CommentUrl) => ({ ...prev, chat: cards[cardId]?.chatName, card: undefined }),
+            search: (prev: EigenDocEditorSearch) => ({ ...prev, chat: cards[cardId]?.chatName, card: undefined }),
             replace: true,
             state: true,
         }),

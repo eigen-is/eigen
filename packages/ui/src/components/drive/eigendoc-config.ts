@@ -1,7 +1,9 @@
 // The config of each document app, such as Docs or Sheets: its name, icon, labels and the app that owns
 // its list, built from the shared type registry. The document apps' shells and the shared sidebar's filter
-// rows read it, and the editor routes take their search validator from here.
+// rows read it, the editor routes take their search validator from here, and a hook inside an editor reads
+// that search here.
 
+import { useSearch } from '@tanstack/react-router';
 import {
     getDocsAppUrl,
     getSheetsAppUrl,
@@ -79,17 +81,20 @@ export function eigenDocSharedTitle(direction: 'by' | 'with', labelPlural?: stri
     return labelPlural ? `${labelPlural} shared ${direction} me` : `Shared ${direction} me`;
 }
 
+export type EigenDocEditorSearch = { chat?: string; card?: string; q?: string; panel?: DocumentPanel };
+
 // Every editor route reads ?chat=, ?card=, ?q= and ?panel= here, so they can't drift.
-export function eigenDocEditorValidateSearch(search: Record<string, unknown>): {
-    chat?: string;
-    card?: string;
-    q?: string;
-    panel?: DocumentPanel;
-} {
+export function eigenDocEditorValidateSearch(search: Record<string, unknown>): EigenDocEditorSearch {
     return {
         chat: typeof search.chat === 'string' ? search.chat : undefined,
         card: typeof search.card === 'string' ? search.card : undefined,
         q: typeof search.q === 'string' ? search.q : undefined,
         panel: search.panel === 'comments' || search.panel === 'activity' ? search.panel : undefined,
     };
+}
+
+// The editor search for a hook inside an editor, such as the comment host, so no route has to hand it down.
+export function useEigenDocEditorSearch(): EigenDocEditorSearch {
+    const search = useSearch({ strict: false });
+    return search;
 }

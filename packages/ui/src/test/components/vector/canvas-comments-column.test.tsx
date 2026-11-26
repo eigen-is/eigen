@@ -178,7 +178,6 @@ async function openCanvas(
         drivePath({ id: 'chat-1', ownerId: 'owner', mountId: 'mount', name: 'thread-1.eigenchat', mimeType: 'x' }),
     ]);
     function Page() {
-        const { chat, card, panel } = router.useSearch({ strict: false });
         const canvas = useCanvasDoc('owner', 'mount', 'v1', VECTOR_STYLE_DEFAULTS);
         const comments = useCanvasCommentHost({
             ownerId: 'owner',
@@ -186,9 +185,6 @@ async function openCanvas(
             canWrite: true,
             mediaFolderId: null,
             chatFolderId: 'chats',
-            panel,
-            chat,
-            card,
             doc: canvas,
             onReveal: (el, growPx) => reveal(el.id, growPx),
         });

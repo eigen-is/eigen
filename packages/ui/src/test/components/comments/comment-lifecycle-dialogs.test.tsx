@@ -65,7 +65,6 @@ async function mountBoard() {
     const onDelete = mock((_cardId: string) => {});
     const handle: { requestDelete?: (cardId: string) => void; openCard?: boolean } = {};
     function Harness() {
-        const { chat } = router.useSearch({ strict: false });
         const { lifecycle } = useCommentHost({
             ownerId: 'owner-1',
             mountId: 'm1',
@@ -74,9 +73,6 @@ async function mountBoard() {
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1']),
-            panel: undefined,
-            chat,
-            card: undefined,
             listPanel: undefined,
             mapName: 'tasks',
             ready: true,

@@ -25,9 +25,7 @@ const { WebsocketProvider } = await import('y-websocket');
 const { NodeSelection } = await import('@tiptap/pm/state');
 const { act, createElement, useState } = await import('react');
 const { formatForDisplay } = await import('@tanstack/react-hotkeys');
-const { createMemoryHistory, createRootRoute, createRouter, RouterProvider, useSearch } = await import(
-    '@tanstack/react-router'
-);
+const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
@@ -153,8 +151,6 @@ async function render({
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
-        // The route reads ?panel=, ?chat= and ?card=, as the doc route does.
-        const search: { panel?: 'comments' | 'activity'; chat?: string; card?: string } = useSearch({ strict: false });
         // The editor route provides the document's media resolver.
         return createElement(MediaResolverProvider, {
             ownerId: path.ownerId,
@@ -167,9 +163,6 @@ async function render({
                 mediaFolderId,
                 chatFolderId,
                 onAccessDialogOpen: () => {},
-                panel: search.panel,
-                chat: search.chat,
-                card: search.card,
             }),
         });
     }

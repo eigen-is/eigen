@@ -139,8 +139,6 @@ async function renderEditor(options: {
     canWrite?: boolean;
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
-    panel?: 'comments' | 'activity';
-    chat?: string;
 }) {
     ({ unmount } = await renderInDocument(
         createElement(VectorEditor, {
@@ -150,9 +148,6 @@ async function renderEditor(options: {
             mediaFolderId: options.mediaFolderId === undefined ? 'media-1' : options.mediaFolderId,
             chatFolderId: options.chatFolderId === undefined ? 'chat-1' : options.chatFolderId,
             onAccessDialogOpen: () => {},
-            panel: options.panel,
-            chat: options.chat,
-            card: undefined,
         }),
     ));
 }
@@ -192,11 +187,6 @@ test('an image is offered only with a media folder, and opens the picker', async
     expect(seen.shell?.imagePickerOpen).toBe(false);
     await act(async () => insert());
     expect(seen.shell?.imagePickerOpen).toBe(true);
-});
-
-test("the route's ?panel= and ?chat= reach the comments host as its list and open thread", async () => {
-    await renderEditor({ panel: 'activity', chat: 'thread-1.eigenchat' });
-    expect(seen.comments).toMatchObject({ panel: 'activity', chat: 'thread-1.eigenchat' });
 });
 
 test('a comment needs the chat folder', async () => {

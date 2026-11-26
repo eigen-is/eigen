@@ -4,7 +4,6 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
-import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import {
@@ -50,9 +49,6 @@ type SlideEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -65,9 +61,6 @@ export function SlideEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: SlideEditorProps) {
     const { isMobile } = useLayout();
@@ -135,9 +128,6 @@ export function SlideEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        panel,
-        chat,
-        card,
         doc,
         onReveal: revealElement,
     });

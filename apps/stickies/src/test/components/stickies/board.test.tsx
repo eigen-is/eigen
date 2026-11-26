@@ -194,16 +194,12 @@ async function openBoard(entries: string[], { browser = false, isMobile = false 
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'b1'), []);
     queryClient.setQueryData(driveKeys.fileHistory('owner-1', 'm1', 'b1', 50), [cardAdded]);
     function Page() {
-        const { chat, card, panel } = router.useSearch({ strict: false });
         return createElement(StickiesBoard, {
             path,
             canWrite: true,
             chatFolderId: 'chat-1',
             mediaFolderId: null,
             onAccessDialogOpen: () => {},
-            panel,
-            chat,
-            card,
         });
     }
     const root = router.createRootRoute({

@@ -6,6 +6,7 @@
 
 import type { DocumentPanel } from '@workspace/lib/types/comments';
 import { useEffect, useEffectEvent } from 'react';
+import { useEigenDocEditorSearch } from '../drive/eigendoc-config';
 import { columnWidthPx } from '../layout/app/column-widths';
 import { useLayout } from '../layout/app/layout-context';
 import type { CommentHostArgs, CommentLifecycleBundle } from './use-comment-host';
@@ -41,7 +42,7 @@ export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): 
     lifecycle: CommentLifecycleBundle;
     column: CommentsColumnState;
 } {
-    const { panel, chat } = hostArgs;
+    const { panel, chat } = useEigenDocEditorSearch();
     const { isMobile, isTablet } = useLayout();
     const listPanel = panel ?? 'comments';
     const { lifecycle, clicked, showList, close } = useCommentHost({ ...hostArgs, listPanel });

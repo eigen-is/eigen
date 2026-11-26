@@ -30,7 +30,7 @@ import {
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft, CardFormPatch, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { CardFormDialog } from '@workspace/ui/components/cards';
@@ -139,9 +139,6 @@ export const CollaborativeEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: {
     path: DrivePath;
@@ -149,10 +146,6 @@ export const CollaborativeEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 }) => {
     // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
@@ -186,9 +179,6 @@ export const CollaborativeEditor = ({
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        panel={panel}
-                        chat={chat}
-                        card={card}
                         initialSearchTerm={initialSearchTerm}
                     />
                 </>
@@ -208,9 +198,6 @@ const TiptapEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: {
     yDoc: Y.Doc;
@@ -223,9 +210,6 @@ const TiptapEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
@@ -496,9 +480,6 @@ const TiptapEditor = ({
         doc: yDoc,
         activeCardIds: activeComments.ids,
         ready: activeComments.ready,
-        panel,
-        chat,
-        card,
         // A list row, an activity row and a landing select the comment's anchor in the body, and scroll it level with
         // the comment's block in the thread beside it, whose top is the scroller's.
         reveal: (cardId) => {

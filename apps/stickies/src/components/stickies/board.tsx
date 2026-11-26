@@ -11,7 +11,7 @@ import { matchesCommentFilter, useCommentFilter } from '@workspace/lib/comments'
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
-import type { CardAttachmentDraft, CardFormPatch, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import { commentMapName } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -26,6 +26,7 @@ import {
     useCommentHost,
 } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
+import { useEigenDocEditorSearch } from '@workspace/ui/components/drive';
 import {
     CollabDocumentGate,
     ColumnLayout,
@@ -58,9 +59,6 @@ type StickiesBoardProps = {
     chatFolderId: string | null;
     mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -70,12 +68,10 @@ export function StickiesBoard({
     chatFolderId,
     mediaFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: StickiesBoardProps) {
     const { ownerId } = path;
+    const { panel } = useEigenDocEditorSearch();
     const {
         board,
         isAddColumnDialogOpen,
@@ -106,9 +102,6 @@ export function StickiesBoard({
         mediaFolderId,
         doc: yjsDoc,
         activeCardIds,
-        panel,
-        chat,
-        card,
         listPanel: panel,
         mapName: commentMapName(DRIVE_TYPE_STICKIES),
         ready: loaded,

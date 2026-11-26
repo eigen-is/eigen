@@ -16,7 +16,7 @@ import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { CardAttachmentDraft, CardFormPatch, DocumentPanel } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import type { ImageSize } from '@workspace/lib/vector';
@@ -62,10 +62,6 @@ type SheetEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -75,9 +71,6 @@ export function SheetEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: SheetEditorProps) {
     const { ownerId } = path;
@@ -138,9 +131,6 @@ export function SheetEditor({
         // The workbook names its sheets once it loaded, and it always holds one, so the active set counts from then. A
         // failed load shows default cells that anchor nothing, so every comment would read as deleted.
         ready: sheets.length > 0 && !loadFailed,
-        panel,
-        chat,
-        card,
         // A list row, an activity row and a landing jump to the comment's first cell. The jump centers the cell, so it
         // stays in view as a thread narrows the grid.
         reveal: (cardId) => {

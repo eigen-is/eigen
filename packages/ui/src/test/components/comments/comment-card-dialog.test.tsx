@@ -98,7 +98,6 @@ async function openBoard(entries: string[]) {
     const onDelete = mock((_cardId: string) => {});
     const handle: { lifecycle?: CommentLifecycleBundle } = {};
     function Board() {
-        const { chat } = router.useSearch({ strict: false });
         const { lifecycle } = useCommentHost({
             ownerId: 'owner-1',
             mountId: 'm1',
@@ -107,9 +106,6 @@ async function openBoard(entries: string[]) {
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1', 'card-3']),
-            panel: undefined,
-            chat,
-            card: undefined,
             listPanel: undefined,
             mapName: 'tasks',
             ready: true,

@@ -3,7 +3,6 @@
 // canvas. The vector route renders it for one vector file.
 
 import { useAuth } from '@workspace/lib/auth';
-import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
@@ -32,9 +31,6 @@ type VectorEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -45,9 +41,6 @@ export function VectorEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    panel,
-    chat,
-    card,
     initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
@@ -92,9 +85,6 @@ export function VectorEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        panel,
-        chat,
-        card,
         doc,
         onReveal: revealElement,
     });

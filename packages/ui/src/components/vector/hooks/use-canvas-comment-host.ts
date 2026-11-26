@@ -7,7 +7,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentCards, useCommentFilter, useCommentHover } from '@workspace/lib/comments';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
-import type { CardAttachmentDraft, CardFormPatch, CommentHover, DocumentPanel } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CardFormPatch, CommentHover } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
@@ -33,10 +33,6 @@ type CanvasCommentHostArgs = {
     canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
-    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    card: string | undefined;
     doc: CanvasDoc;
     // Bring an element into view as a thread opens from a list row or a link, clear of the `growPx` the column is about
     // to grow by over the canvas.
@@ -73,9 +69,6 @@ export function useCanvasCommentHost({
     canWrite,
     mediaFolderId,
     chatFolderId,
-    panel,
-    chat,
-    card,
     doc,
     onReveal,
 }: CanvasCommentHostArgs): CanvasCommentHost {
@@ -94,9 +87,6 @@ export function useCanvasCommentHost({
         doc: doc.yjsDoc,
         activeCardIds: activeComments.ids,
         ready: doc.loaded,
-        panel,
-        chat,
-        card,
         reveal: (cardId, growPx) => {
             const el = elementForCommentCard(doc.elements, cardId);
             if (el) onReveal(el, growPx);
