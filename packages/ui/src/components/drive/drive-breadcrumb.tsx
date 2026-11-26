@@ -65,8 +65,7 @@ export function DriveBreadcrumb({
                     </BreadcrumbItem>
                 )}
                 {paths.map((path, index) => {
-                    // A visitor's chain starts at the public folder, which names no drive.
-                    const label = index === 0 && !head && user ? mountLabel : stripEigenExtension(path.name);
+                    const label = index === 0 && !head ? mountLabel : stripEigenExtension(path.name);
                     return (
                         <Fragment key={path.id}>
                             {(index > 0 || viaShare) && <BreadcrumbSeparator />}

@@ -287,12 +287,12 @@ describe('files and folders without a login', () => {
             return visit(urlOf(route, pathId)).then((res) => assertJson<DrivePath[]>(res));
         }
 
-        test('the public path has no ACL and no parent id', async () => {
+        test('the public path has no ACL and keeps its parent id, as a sharee reads it', async () => {
             for (const head of [folder, loneFile]) {
                 const path = await visitorPath(head.id);
                 expect(path.id).toBe(head.id);
                 expect(path.acl).toBeNull();
-                expect(path.parentId).toBeNull();
+                expect(path.parentId).toBe(privateParent.id);
             }
         });
 
@@ -304,10 +304,10 @@ describe('files and folders without a login', () => {
             expect((await visitorPath(deep.id)).parentId).toBe(sub.id);
         });
 
-        test('a breadcrumb starts at the public path, which has no parent id', async () => {
+        test('a breadcrumb starts at the public path, which keeps its parent id', async () => {
             const crumbs = await visitorList(LINK_ROUTES[2].route, deep.id);
             expect(crumbs.map((crumb) => crumb.name)).toEqual(['Open Folder', 'Sub', 'deep.txt']);
-            expect(crumbs.map((crumb) => crumb.parentId)).toEqual([null, folder.id, sub.id]);
+            expect(crumbs.map((crumb) => crumb.parentId)).toEqual([privateParent.id, folder.id, sub.id]);
             expect(crumbs.map((crumb) => crumb.acl)).toEqual([null, null, null]);
         });
 
@@ -315,10 +315,10 @@ describe('files and folders without a login', () => {
             for (const { route, reads, bytes } of LINK_ROUTES) {
                 if (bytes) continue;
                 const body = await (await visit(urlOf(route, inFolder[reads].id))).text();
-                expect(body).not.toContain(privateParent.id);
+                expect(body).not.toContain(privateParent.name);
             }
             expect(await (await visit(urlOf(LINK_ROUTES[0].route, loneFile.id))).text()).not.toContain(
-                privateParent.id,
+                privateParent.name,
             );
         });
 

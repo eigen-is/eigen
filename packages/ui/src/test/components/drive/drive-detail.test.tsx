@@ -30,8 +30,8 @@ const brief = drivePath({
     ownerId: teamOwnerId('t1'),
     mountId: 'm1',
 });
-// Public, and a visitor's chain is cut at the public folder, which the server gives no parent.
-const holiday = folder('holiday', 'Holiday', null, 'alice');
+// Public, and a visitor's chain is cut at the public folder, which keeps the id of the private folder above it.
+const holiday = folder('holiday', 'Holiday', 'hidden', 'alice');
 const beach = drivePath({
     id: 'beach',
     name: 'beach.jpg',

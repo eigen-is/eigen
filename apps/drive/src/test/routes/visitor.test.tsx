@@ -13,10 +13,17 @@ window.happyDOM.setViewport({ width: 1440, height: 900 });
 // happy-dom lays nothing out, so the list's virtualizer would see a scroller 0 px tall and draw no row.
 Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { get: () => 900 });
 
-const OWNER = 'alice-owner';
+const OWNER = 'alice'.padEnd(32, '0');
 const link = { ownerId: OWNER, visibility: 'link' as const };
-// The public folder heads its own chain, cut by the server, so it has no parent.
-const pub = drivePath({ ...link, id: 'pub', name: 'Holiday', type: 'folder', mimeType: DRIVE_MIME_FOLDER });
+// The public folder heads its own chain, cut by the server, and keeps the id of the private folder above it.
+const pub = drivePath({
+    ...link,
+    id: 'pub',
+    name: 'Holiday',
+    type: 'folder',
+    mimeType: DRIVE_MIME_FOLDER,
+    parentId: 'alice-root',
+});
 const sub = drivePath({
     ...link,
     id: 'sub',
@@ -145,6 +152,9 @@ async function open(url: string) {
 const rowNames = () => [...document.querySelectorAll('[role="row"].eigen-list-item')].map((row) => row.textContent);
 const sectionLabels = () => [...document.querySelectorAll('h3')].map((label) => label.textContent);
 const outsideTheLink = () => requested.filter((pathname) => !isVisitorRoute(pathname));
+const locationRow = () =>
+    [...document.querySelectorAll('dt')].find((label) => label.textContent === 'Location')?.nextElementSibling
+        ?.textContent;
 
 test('a visitor sees a public folder with its rows, its name as the breadcrumb, and a file open beside it', async () => {
     const { container, router } = await open(`/fs/${OWNER}/default/pub?pid=photo`);
@@ -154,7 +164,7 @@ test('a visitor sees a public folder with its rows, its name as the breadcrumb, 
     // The detail column: the item's name and details, with no section whose data needs a login.
     expect(container.querySelector('h2')?.textContent).toBe('beach.jpg');
     // The location starts at the owner, as for anyone the chain was cut for, not at a drive the visitor can't see.
-    expect(container.textContent).toContain('Location › Holiday');
+    expect(locationRow()).toBe('Alice › Holiday');
     expect(sectionLabels()).toEqual(['Details']);
     expect(container.querySelector('[aria-label="Watch"], [aria-label="Stop watching"]')).toBeNull();
     expect(outsideTheLink()).toEqual([]);

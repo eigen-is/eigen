@@ -133,13 +133,12 @@ function DetailsSection({ path, actions }: { path: DrivePath; actions: DriveActi
     const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
 
     // The item's own chain, which its sharing list reads too, less the item. Cut short above the viewer's reach, it
-    // no longer starts at the drive, so the owner stands in for it. A visitor's chain starts at the public folder.
-    const { user } = useAuth();
+    // no longer starts at the drive, so the owner stands in for it.
     const { data: itemChain = [], isPending, isError } = useBreadcrumb(path.ownerId, path.mountId, path.id);
     const chain = itemChain.slice(0, -1);
     const mountLabel = useMountLabel(path.ownerId, path.mountId);
     const { displayName: ownerName } = useResolvedUser({ userId: path.ownerId });
-    const fromRoot = !!user && chain.length > 0 && !sharedChainHead(chain);
+    const fromRoot = chain.length > 0 && !sharedChainHead(chain);
     const location = [
         fromRoot ? mountLabel : ownerName,
         ...chain.slice(fromRoot ? 1 : 0).map((folder) => stripEigenExtension(folder.name)),
