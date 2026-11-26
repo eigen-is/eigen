@@ -82,7 +82,7 @@ export function canReadByLink(chain: readonly DrivePath[]): number | null {
     return endsInFile || endsInDocument || endsInMedia ? head : null;
 }
 
-// Held by name, or outside the trash a visibility that lets everyone signed in read, or a public link while they are on.
+// Held by name, or outside the trash a signed-in link or, while public links are on, a public link.
 export function canReadFromAncestors(
     chain: readonly DrivePath[],
     user: User,
@@ -98,9 +98,10 @@ export function canWriteFromAncestors(chain: readonly DrivePath[], user: User, m
     return !isTrashedChain(chain) && chain.some((path) => path.visibility === 'public-write');
 }
 
-// What a signed-in reader may do with a path. Live readers sync it over the collab socket: they read it by name, or may
-// both write and read it, as an ACL entry can grant write alone. Only a reader by name runs its transforms at
-// foreground priority, so a burst of link views can't take the one transform queue from the people it is shared with.
+// What a signed-in reader may do with a path. A live reader syncs it over the collab socket: they read it by name, or
+// may both write and read it, as an ACL entry can grant write alone. Only a reader by name runs its transforms at
+// foreground priority, so a burst of views through a public or signed-in link can't take the one transform queue from
+// the people it is shared with.
 export function readerAccess(
     chain: readonly DrivePath[],
     user: User,

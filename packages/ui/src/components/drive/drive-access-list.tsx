@@ -89,7 +89,7 @@ type GeneralAccessProps = {
     // A control in place of the name, and words in place of the short line under it.
     choice?: ReactNode;
     description?: ReactNode;
-    // What the link lets someone do, on the right: as text, or the picker that changes it.
+    // What the general access lets someone do, on the right: as text, or the picker that changes it.
     children?: ReactNode;
 };
 

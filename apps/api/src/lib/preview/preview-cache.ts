@@ -196,9 +196,9 @@ async function getOrCacheImage(
 // A stale value is an earlier version's, served while the current one regenerates.
 type Served<T> = { value: T; stale: boolean };
 
-// A member's first miss is foreground work the request waits on. A visitor's, and a stale regeneration, are background
-// work, which waits behind every foreground job and which the runner may drop under load. A plain file's generator
-// ignores it.
+// A first miss for a reader by name is foreground work the request waits on. Anyone else's, and a stale regeneration,
+// are background work, which waits behind every foreground job and which the runner may drop under load. A plain
+// file's generator ignores it.
 type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
 // The first miss's priority is asked for only on a miss, since deciding it reads the file's ancestors.
@@ -357,8 +357,8 @@ export async function getScreenPreview(
     return null;
 }
 
-// A collab document's whole state for a reader who gets no socket, garbage-collected as a member's first sync is, so it
-// holds nothing an author deleted. `version` names the stored rows, and the state is cached under it. A build that
+// A collab document's whole state for a reader who is not live, garbage-collected as a live reader's first sync is, so
+// it holds nothing an author deleted. `version` names the stored rows, and the state is cached under it. A build that
 // ran out of time or memory is a document too large, as for an export, and the version is not built again for a while.
 export async function getCollabState(
     mount: Mount,

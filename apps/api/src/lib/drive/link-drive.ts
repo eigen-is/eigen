@@ -2,7 +2,7 @@
 // a folder listing or a download. Each runs the link rule on the path's breadcrumb first and refuses every path alike,
 // with a 403 or canRead's false, so a visitor can't tell a private path from one that does not exist. An answer holds
 // no ACL and a breadcrumb starts at the public path, so a visitor reads what a sharee reads, while the file handed to
-// the code that serves it stays whole, so a visitor gets the same preview as a member.
+// the code that serves it stays whole, so a visitor gets the same preview as a reader by name.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { arePublicLinksEnabled } from '../config/server-settings';

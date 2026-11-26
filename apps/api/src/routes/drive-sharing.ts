@@ -1,7 +1,7 @@
 // The Drive HTTP routes about who may use a path and what happens to it: its ACL, its members, the
 // caller's permissions, mail to its collaborators, access requests, its history and its watchers. Each
 // gets its drive from getSharedDrive, which checks the access, except an access request, which comes
-// from someone who has none yet, and the caller's permissions, which readPermissions answers for a
+// from someone who has none yet, and the caller's permissions, which getReaderAccess answers for a
 // visitor without a login too. Guests can't share, so the sharing routes refuse them.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
