@@ -1,6 +1,6 @@
-// The mail app's one page: a mailbox's message list beside the open message or the composer. It reads
-// the mailbox and message from the URL and the compose prefill from history state, and hands both to
-// the list, the reader and the composer, which share one set of mail actions and shortcuts.
+// The mail app's one page: a mailbox's message list beside the open message or the composer, in a detail column.
+// It reads the mailbox and message from the URL and the compose prefill from history state, and hands both to the
+// list, the reader and the composer, which share one set of mail actions and shortcuts.
 
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
@@ -12,9 +12,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column, ColumnLayout, EmptyState } from '@workspace/ui/components/layout/app';
+import { Column, ColumnLayout, DetailColumn, EmptyState } from '@workspace/ui/components/layout/app';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
-import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
@@ -294,7 +293,7 @@ function MailRoute() {
             <div ref={mailSurfaceRef} className="contents">
                 <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
                     <Column id="list" width={showDetail ? 'large' : 'flex'} onBack="sidebar" toolbar={listToolbar}>
-                        <div className={cn('flex flex-col h-full overflow-hidden', showDetail && 'border-r')}>
+                        <div className="flex flex-col h-full overflow-hidden">
                             <EmailList
                                 // A new mailbox or search text scrolls the list to the top. A refined search
                                 // that shrinks the results would otherwise keep a scroll offset past the end.
@@ -328,7 +327,7 @@ function MailRoute() {
                     </Column>
                     {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
                     {showDetail && (
-                        <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
+                        <DetailColumn width="flex" actions={detailToolbar} onClose={actions.navigateToList} fill>
                             {isComposing ? (
                                 <EmailDraft
                                     // A compose session stays mounted across auto-save's URL update. An open
@@ -364,7 +363,7 @@ function MailRoute() {
                             ) : isEmailPending ? null : (
                                 <EmptyState message="Email not found" />
                             )}
-                        </Column>
+                        </DetailColumn>
                     )}
                 </ColumnLayout>
             </div>

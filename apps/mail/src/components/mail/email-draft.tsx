@@ -27,7 +27,7 @@ import { LightEditor } from '@workspace/ui/components/editor';
 import { FieldError } from '@workspace/ui/components/field';
 import { FileDropOverlay } from '@workspace/ui/components/file-drop-overlay';
 import { Input } from '@workspace/ui/components/input';
-import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
@@ -50,7 +50,7 @@ export function EmailDraftToolbar({
     hasId: boolean;
 }) {
     return (
-        <Toolbar>
+        <>
             <div className="flex items-center gap-1">
                 <Button type="submit" form="draft-form" pending={isSending} size="sm">
                     <Send className="h-4 w-4" />
@@ -59,7 +59,7 @@ export function EmailDraftToolbar({
                 <TooltipButton icon={Paperclip} tooltipText="Attach file" onClick={onAttach} disabled={isSending} />
             </div>
             {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending} />}
-        </Toolbar>
+        </>
     );
 }
 

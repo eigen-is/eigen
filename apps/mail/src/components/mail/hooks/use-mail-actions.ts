@@ -1,6 +1,7 @@
-// The actions the mail route offers on messages: open, move, delete, flag and read, with a one-step
-// undo, plus reply, reply all and forward, which open the composer prefilled through history state.
-// The route and its keyboard shortcuts both call them, so a button and a key do the same thing.
+// The actions the mail route offers on messages: open and close, with the history rule every detail column shares,
+// move, delete, flag and read, with a one-step undo, plus reply, reply all and forward, which open the composer
+// prefilled through history state. The route and its keyboard shortcuts both call them, so a button and a key do the
+// same thing.
 
 import { useNavigate } from '@tanstack/react-router';
 import { isRefusal } from '@workspace/lib/api-error';
@@ -23,6 +24,7 @@ import {
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type { DraftInput, DraftUpdateOptions, Email, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import { isListedFile } from '@workspace/lib/types/mail';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
@@ -37,6 +39,7 @@ type Undoable = { done?: boolean } & (
 
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
+    const { mailId, mode } = Route.useSearch();
     const navigate = useNavigate();
     const { user } = useAuth();
     const deleteMail = useDeleteEmail();
@@ -102,21 +105,23 @@ export function useMailActions() {
         });
     };
 
-    const navigateToList = () => {
+    // The composer is an open detail too, so a message opened from it replaces its entry. Opening or closing leaves
+    // the compose session's history state behind, so its prefill never rides along into a message or the list.
+    const detail = useDetailHistory(mailId ?? mode, (next, { replace, state }) =>
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
-            search: {},
-        });
-    };
-
-    const handleRowClick = (emailId: string) => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: (prev) => ({ ...prev, mailId: emailId, mode: undefined, to: undefined }),
-        });
-    };
+            search: (prev) => ({ ...prev, mailId: next, mode: undefined, to: undefined }),
+            replace,
+            state: (prev) => ({
+                ...(state === true ? prev : state(prev)),
+                prefillDraft: undefined,
+                forwardedParts: undefined,
+                composeSessionKey: undefined,
+            }),
+        }),
+    );
+    const navigateToList = detail.close;
 
     // A fresh composeSessionKey remounts any open composer.
     const openCompose = () => {
@@ -398,7 +403,7 @@ export function useMailActions() {
 
     return {
         navigateToList,
-        handleRowClick,
+        handleRowClick: detail.open,
         openCompose,
         handleDeleteEmail,
         confirmDeleteEmails,

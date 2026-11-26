@@ -5,7 +5,7 @@ import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/cons
 import type { Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
-import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { KebabTrigger, TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { MessageView } from '@workspace/ui/components/mail';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/print-element';
@@ -39,7 +39,7 @@ export function EmailDetailToolbar({
     mailboxes = [],
 }: EmailDetailToolbarProps) {
     return (
-        <Toolbar>
+        <>
             <div className="flex items-center gap-1">
                 {email.mailbox !== MAILBOX_ARCHIVE && (
                     <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive(email.id)} />
@@ -87,7 +87,7 @@ export function EmailDetailToolbar({
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-        </Toolbar>
+        </>
     );
 }
 
