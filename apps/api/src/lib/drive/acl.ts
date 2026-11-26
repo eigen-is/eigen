@@ -118,6 +118,15 @@ export function canWriteFromAncestors(ancestors: readonly DrivePath[], user: Use
     return canFromAncestors(ancestors, user, memberships, 'write');
 }
 
+// Read the person holds themselves, as an owner or through an ACL entry, not through a link or "Anyone signed in".
+export function canReadByNameFromAncestors(
+    ancestors: readonly DrivePath[],
+    user: User,
+    memberships: Memberships,
+): boolean {
+    return canFromAncestors(ancestors, user, memberships, 'read', false);
+}
+
 // Write the person holds themselves, as an owner or through an ACL entry, not through "Anyone signed in can edit".
 export function canWriteByNameFromAncestors(
     ancestors: readonly DrivePath[],
