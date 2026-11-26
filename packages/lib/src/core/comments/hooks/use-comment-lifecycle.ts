@@ -120,10 +120,10 @@ export function useCommentLifecycle({
         if (known) setOpen({ cardId });
         return known;
     };
-    // A chat landing waits for the index rows too, where there are rows to read, or a comment whose card is gone would
+    // A chat landing waits for the index rows too, which a visitor never reads, or a comment whose card is gone would
     // read as not found. A card id names only a card, so its landing needs only the cards.
     useOpenOnLanding(initialChatName, openChat, {
-        ready: ready && !(indexPathId && commentsPending),
+        ready: ready && (!user || !commentsPending),
         onNotFound: onChatNotFound,
     });
     useOpenOnLanding(initialCardId, openCardById, { ready, onNotFound: onCardNotFound });

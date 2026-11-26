@@ -133,13 +133,16 @@ describe('useIsCardDeleted', () => {
 
     test("a visitor's card is live while the host uses it, though they see no chat folder", async () => {
         session.user = null;
-        const used = await mountPredicate(true, true, null);
-        expect(used.deleted()).toBe(false);
-        await used.unmount();
-        const unused = await mountPredicate(false, true, null);
-        expect(unused.deleted()).toBe(true);
-        await unused.unmount();
-        session.user = { id: 'owner-1' };
+        try {
+            const used = await mountPredicate(true, true, null);
+            expect(used.deleted()).toBe(false);
+            await used.unmount();
+            const unused = await mountPredicate(false, true, null);
+            expect(unused.deleted()).toBe(true);
+            await unused.unmount();
+        } finally {
+            session.user = { id: 'owner-1' };
+        }
     });
 
     test('for a signed-in user, a document with no chat folder has no thread to keep a card live', async () => {

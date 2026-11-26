@@ -1,9 +1,7 @@
 // The right end of a document app's bar: the offline badge, the share, comments and activity buttons, and a kebab
 // menu. On a phone the buttons fold into the kebab, with the rows a host has no room for in its own menus, such as
 // Docs' Word count. The kebab opens without blocking the page, as the bar's menus do, so one press moves on from it.
-// A visitor without a login gets no activity, since it lists the history.
 
-import { useAuth } from '@workspace/lib/auth';
 import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -36,9 +34,8 @@ type DocumentShareClusterProps = {
     mobileMenuItems?: ReactNode;
 };
 
-export function DocumentShareCluster(clusterProps: DocumentShareClusterProps) {
+export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
-    const props = useAuth().user ? clusterProps : { ...clusterProps, onToggleActivityPanel: undefined };
     // One icon for both ways edits can be stuck in the tab; the outage explains itself, so it wins.
     const label = props.storageUnavailable ? 'Storage unavailable' : 'Offline';
     const offlineBadge = (props.offline || props.storageUnavailable) && (
@@ -56,8 +53,7 @@ export function DocumentShareCluster(clusterProps: DocumentShareClusterProps) {
         </Popover>
     );
 
-    // Mobile: collapse the icon row into a kebab. Its own useFindBarRefocus keeps the find-bar
-    // keystroke subscription off the desktop cluster (which would otherwise churn the Watch queries).
+    // Mobile: the icon row folds into a kebab.
     if (isMobile) {
         return (
             <>
@@ -116,8 +112,8 @@ export function DocumentShareCluster(clusterProps: DocumentShareClusterProps) {
     );
 }
 
-// Mobile kebab, split out so its DocSearchBar subscription (via useFindBarRefocus) stays off the
-// desktop cluster. No Eye marker and no open-state cue: an open panel takes the viewport (settled).
+// Mobile kebab, split out so its find-bar keystroke subscription (via useFindBarRefocus) stays off the desktop
+// cluster, where it would churn the Watch queries. No open-state cue: an open panel takes the viewport.
 function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,

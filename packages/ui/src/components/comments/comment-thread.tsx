@@ -1,9 +1,7 @@
 // The comment thread under a card, such as a sticky's: the card itself on top, the Activity of its chat room below it
 // in one scroll, the composer pinned under both, and the dialog that deletes a message. It fills the height its host
-// gives it, such as a dialog's. It finds the chat room by name in the document's chat folder. A visitor without a login
-// reads the card alone.
+// gives it, such as a dialog's. It finds the chat room by name in the document's chat folder.
 
-import { useAuth } from '@workspace/lib/auth';
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { ReactNode } from 'react';
@@ -28,17 +26,16 @@ type CommentThreadProps = {
 };
 
 export function CommentThread({ ownerId, mountId, pathId, chatName, lead, className }: CommentThreadProps) {
-    const { user } = useAuth();
-    const { resolveChatId } = useMediaResolver();
+    const { resolveChatId, isChatMissing } = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
-    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. If the
-    // thread is gone, the card reads deleted and the dialog shows that instead of this thread.
-    if (!user || !chatId) {
+    // A name the listing lacks waits for the listing's refetch, with the loading line the message list shows. A thread
+    // known to be gone shows the card alone, such as a visitor's, whose listing has no chat folder.
+    if (!chatId) {
         return (
             <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto', className)}>
                 {lead}
-                {user && <LoadingState />}
+                {!isChatMissing(chatName) && <LoadingState />}
             </div>
         );
     }

@@ -2,89 +2,37 @@
 // tree and editor, against a server that answers only the routes a public link opens: read-only, with no share, no
 // activity and only the routes on that list asked. A private slides sends them to log in with the way back, and a
 // signed-in user's and a guest's editor still read the comment index the visitor never asks for.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
-import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
-import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { renderInDocument } from '@workspace/ui/test/render-in-document';
-import { OWNER, session, sessionAuth, visitorServer } from '@workspace/ui/test/visitor-server';
-
-const window = installHappyDom();
-window.happyDOM.setViewport({ width: 1440, height: 900 });
-stubCanvasImageFonts();
+import {
+    labelled,
+    OWNER,
+    providers,
+    session,
+    visitorServer,
+    withProviders,
+    withSession,
+} from '@workspace/ui/test/visitor-server';
 
 const server = visitorServer({ type: 'slides', mimeType: DRIVE_MIME_SLIDES, name: 'Holiday.eigenslides' });
 
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realCollab = { ...(await import('@workspace/lib/collab')) };
-// The editor's own provider, kept so a test can mark it synced and read the awareness it would send.
-type Provider = NonNullable<ReturnType<typeof realCollab.useCollabDoc>['provider']>;
-const providers = new Set<Provider>();
-mock.module('@workspace/lib/collab', () => ({
-    ...realCollab,
-    useCollabDoc: (options: Parameters<typeof realCollab.useCollabDoc>[0]) => {
-        const collab = realCollab.useCollabDoc(options);
-        if (collab.provider) providers.add(collab.provider);
-        return collab;
-    },
-}));
-mock.module('@workspace/lib/auth', () => ({
-    ...realAuth,
-    useAuth: () => sessionAuth(),
-    useIsGuest: () => session.user?.role === 'guest',
-}));
+mock.module('@workspace/lib/collab', () => withProviders(realCollab));
+mock.module('@workspace/lib/auth', () => withSession(realAuth));
 afterAll(() => {
     mock.module('@workspace/lib/collab', () => realCollab);
     mock.module('@workspace/lib/auth', () => realAuth);
 });
 
-const { act } = await import('react');
-const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
-const { CommandPaletteProvider } = await import('@workspace/ui/components/layout/app');
-const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
-const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
 const { routeTree } = await import('../../routeTree.gen');
-
-let unmount = async () => {};
-afterEach(async () => {
-    await unmount();
-    providers.clear();
-    session.user = null;
-});
-
-async function open(url: string) {
-    const router = createRouter({
-        routeTree,
-        history: createMemoryHistory({ initialEntries: [url] }),
-        context: { auth: sessionAuth() },
-    });
-    await router.load();
-    const rendered = await renderInDocument(
-        <UploadProvider>
-            <PreviewProvider>
-                <CommandPaletteProvider>
-                    <RouterProvider router={router} />
-                </CommandPaletteProvider>
-            </PreviewProvider>
-        </UploadProvider>,
-    );
-    unmount = rendered.unmount;
-    // The editor mounts once the document's info arrives, and loads once its provider syncs.
-    for (let i = 0; i < 8; i++) {
-        await act(async () => {
-            for (const provider of providers) provider.synced = true;
-            await new Promise((resolve) => setTimeout(resolve, 10));
-        });
-    }
-    return { container: rendered.container, router };
-}
+const open = (url: string) => server.open(routeTree, url);
 
 const URL_OF = (pathId: string) => `/slide/${OWNER}/default/${pathId}`;
-const labelled = (label: string) => document.querySelector(`[aria-label="${label}"]`);
 const READ_ONLY = "You can only read this document because you're set to Viewer";
 
 test('a visitor reads a public slides, with its name in the bar, and asks only for what the link opens', async () => {
-    const { router } = await open(URL_OF('pub'));
+    const router = await open(URL_OF('pub'));
     expect(router.state.location.pathname).toBe(URL_OF('pub'));
     expect(labelled(READ_ONLY)).not.toBeNull();
     expect(document.querySelector('header')?.textContent).toContain('Holiday');
@@ -99,7 +47,7 @@ test('a visitor reads a public slides, with its name in the bar, and asks only f
 });
 
 test('a visitor lands on login, with the way back, for a slides the link does not open', async () => {
-    const { router } = await open(URL_OF('secret'));
+    const router = await open(URL_OF('secret'));
     expect(router.state.location.pathname).toBe('/login');
     expect(router.state.location.search).toEqual({ redirect: URL_OF('secret') });
 });

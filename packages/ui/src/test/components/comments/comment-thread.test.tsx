@@ -1,5 +1,5 @@
 // One comment thread stays mounted when its dialog moves to another card, and what waits to be sent belongs to the
-// thread it was typed in. A visitor without a login reads the card and gets no thread and no reply box.
+// thread it was typed in. A visitor without a login reads the card alone, with no loader and no reply box.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 
@@ -23,12 +23,16 @@ const room = {
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realChat = { ...(await import('@workspace/lib/chat')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
-const session: { user: { id: string; email: string } | null } = { user: { id: 'me', email: 'me@test.eigen.is' } };
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
+// A visitor's listing has no chat folder, so no thread resolves and every one is known missing.
+const listing = { hasChatFolder: true };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 mock.module('@workspace/lib/chat', () => ({ ...realChat, useChatRoom: () => room }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useMediaResolver: () => ({ resolveChatId: (chatName: string) => `id-of-${chatName}` }),
+    useMediaResolver: () => ({
+        resolveChatId: (chatName: string) => (listing.hasChatFolder ? `id-of-${chatName}` : null),
+        isChatMissing: () => !listing.hasChatFolder,
+    }),
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
@@ -77,8 +81,8 @@ test('a draft stays behind when the thread moves to another card', async () => {
     await act(async () => root.unmount());
 });
 
-test('a visitor reads the card above the thread, and gets no reply box', async () => {
-    session.user = null;
+test('a visitor reads the card above the thread, with no loader and no reply box', async () => {
+    listing.hasChatFolder = false;
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -94,7 +98,8 @@ test('a visitor reads the card above the thread, and gets no reply box', async (
         ),
     );
     expect(container.textContent).toBe('The card');
+    expect(container.firstElementChild?.childElementCount).toBe(1);
     expect(container.querySelector('textarea')).toBeNull();
     await act(async () => root.unmount());
-    session.user = { id: 'me', email: 'me@test.eigen.is' };
+    listing.hasChatFolder = true;
 });

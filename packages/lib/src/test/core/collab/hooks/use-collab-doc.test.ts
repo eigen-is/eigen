@@ -30,13 +30,11 @@ class FakeProvider {
     public disableBc = true;
     public bcConnects = 0;
     // y-websocket sends the local state on open, and y-protocols' setLocalStateField writes only while it is set.
+    private localState: Record<string, unknown> | null = {};
     public awareness = {
-        state: {} as Record<string, unknown> | null,
-        getLocalState() {
-            return this.state;
-        },
-        setLocalState(state: Record<string, unknown> | null) {
-            this.state = state;
+        getLocalState: () => this.localState,
+        setLocalState: (state: Record<string, unknown> | null) => {
+            this.localState = state;
         },
     };
     public connectBc() {

@@ -61,11 +61,12 @@ type CanvasToolbarProps = {
     // The canvas the Insert menu places into (Insert → Chart) and the Edit menu's clipboard rows act on.
     canvasRef: RefObject<CanvasHandle | null>;
     onAccessDialogOpen: () => void;
-    // Document-level comments + activity. Always offered: desktop draws the side panel, mobile the Column.
+    // Document-level comments, always offered, and activity, which a visitor doesn't get. Desktop draws the side panel,
+    // mobile the Column.
     onToggleCommentPanel: () => void;
     commentPanelOpen: boolean;
     assignedCommentCount: number;
-    onToggleActivityPanel: () => void;
+    onToggleActivityPanel?: () => void;
     activityPanelOpen: boolean;
     // The File menu's per-app identity.
     createLabel: string;
