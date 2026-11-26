@@ -24,7 +24,7 @@ import { foldName } from '../mount/names';
 //   - A sibling that is itself an svg with name refs is inlined first, at most MAX_SVG_INLINE_DEPTH deep.
 //   - The output is capped at SVG_INLINE_MAX_BYTES. Past it the refs are stripped, never a 500.
 //
-// The result shares the screen preview's cache key, `{pathId}-{updatedAt}.screen.svg`, so every display surface and
+// The result is cached as the screen preview, under the svg's updatedAt and a format tag, so every display surface and
 // the export's prepareMedia, which calls getScreenPreview too, get it for free. A sibling's edit, rename or delete
 // leaves the svg's updatedAt alone, so a cached preview outlives it until the svg itself changes.
 

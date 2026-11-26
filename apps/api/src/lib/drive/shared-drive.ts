@@ -24,7 +24,7 @@ import type { Mount } from '../mount';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { canonicalACLId, canReadFromAncestors } from './acl';
+import { canonicalACLId, canReadFromAncestors, canWriteByNameFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -115,6 +115,18 @@ export class SharedDrive {
     // When the owner restricts sharing, only an owner may change who has access.
     private sharingRestrictedFor(path: DrivePath, memberships: Memberships): boolean {
         return path.sharingRestricted && !this.isEffectiveOwner(path.ownerId, memberships);
+    }
+
+    // Changing who has access needs write held by name: "Anyone signed in can edit" lets everyone change the
+    // content, never hand it on. The owner's restriction comes on top.
+    private async requireShare(mountId: string, pathId: string, memberships: Memberships): Promise<DrivePath> {
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const path = chain.at(-1);
+        if (!path || !canWriteByNameFromAncestors(chain, this.user, memberships)) {
+            throw new ApiError(403, 'No permission to change sharing');
+        }
+        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
+        return path;
     }
 
     // ---- Mounts ----
@@ -369,8 +381,7 @@ export class SharedDrive {
 
     // ---- Access and sharing ----
 
-    // Write access comes first, so a reader gets the same 403 as on any path they can't change. A value
-    // for the restriction from anyone but an owner is dropped.
+    // A value for the restriction from anyone but an owner is dropped.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -381,12 +392,7 @@ export class SharedDrive {
         options?: ACLPropagationOptions,
     ): Promise<void> {
         const memberships = await getMemberships(this.user.id);
-        await this.requireWrite(mountId, pathId, memberships);
-
-        const path = await this.drive.getPath(mountId, pathId);
-        if (!path) throw new ApiError(404, 'Path not found');
-        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
-
+        const path = await this.requireShare(mountId, pathId, memberships);
         const effectiveOwner = this.isEffectiveOwner(path.ownerId, memberships);
         return this.drive.updateACLDelta(
             mountId,
@@ -413,11 +419,12 @@ export class SharedDrive {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, pathId, memberships);
 
-        const path = await this.drive.getPath(mountId, pathId);
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const path = chain.at(-1);
         if (!path) throw new ApiError(404, 'Path not found');
 
-        const canWrite = await this.canWrite(mountId, pathId, this.user, memberships);
-        const canShare = canWrite && !this.sharingRestrictedFor(path, memberships);
+        const canShare =
+            canWriteByNameFromAncestors(chain, this.user, memberships) && !this.sharingRestrictedFor(path, memberships);
         const { recipients } = await this.drive.checkAccessForEmails(mountId, pathId, emails);
         return { canShare, recipients };
     }
@@ -433,8 +440,8 @@ export class SharedDrive {
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
     }
 
-    // An invite to a chat inside a document shares the document. So it needs write access to both, and
-    // the document's sharing restriction counts.
+    // An invite to a chat inside a document shares the document. So it needs write on the chat, and the right to
+    // share the document.
     public async inviteToChat(mountId: string, chatId: string, email: string): Promise<InviteResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, chatId, memberships);
@@ -443,14 +450,7 @@ export class SharedDrive {
         if (!chatPath) throw new ApiError(404, 'Chat not found');
 
         const container = await this.drive.findContainerPath(mountId, chatPath.parentId ?? '');
-        if (container) {
-            await this.requireWrite(mountId, container.id, memberships, 'No write permission on container document');
-        }
-        const target = container ?? chatPath;
-        if (this.sharingRestrictedFor(target, memberships)) {
-            throw new ApiError(403, 'Sharing is restricted by the owner');
-        }
-
+        const target = await this.requireShare(mountId, (container ?? chatPath).id, memberships);
         return this.drive.inviteToChat(mountId, chatId, email, this.user, target);
     }
 

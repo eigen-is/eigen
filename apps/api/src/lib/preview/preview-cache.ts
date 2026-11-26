@@ -37,13 +37,12 @@ import { parseVCardPreview } from './vcard-preview';
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
 type ScreenPreviewResult = ImagePreview | { type: 'redirect'; url: string } | null;
 
-function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
-    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.screen.${ext}`;
-}
-
 // A format names the shape of its renderer's output and is part of the cache name. Bump it whenever that shape or a
 // typed payload's type changes: a parser refuses only a body it can't read, so the old shape would be served.
 export const TEXT_FORMAT = 'f8';
+// The screen previews' formats. The SVG's is bumped whenever what the inliner takes in changes.
+const WEBP_SCREEN_FORMAT = 'screen';
+const SVG_SCREEN_FORMAT = 'screen-f2';
 export const VCARD_FORMAT = 'vcard-f1';
 // Bumped on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
 export const EML_FORMAT = 'eml-f6';
@@ -54,6 +53,10 @@ const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
+}
+
+function screenCacheName(drivePath: DrivePath, format: string, ext: 'webp' | 'svg'): string {
+    return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.${ext}`;
 }
 
 // A job that ran out of time or memory will again, holding the only transform slot, so an empty marker beside its
@@ -146,8 +149,9 @@ async function getOrCacheImage(
 // A stale value is an earlier version's, served while the current one regenerates.
 type Served<T> = { value: T; stale: boolean };
 
-// A first miss is foreground work the request waits on, a stale regeneration background work the runner may drop
-// under load. A plain file's generator ignores it.
+// A member's first miss is foreground work the request waits on. A visitor's, and a stale regeneration, are background
+// work, which waits behind every foreground job and which the runner may drop under load. A plain file's generator
+// ignores it.
 type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
 // A body the parser rejects counts as a corrupt file.
@@ -158,13 +162,21 @@ function bodyOnly(body: string | null): PreviewResult | null {
     return body === null ? null : { body };
 }
 
+// A cached empty body is a version with nothing to preview: it answers no preview, like a failed one, but never
+// generates again.
+type CachedText<T> = { value: T | null };
+
+function fresh<T>(cached: CachedText<T>): Served<T> | null {
+    return cached.value === null ? null : { value: cached.value, stale: false };
+}
+
 // An unusable file is deleted: it is the current version, so it would be read again on every request, and a stale
 // read starts no regeneration of a cache name that exists.
-async function readCachedText<T>(cacheFile: string, parse: CachedTextParser<T>): Promise<T | null> {
+async function readCachedText<T>(cacheFile: string, parse: CachedTextParser<T>): Promise<CachedText<T> | null> {
     if (!fs.existsSync(cacheFile)) return null;
     try {
         const cached: PreviewResult = await Bun.file(cacheFile).json();
-        return parse(cached);
+        return { value: cached.body ? parse(cached) : null };
     } catch (err) {
         console.error(`[preview] Discarding unreadable cache file ${cacheFile}:`, err);
         await fs.promises.unlink(cacheFile).catch(() => {});
@@ -178,12 +190,13 @@ async function getOrCacheText<T>(
     format: string,
     parse: CachedTextParser<T>,
     generate: TextPreviewGenerator,
+    firstMiss: TransformPriority,
 ): Promise<Served<T> | null> {
     const pathId = drivePath.id;
     const cacheName = textCacheName(drivePath, format);
     const cacheFile = path.join(previewsDir, cacheName);
     const current = await readCachedText(cacheFile, parse);
-    if (current !== null) return { value: current, stale: false };
+    if (current !== null) return fresh(current);
     const failed = failedRecently(cacheFile);
     const generateText = (priority: TransformPriority) =>
         generateOnce(
@@ -193,8 +206,7 @@ async function getOrCacheText<T>(
             cacheName,
             async () => {
                 try {
-                    const result = await generate(priority);
-                    return result?.body ? result : null;
+                    return await generate(priority);
                 } catch (err) {
                     // Overload is not "no preview", and neither is a file the renderer refused: a controlled
                     // status reaches the client instead of being cached as a 404.
@@ -212,15 +224,15 @@ async function getOrCacheText<T>(
     // A job for this name may have finished during that disk read, so the check runs again with no wait before a job
     // starts.
     const written = await readCachedText(cacheFile, parse);
-    if (written !== null) return { value: written, stale: false };
+    if (written !== null) return fresh(written);
     if (stale !== null) {
         if (!failed) generateText('background').catch(() => {});
         return { value: stale, stale: true };
     }
     if (failed) return null;
 
-    const generated = await generateText('foreground');
-    return generated === null ? null : { value: parse(generated), stale: false };
+    const generated = await generateText(firstMiss);
+    return generated?.body ? { value: parse(generated), stale: false } : null;
 }
 
 async function readNewestStaleText<T>(
@@ -243,7 +255,8 @@ async function readNewestStaleText<T>(
     for (const { name } of candidates) {
         try {
             const cached: PreviewResult = await Bun.file(path.join(previewsDir, name)).json();
-            return parse(cached);
+            // An empty body is nothing to show while the current version builds.
+            if (cached.body) return parse(cached);
         } catch {
             // Pruned between readdir and read, or of a shape the parser refuses — try the next-newest.
         }
@@ -260,7 +273,7 @@ export async function getScreenPreview(
     drivePath: DrivePath,
     embedUrl: string,
 ): Promise<ScreenPreviewResult> {
-    const mime = drivePath.mimeType || '';
+    const mime = drivePath.mimeType;
 
     if (isScreenPreviewRedirect(mime)) {
         return { type: 'redirect', url: embedUrl };
@@ -272,7 +285,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, 'svg'),
+            screenCacheName(drivePath, SVG_SCREEN_FORMAT, 'svg'),
             'image/svg+xml',
             async () => {
                 const bytes = await mount.readBytes(drivePath.id);
@@ -287,7 +300,7 @@ export async function getScreenPreview(
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
-            screenCacheName(drivePath, 'webp'),
+            screenCacheName(drivePath, WEBP_SCREEN_FORMAT, 'webp'),
             'image/webp',
             async () => {
                 const file = await mount.readFile(drivePath.id);
@@ -306,9 +319,13 @@ export async function getScreenPreview(
 
 // The container type decides, never the mime: an uploader picks the mime, and a plain file wearing an Eigen mime
 // previews as its bytes.
-export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<Served<TextPreviewResult> | null> {
-    const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '') : undefined;
-    const mode = documentType ?? getBytesTextPreviewMode(drivePath.mimeType || '', drivePath.name);
+export async function getTextPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    firstMiss: TransformPriority,
+): Promise<Served<TextPreviewResult> | null> {
+    const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType) : undefined;
+    const mode = documentType ?? getBytesTextPreviewMode(drivePath.mimeType, drivePath.name);
     if (mode === null) return null;
     // Refused off the row's size, before any read; a container's size is its databases, not its body.
     if (!documentType && drivePath.size > TEXT_PREVIEW_MAX_BYTES) return null;
@@ -322,13 +339,14 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
             documentType
                 ? generateDocumentPreview(documentType, mount, drivePath, priority)
                 : generateFileTextPreview(mount, drivePath),
+        firstMiss,
     );
 }
 
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<PreviewResult | null> {
     const bytes = await mount.readBytes(drivePath.id);
     if (!bytes) return null;
-    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
+    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType);
     return bodyOnly(preview?.body ?? null);
 }
 
@@ -354,13 +372,18 @@ export function assertVCardPreviewable(fileName: string, contentType: string, si
     if (size > VCARD_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
-export async function getVCardPreview(mount: Mount, drivePath: DrivePath): Promise<Served<VCardPreview> | null> {
+export async function getVCardPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    firstMiss: TransformPriority,
+): Promise<Served<VCardPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
         drivePath,
         VCARD_FORMAT,
         ({ body }) => parseVCardPreview(body),
         (priority) => runFileTransformToText(mount, drivePath, VCARD_PREVIEW_JOB, { priority }).then(bodyOnly),
+        firstMiss,
     );
 }
 
@@ -375,13 +398,18 @@ export function assertEmlPreviewable(fileName: string, contentType: string, size
     if (size > EML_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
-export async function getEmlPreview(mount: Mount, drivePath: DrivePath): Promise<Served<EmlPreview> | null> {
+export async function getEmlPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    firstMiss: TransformPriority,
+): Promise<Served<EmlPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
         drivePath,
         EML_FORMAT,
         ({ body }) => parseEmlPreview(body),
         (priority) => runFileTransformToText(mount, drivePath, EML_PREVIEW_JOB, { priority }).then(bodyOnly),
+        firstMiss,
     );
 }
 
@@ -396,13 +424,18 @@ export function assertIcsPreviewable(fileName: string, contentType: string, size
     if (size > ICS_MAX_BYTES) throw new ApiError(413, 'File too large to preview');
 }
 
-export async function getIcsPreview(mount: Mount, drivePath: DrivePath): Promise<Served<IcsPreview> | null> {
+export async function getIcsPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    firstMiss: TransformPriority,
+): Promise<Served<IcsPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
         drivePath,
         ICS_FORMAT,
         ({ body }) => parseIcsPreview(body),
         (priority) => runFileTransformToText(mount, drivePath, ICS_PREVIEW_JOB, { priority }).then(bodyOnly),
+        firstMiss,
     );
 }
 

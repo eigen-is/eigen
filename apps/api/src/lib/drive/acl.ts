@@ -60,13 +60,14 @@ export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: Drive
     if (!intoOpenFolder) throw new ApiError(423, DOCUMENT_WRITE_ERROR);
 }
 
-// Ownership, team membership, public visibility or an ACL entry on the path or any ancestor. Only the
-// first two count in the trash.
+// Ownership, team membership, public visibility (unless countVisibility is off) or an ACL entry on the path or any
+// ancestor. Only the first two count in the trash.
 function canFromAncestors(
     ancestors: readonly DrivePath[],
     user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
+    countVisibility = true,
 ): boolean {
     const trashed = isTrashedChain(ancestors);
     for (const path of ancestors) {
@@ -77,7 +78,10 @@ function canFromAncestors(
 
         if (trashed) continue;
 
-        if (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write') {
+        if (
+            countVisibility &&
+            (permission === 'read' ? grantsPublicRead(path.visibility) : path.visibility === 'public-write')
+        ) {
             return true;
         }
 
@@ -112,6 +116,15 @@ export function canReadFromAncestors(ancestors: readonly DrivePath[], user: User
 
 export function canWriteFromAncestors(ancestors: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     return canFromAncestors(ancestors, user, memberships, 'write');
+}
+
+// Write the person holds themselves, as an owner or through an ACL entry, not through "Anyone signed in can edit".
+export function canWriteByNameFromAncestors(
+    ancestors: readonly DrivePath[],
+    user: User,
+    memberships: Memberships,
+): boolean {
+    return canFromAncestors(ancestors, user, memberships, 'write', false);
 }
 
 export function matchesACL(
