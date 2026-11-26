@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import { readChartSpec } from '@workspace/lib/charts';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
@@ -36,6 +37,7 @@ import {
     BUDGET,
     CHATS,
     CONTACTS,
+    DEMO_TIME_ZONE,
     DOCS,
     HEIN_KLARENBEEK,
     KANBAN,
@@ -474,7 +476,14 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(tryingMedia).toContain(tryingFigures[0].attrs?.['mediaName']);
 
             // Every persona's own calendar holds their shifts and the whole personal pool, beside the team calendar.
-            type EventRow = { title: string; startTime: number; endTime: number; allDay: number; rrule: string | null };
+            type EventRow = {
+                title: string;
+                startTime: number;
+                endTime: number;
+                allDay: number;
+                rrule: string | null;
+                timezone: string | null;
+            };
             const personaIds = new Map(
                 query<{ id: string; email: string }>(usersDb, 'SELECT id, email FROM user').map((row) => [
                     row.email,
@@ -486,10 +495,11 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 if (!id) throw new Error(`${key} has no account`);
                 return join(root, 'home', id);
             };
+            const calendarDbOf = (key: string) => join(homeOf(key), 'eigen.calendar', 'calendar.db');
             const personalEvents = (key: string) =>
                 query<EventRow>(
-                    join(homeOf(key), 'eigen.calendar', 'calendar.db'),
-                    'SELECT title, startTime, endTime, allDay, rrule FROM events',
+                    calendarDbOf(key),
+                    'SELECT title, startTime, endTime, allDay, rrule, timezone FROM events',
                 );
             for (const persona of PERSONAS) {
                 const titles = new Set(personalEvents(persona.key).map((row) => row.title));
@@ -498,17 +508,18 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             }
             const financeKey = personaByRole('finance').key;
             const financeHome = homeOf(financeKey);
-            const financeCalendarDb = join(financeHome, 'eigen.calendar', 'calendar.db');
+            const financeCalendarDb = calendarDbOf(financeKey);
             const financeEvents = personalEvents(financeKey);
             const financeRow = (title: string) => {
                 const row = financeEvents.find((event) => event.title === title);
                 if (!row) throw new Error(`'${title}' missing from the finance lead's calendar`);
                 return row;
             };
-            // A recurring line keeps its rule.
+            // A recurring line keeps its rule and its zone, so it expands on Amsterdam weekdays across a DST switch.
             const recurring = PERSONAL_EVENTS.find((line) => line.rrule);
-            if (!recurring) throw new Error('the personal pool has no recurring line');
-            expect(financeRow(recurring.title).rrule).toBe(recurring.rrule ?? null);
+            if (!recurring?.rrule) throw new Error('the personal pool has no recurring line');
+            expect(financeRow(recurring.title).rrule).toBe(recurring.rrule);
+            expect(financeRow(recurring.title).timezone).toBe(DEMO_TIME_ZONE);
             // A one-day all-day line is UTC midnight on its weekday, with an exclusive end the next day.
             const allDayLine = PERSONAL_EVENTS.find((line) => line.allDay);
             if (!allDayLine) throw new Error('the personal pool has no all-day line');
@@ -518,12 +529,19 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             expect(allDayStart.getUTCHours()).toBe(0);
             expect(allDayStart.getUTCDay()).toBe((((6 + allDayLine.daysFromFestival) % 7) + 7) % 7);
             expect(allDayRow.endTime - allDayRow.startTime).toBe(86_400);
-            // A half-hour line starts at :30 local time and keeps its length in minutes.
+            // A half-hour line starts at :30 Amsterdam time and keeps its length in minutes.
             const halfHour = PERSONAL_EVENTS.find((line) => !line.allDay && !line.rrule && line.startHour % 1 === 0.5);
             if (!halfHour) throw new Error('the personal pool has no half-hour line');
             const halfHourRow = financeRow(halfHour.title);
-            expect(new Date(halfHourRow.startTime * 1000).getMinutes()).toBe(30);
+            const halfHourStart = utcToLocal(new Date(halfHourRow.startTime * 1000), DEMO_TIME_ZONE);
+            expect(halfHourStart.minute).toBe(30);
             expect(halfHourRow.endTime - halfHourRow.startTime).toBe(halfHour.durationHours * 3600);
+            // Every timed line starts at its own hour on the Amsterdam clock, whatever zone the seeder ran in.
+            const timedLines = PERSONAL_EVENTS.filter((line) => !line.allDay);
+            const amsterdamHours = timedLines.map(
+                (line) => utcToLocal(new Date(financeRow(line.title).startTime * 1000), DEMO_TIME_ZONE).hour,
+            );
+            expect(amsterdamHours).toEqual(timedLines.map((line) => Math.trunc(line.startHour)));
 
             // Budget sheet: built from BUDGET (demo/sheet-build.ts) and decoded through the shipped reader. The
             // formulas hold their computed values; the amounts carry data bars, the margin a red rule below zero and

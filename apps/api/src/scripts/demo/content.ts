@@ -124,6 +124,8 @@ export const ADMIN_NAME = 'Tuimel Admin';
 export const ADMIN_LOCALPART = 'office';
 // The mail domain the seeder uses when MAIL_DOMAIN is unset.
 export const DEMO_MAIL_DOMAIN = 'tuimel.example';
+// The festival is Dutch, so every seeded time is on this clock, whatever zone the demo server runs in.
+export const DEMO_TIME_ZONE = 'Europe/Amsterdam';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';
@@ -1562,7 +1564,7 @@ export type MailAttachment = { filename: string } & (
 
 // An iMIP invitation (METHOD:REQUEST) from the message's external sender to the thread's persona, written with the
 // shipped iCalendar writer.
-export type SeededInvite = Omit<SeededPersonalEvent, 'allDay' | 'days' | 'rrule'>;
+export type SeededInvite = Omit<SeededSlot, 'allDay' | 'days' | 'rrule'>;
 
 export type SeededMail = {
     // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox. Either
@@ -1997,7 +1999,7 @@ export const MAILS: SeededMail[] = [
 
 // One line in a calendar, a team event's, a shift's or a personal one's. Its day counts from the festival Saturday
 // (0 = festival day, negative = before it), resolved at seed time, so the festival always lands on a weekend.
-export type SeededPersonalEvent = {
+export type SeededSlot = {
     title: string;
     daysFromFestival: number;
     startHour: number; // 9.5 is half past nine
@@ -2009,7 +2011,7 @@ export type SeededPersonalEvent = {
     description?: string;
 };
 
-export type SeededEvent = SeededPersonalEvent & {
+export type SeededEvent = SeededSlot & {
     organizer: LeadRole;
     attendees: (LeadRole | string)[]; // role or persona key
     replies?: Record<string, Exclude<Attendee['status'], 'accepted'>>; // by persona key; every other guest accepted
@@ -2122,10 +2124,10 @@ export const EVENTS: SeededEvent[] = [
     },
 ];
 
-// --- Personal calendars: each persona's own calendar holds their two SHIFTS, such as a shift or an errand, and the
-// whole PERSONAL_EVENTS pool. ---
+// --- Personal calendars: each persona's own calendar holds two SHIFTS of their own, such as a bar shift or an
+// errand, and the whole PERSONAL_EVENTS pool. ---
 
-export type SeededShift = SeededPersonalEvent & { persona: string }; // persona key
+export type SeededShift = SeededSlot & { persona: string }; // persona key
 
 export const SHIFTS: SeededShift[] = [
     { persona: 'anouk', title: 'Walk the field before doors', daysFromFestival: 0, startHour: 10, durationHours: 1 },
@@ -2184,12 +2186,12 @@ export const SHIFTS: SeededShift[] = [
 
 // Every persona gets the whole pool, so no line names one of them; friends, family and outsiders are fine. It is
 // densest in the weeks a visitor lands on, about three and four weeks before the festival.
-export const PERSONAL_EVENTS: SeededPersonalEvent[] = [
+export const PERSONAL_EVENTS: SeededSlot[] = [
     {
         title: 'Morning run',
         daysFromFestival: -25,
         startHour: 7,
-        durationHours: 0.75,
+        durationHours: 0.5,
         rrule: 'FREQ=WEEKLY;COUNT=8;BYDAY=TU,TH',
         location: 'Park loop',
     },
