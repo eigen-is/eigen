@@ -17,7 +17,7 @@ import type { ColumnWidth } from './column-widths';
 import { useLayout } from './layout-context';
 
 type DetailColumnProps = {
-    width: Exclude<ColumnWidth, 'small'>;
+    width: ColumnWidth;
     // Only over a list, such as the comments list: an item names itself in its body.
     title?: string;
     // Back from an item to the list it was opened from inside the column.

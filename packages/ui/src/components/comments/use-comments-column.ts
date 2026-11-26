@@ -31,7 +31,7 @@ export type CommentsColumnState = {
     // The list behind the column, which a thread goes back to.
     listPanel: DocumentPanel;
     threadOpen: boolean;
-    width: 'medium' | 'large';
+    width: 'small' | 'large';
     // How much wider a thread is than the list.
     growPx: number;
     commentPanelOpen: boolean;
@@ -83,8 +83,8 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
     const unlinked = !chat && !!openCard;
     const open = !!url || unlinked;
     const threadOpen = !!chat || unlinked;
-    const width = threadOpen ? 'large' : 'medium';
-    const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('medium');
+    const width = threadOpen ? 'large' : 'small';
+    const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('small');
 
     const closeUnlinked = () => {
         if (unlinked) setOpenCardId(null);

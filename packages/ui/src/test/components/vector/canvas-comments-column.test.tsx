@@ -1,8 +1,8 @@
-// A canvas app's comments open in one column beside the canvas: the list at ?panel=comments, 320 wide, and a thread at
-// ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll kept. The toolbar's toggle pushes,
-// close goes back on that push, and X and Esc close the whole column from a thread too. A ?chat= landing opens at once
-// at 400 and loads; one that names nothing lands on the list, a deleted one opens as deleted. The editor beside it never
-// remounts, on a desktop or a phone, and the find bar keeps clear of the column.
+// A canvas app's comments open in one column beside the canvas: the list at ?panel=comments, 256 wide like the
+// properties panel, and a thread at ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll
+// kept. The toolbar's toggle pushes, close goes back on that push, and X and Esc close the whole column from a thread
+// too. A ?chat= landing opens at once at 400 and loads; one that names nothing lands on the list, a deleted one opens
+// as deleted. The editor beside it never remounts, on a desktop or a phone, and the find bar keeps clear of the column.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -271,7 +271,7 @@ test("the toolbar's toggle pushes ?panel=comments, and closing goes back over th
     await settle();
     expect(search().get('panel')).toBe('comments');
     expect(historyIndex()).toBe(1);
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('256px');
     await act(async () => toggleComments());
     await settle();
     expect(search().get('panel')).toBeNull();
@@ -305,12 +305,12 @@ test('"‹ Comments" goes back to the list by replace, with its scroll kept', as
     expect(historyIndex()).toBe(1);
     // Under the thread the list keeps the list's width, so its rows don't wrap again.
     expect(list.classList.contains('invisible')).toBe(true);
-    expect(list.style.right).toBe('80px');
+    expect(list.style.right).toBe('144px');
     await click(button('Comments'));
     expect(search().get('chat')).toBeNull();
     expect(search().get('panel')).toBe('comments');
     expect(historyIndex()).toBe(1);
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('256px');
     const after = listRow()?.closest<HTMLElement>('.overflow-y-auto');
     expect(after).toBe(list);
     expect(after?.scrollTop).toBe(120);
@@ -351,7 +351,7 @@ test('a ?chat= that names no comment lands on the list by replace', async () => 
     expect(search().get('chat')).toBeNull();
     expect(search().get('panel')).toBe('comments');
     expect(historyIndex()).toBe(1);
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('256px');
 });
 
 test("a deleted comment's ?chat= opens it as deleted", async () => {
@@ -413,16 +413,21 @@ test('on a phone the column covers the editor, which stays mounted', async () =>
 test("the find bar's inset follows the column as it grows into a thread", async () => {
     await openCanvas(['/', '/?panel=comments'], { initialSearchTerm: 'x' });
     const bar = () => document.querySelector<HTMLElement>('.absolute.right-4.z-10');
-    expect(bar()?.style.right).toBe('336px');
+    expect(bar()?.style.right).toBe('272px');
     await click(listRow());
     expect(bar()?.style.right).toBe('416px');
     await click(button('Close'));
     expect(bar()?.style.right).toBe('');
 });
 
-test('the find bar clears the properties panel on a desktop, and spans a phone', async () => {
+test('the find bar clears the properties panel and the comments list alike on a desktop, and spans a phone', async () => {
     await openCanvas(['/'], { initialSearchTerm: 'x', canEdit: true });
     const bar = () => document.querySelector<HTMLElement>('.absolute.right-4.z-10');
+    expect(bar()?.style.right).toBe('272px');
+    // The comments list takes the panel's place at the panel's width, so the find bar stays put.
+    await act(async () => toggleComments());
+    await settle();
+    expect(columnWidth()).toBe('256px');
     expect(bar()?.style.right).toBe('272px');
     await unmount();
     await openCanvas(['/'], { initialSearchTerm: 'x', canEdit: true, isMobile: true });
