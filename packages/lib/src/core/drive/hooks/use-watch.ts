@@ -21,12 +21,15 @@ type WatchToggle = {
 
 type WatchTarget = { ownerId: string; mountId: string; pathId: string };
 
-// An empty pathId reads nothing, for a host that has no single item to show.
-export function useWatchToggle(ownerId: string, mountId: string, pathId: string): WatchToggle {
-    const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
+// An empty pathId reads nothing, for a host that has no single item to show. A visitor, with no login,
+// watches nothing, so the hook answers null for them and reads nothing.
+export function useWatchToggle(ownerId: string, mountId: string, pathId: string): WatchToggle | null {
+    const { user } = useAuth();
+    const { data: status } = useIsPathWatched(ownerId, mountId, user ? pathId : '');
     const watch = useWatchPath();
     const unwatch = useUnwatchPath();
 
+    if (!user) return null;
     const direct = status?.direct ?? false;
     const label = direct
         ? 'Stop watching'
@@ -58,9 +61,7 @@ export function useAllWatches() {
     });
 }
 
-// A visitor, with no login, watches nothing.
 function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
-    const { user } = useAuth();
     return useQuery({
         queryKey: driveKeys.pathWatched(ownerId, mountId, pathId),
         queryFn: async () => {
@@ -68,7 +69,7 @@ function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!user && !!ownerId && !!mountId && !!pathId,
+        enabled: !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
