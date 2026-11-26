@@ -10,7 +10,7 @@ When a user opens someone else's file, the route hands them the owner's drive wr
 
 The recipient still needs to find what was shared. So when an ACL changes, the owner's side pushes a small record into each recipient's own `shared.db`. This push is called propagation, and it is asynchronous: the save answers before every record has landed. The record never grants anything. A recipient who has no account yet, or a team whose members change, is covered by the share registry: a server-wide list of "this owner shared something with this address". It is read when the account or the membership appears, which is called reconciliation.
 
-Three rules sit on top. A client never sends a whole ACL: the route takes a delta, the entries to add and the ids to remove, and the server merges it, so two people sharing at once can't undo each other ([ACL Route](#acl-route)). An editor can share onward, unless the path has `sharingRestricted` set, which keeps sharing to the owner ([Re-Share Prevention](#re-share-prevention)). And a chat inside a document has no list of its own, so inviting someone to it shares the document ([Chat Invite Bubbling](#chat-invite-bubbling)).
+Three rules sit on top. A client never sends a whole ACL: the route takes a delta, the entries to add and the ids to remove, and the server merges it, so two people sharing at once can't undo each other ([ACL Route](#acl-route)). An editor by name, someone whose write comes from ownership, a team or an ACL entry, can share onward, unless the path has `sharingRestricted` set, which keeps sharing to the owner. Write that comes only from `public-write` edits the content, never who has access ([Re-Share Prevention](#re-share-prevention)). And a chat inside a document has no list of its own, so inviting someone to it shares the document ([Chat Invite Bubbling](#chat-invite-bubbling)).
 
 The sections run in this order: the types and the check, the rules, visibility and public links, who has access in effect, propagation and the registry, chat invites, and restricted sharing with the ACL route.
 
@@ -65,7 +65,7 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 - **Team ACL**: Additive with user ACL
 - **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `matchesACL` only checks `user` and `team` entries. Org-wide sharing is not implemented; use teams instead
 - **The root folder has no ACL**: `Drive.updateACLDelta` refuses a mount's root with 403
-- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it
+- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it. `requireMove` counts write from `public-write` too, so a person who edits only through the link can move an item into a folder in the same drive where they hold write by name, and then share it from there ([ROADMAP.md](ROADMAP.md))
 
 ## Visibility
 
@@ -90,7 +90,7 @@ The link is the item's ordinary URL: the path id is a random UUID, so the URL is
 
 **The server switch closes every link for everyone.** `sharing.publicLinks` is on by default and never on a demo server: `arePublicLinksEnabled()` in `lib/config/server-settings.ts` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). `LinkDrive` refuses every path while it is off, and `grantsPublicRead` counts `link` only while it is on, so a signed-in non-member or a guest loses the read too. People with an ACL entry, the owner and the team keep theirs. The stored value stays, so turning the switch on opens the same URLs again.
 
-**`Drive.updateACLDelta` is the one place that refuses a new link**: 403 while public links are off, and 400 on anything but a file, a folder or a collab document (`canHaveLink`) or on a path inside a document. A path that already has `link` saves as before, so its people can still be changed, or the link closed, while the switch is off. The editor and `sharingRestricted` rules are those of any visibility change ([Re-Share Prevention](#re-share-prevention)).
+**`Drive.updateACLDelta` is the one place that refuses a new link**: 403 while public links are off, and 400 on anything but a file, a folder or a collab document (`canHaveLink`) or on a path inside a document. A path that already has `link` saves as before, so its people can still be changed, or the link closed, while the switch is off. Who may turn a link on is who may make any sharing change: write by name, and the owner when sharing is restricted ([Re-Share Prevention](#re-share-prevention)).
 
 ## Effective Members
 
@@ -225,8 +225,7 @@ In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) 
 - Standalone chat → ACL lands on the chat itself; embedded or nested → on the nearest container above it
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
-- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
-- `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
+- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** the right to share the container, or the chat itself when it stands alone (`requireShare`, [Re-Share Prevention](#re-share-prevention)), otherwise 403. So someone who edits the document only through `public-write` can't invite. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
 - Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 
 ### Frontend
@@ -235,13 +234,15 @@ The `/invite` slash command calls `useInviteToChat()` (`packages/lib/src/core/ch
 
 ## Re-Share Prevention
 
-Per-path `sharingRestricted` flag: only the owner, or a team member on a team-owned path, may change ACL or visibility. Editors keep full read/write on content. Default `false`.
+Changing who has access, the ACL or the visibility, needs write held by name: ownership, membership of the owning team, or an ACL entry with write on the path or a folder above it (`canWriteByNameFromAncestors` in `acl.ts`). Write that comes only from `public-write` lets everyone signed in change the content, and never lets them hand it on: otherwise anyone could add themselves, remove the owner's people or open the item to the internet.
 
-The ACL model treats "can edit content" and "can manage access" as one permission. Without the flag, sharing a document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove people. The flag separates the two without adding a third permission level.
+On top sits the per-path `sharingRestricted` flag: only the owner, or a team member on a team-owned path, may change ACL or visibility. Editors keep full read/write on content. Default `false`.
+
+For an editor by name, "can edit content" and "can manage access" are one permission. Without the flag, sharing a document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove people. The flag separates the two without adding a third permission level.
 
 **Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so a viewer gets the generic "no write permission" 403, the same as on any path they can't change. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. A recipient's **Shared with me** reads the flag from the owner's row, so it shows the current state.
+**Enforcement**: `SharedDrive.requireShare` is the one check. It asks write by name over the path's breadcrumb, so a viewer and a link-only editor get the same 403, "No permission to change sharing". Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403. `updateACLDelta()` runs it before every ACL change, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` runs it on the container, and the drive `access-check` answers `canShare` by the same rule, which a mail send's grants read ([MAIL.md](MAIL.md#a-send-grants-access-only-when-the-sender-says-so)). The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. A recipient's **Shared with me** reads the flag from the owner's row, so it shows the current state.
 
 ### ACL Route
 
@@ -259,7 +260,7 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 ### Frontend
 
-`useIsEffectiveOwner()` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog renders: a guest, or a restricted non-owner, gets the read-only `DriveAccessList`, everyone else `DriveAccessListEdit`. Only effective owners see its **Editors can share** checkbox (checked = not restricted), and the flag is only included in the save payload for them. Both components sit in `packages/ui/src/components/drive/`.
+`useCanShare(path)` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog renders, by the server's rule: an effective owner, or someone a write entry on the path or a folder above it names by email or team, unless sharing is restricted, gets `DriveAccessListEdit`. Everyone else gets the read-only `DriveAccessList`: a guest, a viewer, a link-only editor and a restricted non-owner. It reads the folders above from the breadcrumb, and until those load only the path's own entries count. Only effective owners see its **Editors can share** checkbox (checked = not restricted), and the flag is only included in the save payload for them. Both components sit in `packages/ui/src/components/drive/`.
 
 ### Design Decisions
 
@@ -267,10 +268,10 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 **Self-removal is a delete, not an ACL edit.** A restricted editor cannot touch the ACL at all; the only thing they can do is leave, and that rides on `deletePath` so the ACL route keeps one rule.
 
-**Visibility blocked too.** An editor cannot flip a restricted file to `public-read` or `link`: same route, same check.
+**Visibility blocked too.** An editor cannot flip a restricted file to `public-read` or `link`, and a link-only editor can't flip any: same route, same check.
 
 **Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwner()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
 
-Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
+Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`, `apps/api/src/test/acl/share-by-name.test.ts`.
 
 See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings, [SCALABILITY.md](SCALABILITY.md) for the home relay, [GUEST-ACCESS.md](GUEST-ACCESS.md) for guests and the share registry, [COLLAB.md](COLLAB.md) for live collab sockets
