@@ -88,7 +88,7 @@ The rule: **the bar names a list; the body names an item.** A detail bar holds n
 
 - Back is "‹" everywhere: one `BackButton({ onClick, label? })` in `packages/ui` layout/toolbar, a lone chevron with the tooltip "Back", or a chevron with the name of the list it returns to. `Column`'s phone back uses it, so every app's phone back becomes "‹" (it was "←"). Drive's text editor's "Back to files" arrow (`EditToolbar` in `editor-toolbar.tsx`) becomes `‹ Files`, a `BackButton` with the label of where it goes, as `‹ Comments` does; `code-editor-leave.test.tsx`, which clicks it by its old name, follows.
 - Left, in a column that has drilled from its list into one item: `‹ Comments`, on a desktop and on a phone alike. It goes to the list.
-- Left, on a phone, with no list behind: a lone "‹" that closes the column, back to the document or the list beside it, then the bar's title if it has one. So the comments column's own list shows "‹" and the title "Comments", never "‹ Comments". The prototype labelled that back with the title (`DetailColumn` passes `label={title}` whenever it shows a back); the build labels it only when `onBack` is set.
+- Left, on a phone, with no list behind: a "‹" that closes the column, back to the document or the list beside it, labelled with the bar's title if it has one. So the comments column's own list shows `‹ Comments`, the same button as a thread's back, and a column without a title a lone "‹" (the owner's ruling, 26 November 2026: the two backs looked different, and should look the same).
 - Right: the item's icon actions, then a ⋮ for the rest, then a gap, then X off the phone. On a phone the back closes, so no X. X always means Close, never Reject. Mail is the exception: its actions start at the left, as they did before the detail column, with the X still at the far right (the owner, 26 November 2026).
 - Height `h-12`, `app-gutter-x`, bottom border fading in on scroll (`toolbarBorder="auto"`), as Drive and Mail.
 
@@ -207,7 +207,7 @@ Phone, every kind:
 └─────────────────────┘        └─────────────────────┘
 ```
 
-On a phone a comment thread's bar reads `[‹ Comments  🔗 ✎ ✓ ]` and the comments list's own bar `[‹  Comments  ≡ ]`: a lone "‹" back to the document, then the title, not a `‹ Comments` button.
+On a phone a comment thread's bar reads `[‹ Comments  🔗 ✎ ✓ ]` and the comments list's own bar `[‹ Comments  ≡ ]`: the same `‹ Comments` button, which closes the column back to the document.
 
 ## 4. Behaviour
 
@@ -249,7 +249,7 @@ All in `packages/ui`, exported from its barrels; nothing carries a permission ch
 <DetailColumn
     width="medium"               // 'flex' | 'small' | 'medium' | 'large'
     title?="Comments"            // only over a list
-    onBack?={toList}             // in-column back (thread → list), "‹ Comments"; on a phone a lone "‹" runs onClose without it
+    onBack?={toList}             // in-column back (thread → list), "‹ Comments"; on a phone without it "‹ title" runs onClose
     actions={…}
     onClose={close}
     fill?                        // the body scrolls itself, such as a thread over its pinned composer
@@ -345,7 +345,7 @@ Why not a thread beside the list: 256 + 320 at the right is 576px, which in Slid
 After the prototype's second round (owner, 25 November 2026):
 
 7. **One body anatomy.** `DetailItemBlock` (the item as it looks on its surface, square, in its color's `'panel'` tone, the `text-xl font-medium` title inside), `DetailMeta` (one muted `text-xs` line) and `DetailSection` (an `eigen-section-label` caption over `text-sm` rows), for the event (without the block, decision 13), the comment thread, the board's card dialog, the .ics preview, and later a contact and the stickies list view (section 3). It replaces the old heading-and-meta rules. `AttendeeList`'s toggle drops its "N guests" label.
-8. **Back is "‹" everywhere.** One `BackButton`: a lone chevron with the tooltip "Back", or a chevron with the list's name. Every app's phone back becomes "‹" (was "←"), the comments thread shows `‹ Comments` on a desktop and a phone, and Drive's text editor's "Back to files" arrow becomes `‹ Files`. On a phone the comments column's own list shows a lone "‹" back to the document beside the title "Comments", never `‹ Comments`.
+8. **Back is "‹" everywhere.** One `BackButton`: a lone chevron with the tooltip "Back", or a chevron with the list's name. Every app's phone back becomes "‹" (was "←"), the comments thread shows `‹ Comments` on a desktop and a phone, and Drive's text editor's "Back to files" arrow becomes `‹ Files`. On a phone the comments column's own list shows `‹ Comments` too, the same button as a thread's, closing the column back to the document (the owner's ruling, 26 November 2026).
 9. **One `.eigen-block` class** for every tile and block, in `globals.css`: square, one flat shadow, the dark-mode stripe in its place. Calendar items and board cards look exactly the same. The owner chose it flat; drag ghosts and the board's drag overlay no longer look lifted, accepted.
 10. **Two tones stay** (the owner's correction, 25 November 2026, of an earlier "one tint"). `colorSurface(color, tone)` keeps `'tile'` 0.25 for small tiles and `'panel'` 0.5, the paler one, for `DetailItemBlock`, so the large reading area of an opened card or comment stays readable. An opened sticky is a white dialog with the card's panel-toned block on top, as a comment is in its column. Answer 5 in PROPOSAL_CALENDAR_VIEWS.md stands.
 11. **Slides' rail is slides-only**, not a Column token: 208 (`w-52`) on normal screens, 256 from 1920 wide (`min-[120rem]:w-64`), where it matches the properties column across from it. This reverses the earlier ruling that moved it to `small`: a wider rail took room from the slide and its thumbnails read no better.

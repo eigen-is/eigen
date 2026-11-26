@@ -53,7 +53,7 @@ Docs, Sheets, Slides, Stickies, and Vector have a fuller view of the same record
 
 The panel opens beside the document and lists up to 50 entries, newest first. Lines that refer to a comment or a card open it in the document when you click them. If nothing has happened yet, the panel says **No activity yet**.
 
-Click **Activity** again, or **Close** (the X) at the panel's top right, to close it. On a phone the panel fills the screen, and **‹** takes you back.
+Click **Activity** again, or **Close** (the X) at the panel's top right, to close it. On a phone the panel fills the screen, and **‹ Activity** at the top left takes you back.
 
 <div class="eigen-callout">
 

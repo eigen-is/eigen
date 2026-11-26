@@ -43,7 +43,7 @@ A selected image or chart opens no panel on a phone. You can still drag it, and 
 
 ## Boards on a phone
 
-A board's columns are as wide as the screen, so you see one at a time and swipe sideways to reach the next. **Activity**, in the **⋮** menu, fills the screen, and **‹** takes you back to the board.
+A board's columns are as wide as the screen, so you see one at a time and swipe sideways to reach the next. **Activity**, in the **⋮** menu, fills the screen, and **‹ Activity** at the top left takes you back to the board.
 
 ## Controls fold into menus
 
@@ -53,4 +53,4 @@ In Calendar, **Today** and the month or week choice move into a **View options**
 
 ## Comments and activity
 
-In documents, spreadsheets, presentations, and drawings, opening **Comments** or **Activity** takes over the screen instead of opening a panel beside your work, with its own back button. In a presentation or a drawing, a comment's thread has **Comments** at the top left to go back to the list, and your phone's back gesture closes comments from the list or a thread. Your document is waiting exactly as you left it, with the same scroll position and selection.
+In documents, spreadsheets, presentations, and drawings, opening **Comments** or **Activity** takes over the screen instead of opening a panel beside your work, with **‹ Comments** or **‹ Activity** at the top left to go back to your work. In a presentation or a drawing, a comment's thread has the same **‹ Comments** to go back to the list, and your phone's back gesture closes comments from the list or a thread. Your document is waiting exactly as you left it, with the same scroll position and selection.

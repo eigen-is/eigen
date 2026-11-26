@@ -24,7 +24,7 @@ The media hooks answer `false` during a prerender, so a build-time render and th
 
 What steps aside is hidden, not unmounted: `<main>` under the sidebar column, docs under the comments column through its own `hidden` wrapper, sheets, slides and vector under the comments column and a Stickies board under its activity column, through `PhoneDetail` ([COMMENTS.md](COMMENTS.md#on-a-phone-the-column-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection and undo history across the visit. A list page is the exception: `ListDetailLayout` hands the phone the detail as its `mobileColumn`, so the list unmounts while the detail shows: a list holds nothing a remount loses but its scroll.
 
-The comments column is a screen of its own, as a mail is. Its list's bar shows a lone "‹" back to the document beside the title Comments, never "‹ Comments", which only a thread's bar shows, back to the list. The system back closes the column from either, since the list and a thread share one history entry ([LAYOUT.md](LAYOUT.md#a-detail-column-opens-at-the-right-under-the-bar-that-spans-the-screen)).
+The comments column is a screen of its own, as a mail is. Its list's bar shows "‹ Comments", which closes the column back to the document, and a thread's bar the same "‹ Comments" button, back to the list: one look for both, the owner's ruling of 26 November 2026. The system back closes the column from either, since the list and a thread share one history entry ([LAYOUT.md](LAYOUT.md#a-detail-column-opens-at-the-right-under-the-bar-that-spans-the-screen)).
 
 ## A hidden surface can't be scrolled or focused
 
