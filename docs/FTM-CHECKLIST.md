@@ -49,7 +49,7 @@ Most gaps have no plan. The proposals that do exist cover a handful of rows each
 | [PROPOSAL_AI.md](proposals/PROPOSAL_AI.md) | Research only; ROADMAP-POST-1.md shelves it (size XL, needs a GPU sidecar, kept as a grant narrative) | AI that runs in the browser or on the server, so nothing leaves the instance: writing help and summaries (row 201), semantic search (row 202) | It has a per-user setting, not an admin switch (row 203) |
 | [PROPOSAL_TEAM_ADDRESSES.md](proposals/PROPOSAL_TEAM_ADDRESSES.md) | Not built; ROADMAP.md row "Team mail addresses" | A team gets an address whose mail reaches every member (rows 18 and 60); phase 2 lets members send as the team (rows 19, 59 and 61, in part). It also lets a team calendar invite outside guests properly | Each member gets their own copy, so it is no shared mailbox with one read state. Personal aliases (rows 20 and 59) stay open |
 | [PROPOSAL_RSPAMD.md](proposals/PROPOSAL_RSPAMD.md) | Not built, 1 to 2 days; ROADMAP.md row "rspamd sidecar + spam learn-loop" | Spam scoring and learning from Report spam (row 9), and SPF, DKIM and DMARC checks on mail that arrives (row 7) | Malware scanning (row 10) |
-| [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md) | Not built; ROADMAP.md row "Public links" in P1, raised by the owner because users ask for it again and again | A view-only link that needs no account (row 106) | Edit links are a possible phase 2 |
+| [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md) | Built, raised by the owner because users ask for it again and again | A view-only link that needs no account (row 106) | Edit links are a possible phase 2 |
 | [PROPOSAL_CALENDAR_IMPORT.md](proposals/PROPOSAL_CALENDAR_IMPORT.md) | File import built, subscriptions not; ROADMAP.md row "Calendar subscriptions" | Subscribing to an outside calendar feed (row 82) | Sharing a calendar with outside people (row 81) |
 | [PROPOSAL_PORTABLE_DOCUMENTS.md](proposals/PROPOSAL_PORTABLE_DOCUMENTS.md) | Not built; ROADMAP.md row | A document downloaded as one file and uploaded on any Eigen server (row 55, in part) | Chat rooms have no export, and Drive has no folder download as zip |
 | [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) | Not built, waits for SSO; ROADMAP-POST-1.md | Eigen's Mail on a mailbox at another provider, which eases a migration | A one-shot IMAP import (row 220), which it calls separate, smaller work |
@@ -228,7 +228,7 @@ Eigen is open-source software, MIT licensed, that an organisation hosts itself o
 | 103 | Share with groups | Yes | With a team | |
 | 104 | Rights per document: view, comment, edit | Partly | View and edit only. Commenting needs write access, so nobody can comment without being able to edit | [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "A view-and-comment role" |
 | 105 | Rights per folder: view, comment, edit | Partly | Folder rights pass to everything inside, with the same two levels | [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "A view-and-comment role" |
-| 106 | Share through a public link | No | "Anyone with the link" still needs an Eigen account | [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md); [ROADMAP.md P1](ROADMAP.md#p1-high-value-per-effort-start-next) "Public links" |
+| 106 | Share through a public link | Yes | "Anyone with the link" opens a file, folder or document view-only without an account, unless an admin turns public links off ([ACL.md](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)) | |
 | 107 | Download documents | Yes | Uploaded files as they are; Eigen documents as docx, xlsx, pptx, PDF or HTML | |
 | 108 | Team folders the organisation owns | Yes | Team drives, owned by the team | |
 | 109 | Edit together at the same time | Yes | Docs, sheets, slides, boards and drawings, with live cursors ([COLLAB.md](COLLAB.md)) | |
@@ -328,7 +328,7 @@ Eigen has no video meetings and no code toward them: no WebRTC, no screen sharin
 | 176 | One-on-one chats | Yes | | |
 | 177 | Group chats | Yes | | |
 | 178 | Lasting rooms | Yes | A room is a file in Drive; team rooms act as channels ([CHAT.md](CHAT.md)) | |
-| 179 | Rooms open to the whole organisation or invite-only | Yes | Share sets a room to Restricted or Unrestricted. There is no list of open rooms to browse | |
+| 179 | Rooms open to the whole organisation or invite-only | Yes | Share sets a room to Restricted or Anyone signed in with the link. There is no list of open rooms to browse | |
 | 180 | Invite outside people to chats and rooms | Yes | As guests | |
 | 181 | Reply in threads | No | The database has a `replyTo` column and the API takes it, but no interface sets or shows it | None |
 | 182 | @mentions | Yes | | |
