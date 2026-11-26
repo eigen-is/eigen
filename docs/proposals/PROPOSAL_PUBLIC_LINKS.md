@@ -16,7 +16,7 @@ The whole design in one table:
 | 4 | What a visitor is handed | `LinkDrive` | A read-only wrapper: a few reads, trimmed |
 | 5 | Which routes listen | The `linkAuth` macro | Thirteen read routes and the socket: `user ? getSharedDrive : LinkDrive` |
 | 6 | The socket | `CollabDocument` and `routes/collab.ts` | A connection without a user gets no awareness and may send almost nothing |
-| 7 | The visitor's screen | One `beforeLoad` for seven routes | The item's own route renders without a login; "visitor" means "no user" |
+| 7 | The visitor's screen | One `beforeLoad` guard for seven routes | The item's own route renders without a login; "visitor" means "no user" |
 
 ## The problem
 
@@ -143,9 +143,9 @@ What the apps do today, read from the code:
 
 The change, with no new route and no second URL:
 
-- **Seven route files leave `_auth`**: the five editor routes and Drive's `fs` and `shared.$to`. The URLs stay the same. Each app's root route and the file itself name the new route id, and Drive's two take their user from `useAuth()`.
-- **One `beforeLoad` guards all seven**, beside `createAuthRouteOptions` in `auth-route.tsx`. With a user it does nothing. With no user it asks the permissions route for the item the URL names and redirects to `/login`, with the way back, on no read. A URL that names no item redirects at once: `/fs/<owner>/<mount>/root`, `/shared/by-me`, and `/shared/with-me` without `pid`. So a private item behaves as today, and `RequestAccessView` is untouched: only a signed-in user reaches it.
-- **"Visitor" is "no user"**, read from `useAuth()` in the seams that have a guest case today or serve every app. `useCommentLifecycle` shows the cards and runs no thread, index or member query. `useDriveActionsFor` and `useFileActions` keep Open and, for a plain file, Download. `FileMenu` keeps Print and drops Download, which is an export. `EigenDocEditorRoute` mounts no share dialog, and the top bar shows the document's name.
+- **Eight route files leave `_auth`**: the five editor routes and Drive's `fs`, `shared.$to` and `edit`. The URLs stay the same. Drive's `edit` route is the text editor, which a text file's link names; without a user it only forwards to the file's page under `shared`, where the guard checks it. Each app's root route and the file itself name the new route id, and Drive's two take their user from `useAuth()`.
+- **One `beforeLoad` guards the other seven**, `guardLinkRoute` beside `createAuthRouteOptions` in `auth-route.tsx`. With a user it does nothing. With no user it asks the permissions route for the item the URL names, through `fetchPathPermissions` in lib, and redirects to `/login`, with the way back, on no read. A URL that names no item redirects at once: `/fs/<owner>/<mount>/root`, `/shared/by-me`, and `/shared/with-me` without `pid`. So a private item behaves as today, and `RequestAccessView` is untouched: only a signed-in user reaches it. Drive's folder route skips the guard while the visitor stays on that route, so opening a subfolder asks nothing twice; the API refuses what the link does not cover.
+- **"Visitor" is "no user"**, read from `useAuth()` in the seams that have a guest case today or serve every app. `useCommentLifecycle` shows the cards and runs no thread, index or member query. `useDriveActionsFor` keeps Open, and `useFileActions` keeps Quick preview and a plain file's Download. The history and watch queries are off, and Watch, the sharing section and, on a lone file's page, the close button are not drawn. `FileMenu` keeps Print and drops Download, which is an export. `EigenDocEditorRoute` mounts no share dialog, and the top bar shows the document's name.
 - **A lone file.** With no user the shared route leaves `useSharedPaths` off (it takes `skipToken` for an empty owner id) and gives `DriveLayout` the one file from `usePathInfo` as its list, read-only, with the file's name as the title. The visitor sees one row with the file open beside it, and the quick look works.
 
 Who sees what on the one URL:
@@ -201,6 +201,7 @@ No sweep and no cleanup: a link is one value in one row.
 ## Risks, and what is accepted
 
 - **The URL is a bearer token, and only choosing another General access closes it.** URLs travel: browser history, chat previews, forwarded mails. Choosing the link again, a restore from the trash, turning the setting off and on, or a backup restore from when it was public all open the same URL.
+- **A visitor learns the id of the folder a public item sits in**, from the item's `parentId`, as a signed-in sharee does. It opens nothing while that folder is private. Accepted, for one chain rule on both sides.
 - **A move tells a shared folder's readers the id of the folder on the other side.** A file moved between a private folder and a shared one carries the private folder's id in its history line and its live event, as every path carries its `parentId`. Those readers can open that folder once it is public. Accepted.
 - **Ids are in logs.** Caddy's access log, the `[slow]` line in `app.ts` and `[collab] open path=` in `routes/collab.ts` hold path ids, which now open a public item.
 - **A guest account reads more than a visitor.** With open guest sign-up anyone can make one and then read the member list and the comment threads of a public item, as `public-read` allows today. Accepted.
