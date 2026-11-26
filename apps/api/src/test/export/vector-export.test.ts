@@ -56,7 +56,12 @@ beforeAll(async () => {
 async function pdfHtmlOf(pathId: string): Promise<string> {
     const home = await getHome(ctx.alice.user.id);
     const { mount, path } = await home.drive.resolveFile(mountId, pathId);
-    const { data: bytes } = await runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path);
+    const { data: bytes } = await runDocumentExport(
+        { documentType: 'eigenvector', format: 'pdf-html' },
+        mount,
+        path,
+        'foreground',
+    );
     return bytes.toString('utf-8');
 }
 
@@ -83,7 +88,7 @@ describe('Eigenvector export — empty drawing', () => {
     test('pdf export of an empty drawing is rejected with 400', async () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
-        await expect(exportDocument(mount, path, 'pdf')).rejects.toThrow('The drawing is empty');
+        await expect(exportDocument(mount, path, 'pdf', 'foreground')).rejects.toThrow('The drawing is empty');
     }, 60_000);
 });
 
@@ -277,7 +282,7 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
         await expect(
-            runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path),
+            runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path, 'foreground'),
         ).rejects.toThrow('The drawing is empty');
     }, 60_000);
 });

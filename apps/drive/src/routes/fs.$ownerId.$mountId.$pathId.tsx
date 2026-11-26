@@ -9,10 +9,10 @@ import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import {
-    useCanWriteByName,
     useCanWriteFolder,
     useFolderContent,
     usePathInfo,
+    useWritesByName,
     validateDriveSearch,
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -78,7 +78,7 @@ function FolderRoute() {
     // One capability set for menus, detail column and quick look.
     const capabilities = browseCapabilities(
         useCanWriteFolder(ownerId, mountId, pathId),
-        useCanWriteByName(currentPath),
+        useWritesByName(ownerId, mountId, pathId),
     );
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({

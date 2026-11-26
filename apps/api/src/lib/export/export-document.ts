@@ -18,6 +18,7 @@ import type {
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
@@ -57,6 +58,7 @@ export async function exportDocument(
     mount: Mount,
     path: DrivePath,
     format: string,
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     // The container TYPE gates the dispatch: mimeType is caller-controlled on upload, so a plain
@@ -69,6 +71,7 @@ export async function exportDocument(
             envelope,
             mount,
             path,
+            priority,
             signal,
         );
     }
@@ -79,6 +82,7 @@ export async function exportDocument(
             envelope,
             mount,
             path,
+            priority,
             signal,
         );
     }
@@ -89,6 +93,7 @@ export async function exportDocument(
             envelope,
             mount,
             path,
+            priority,
             signal,
         );
     }
@@ -99,6 +104,7 @@ export async function exportDocument(
             envelope,
             mount,
             path,
+            priority,
             signal,
         );
     }
@@ -116,11 +122,12 @@ async function serveExport(
     envelope: ExportEnvelope,
     mount: Mount,
     path: DrivePath,
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     // A deck's PDF document lays its slides out at 1:1 (renderPrintPage), so WeasyPrint's zoom scales them
     // onto the sheet.
-    const { data: bytes, zoom, warnings } = await runDocumentExport(job, mount, path, signal);
+    const { data: bytes, zoom, warnings } = await runDocumentExport(job, mount, path, priority, signal);
     return {
         // WeasyPrint runs in a subprocess of its own, so it never blocks the event loop, over the
         // document the transform process rendered.
@@ -139,6 +146,7 @@ export async function runDocumentExport(
     job: ExportJob,
     mount: Mount,
     path: DrivePath,
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<{ data: Buffer; zoom?: number; warnings: TransformWarning[] }> {
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
@@ -149,6 +157,7 @@ export async function runDocumentExport(
             ? { kind: 'export', ...job, title: path.name, publicOrigin: getPublicOrigin() }
             : { kind: 'export', ...job, title: stripEigenExtension(path.name) };
     return runTransformToBytes(mount, path, request, {
+        priority,
         signal,
         prepareMedia: (names, prepSignal) => collectExportMedia(mount, path, job.format, names, prepSignal),
     });

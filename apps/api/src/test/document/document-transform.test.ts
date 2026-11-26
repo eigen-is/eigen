@@ -528,7 +528,7 @@ describe('document transform (eigensheets export)', () => {
     });
 
     test('html export through the Worker matches the pinned golden bytes', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -546,7 +546,7 @@ describe('document transform (eigensheets export)', () => {
     }, 120_000);
 
     test('xlsx export through the Worker returns a parseable workbook', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'xlsx');
+        const result = await exportDocument(golden.mount, golden.path, 'xlsx', 'foreground');
         const sheets = xlsxToSheets(result.data);
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
         const cell = (r: number, c: number) => sheets[0].celldata?.find((d) => d.r === r && d.c === c)?.v;
@@ -980,7 +980,7 @@ describe('document transform (eigendoc)', () => {
     }, 120_000);
 
     test('html export is byte-identical to the pre-move pipeline', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -990,6 +990,7 @@ describe('document transform (eigendoc)', () => {
             { documentType: 'eigendoc', format: 'pdf-html' },
             golden.mount,
             golden.path,
+            'foreground',
         );
         expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
@@ -1118,6 +1119,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'docx' },
                 golden.mount,
                 golden.path,
+                'foreground',
                 controller.signal,
             ).catch(() => {});
             calls = spy.mock.calls.length;
@@ -1162,6 +1164,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'html' },
                 doc.mount,
                 doc.path,
+                'foreground',
             );
             names = read.mock.calls.map(([, file]) => file.name);
             expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
@@ -1208,6 +1211,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'html' },
                 doc.mount,
                 doc.path,
+                'foreground',
             );
             expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
         });
@@ -1223,7 +1227,9 @@ describe('document transform (eigendoc)', () => {
         await withDeclaredMedia('heavy-svgs', svgs, async (doc) => {
             const read = spyOn(previewCache, 'getScreenPreview');
             try {
-                const failure = await exportDocument(doc.mount, doc.path, 'pdf').catch((err: unknown) => err);
+                const failure = await exportDocument(doc.mount, doc.path, 'pdf', 'foreground').catch(
+                    (err: unknown) => err,
+                );
                 expect(read).not.toHaveBeenCalled();
                 expect(failure).toMatchObject({ status: 413 });
             } finally {
@@ -1246,6 +1252,7 @@ describe('document transform (eigendoc)', () => {
                     { documentType: 'eigendoc', format: 'docx' },
                     doc.mount,
                     doc.path,
+                    'foreground',
                 );
                 expect(encode.mock.calls.map(([, , fileName]) => fileName)).toEqual(['light.png']);
                 expect(warnings).toContainEqual({ code: 'images-dropped', count: 1 });
@@ -1272,6 +1279,7 @@ describe('document transform (eigendoc)', () => {
                     { documentType: 'eigendoc', format },
                     doc.mount,
                     doc.path,
+                    'foreground',
                     controller.signal,
                 ).catch(() => {});
                 calls = encode.mock.calls.length;
@@ -1299,9 +1307,12 @@ describe('document transform (eigendoc)', () => {
         let failure: unknown;
         let calls = -1;
         try {
-            failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
-                (err: unknown) => err,
-            );
+            failure = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'docx' },
+                doc.mount,
+                doc.path,
+                'foreground',
+            ).catch((err: unknown) => err);
             timedOut.resolve();
             await Bun.sleep(600);
             calls = encode.mock.calls.length;
@@ -1373,7 +1384,12 @@ describe('document transform (docx round trip)', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
         await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
-        const { data: docx } = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
+        const { data: docx } = await runDocumentExport(
+            { documentType: 'eigendoc', format: 'docx' },
+            mount,
+            path,
+            'foreground',
+        );
         return docxToPmJson(docx, { publicOrigin: getPublicOrigin() });
     }
 
@@ -1549,7 +1565,7 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 
     test('html export matches the pinned golden bytes', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -1560,6 +1576,7 @@ describe('document transform (eigenslides)', () => {
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
             golden.path,
+            'foreground',
         );
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
@@ -1919,7 +1936,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, mount, path);
+            await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, mount, path, 'foreground');
         } catch (err) {
             error = err;
         } finally {

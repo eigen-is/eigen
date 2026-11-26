@@ -92,9 +92,10 @@ export const app = new Elysia({
             origin: getTrustedOrigins(),
             methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
             credentials: true,
-            allowedHeaders: ['Content-Type', 'Authorization'],
-            // The dev client is cross-origin, names a download from Content-Disposition and toasts an export's summary.
-            exposeHeaders: ['Content-Disposition', EXPORT_SUMMARY_HEADER],
+            allowedHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
+            // The dev client is cross-origin, names a download from Content-Disposition, toasts an export's summary
+            // and asks for a document's stored state again by its ETag.
+            exposeHeaders: ['Content-Disposition', EXPORT_SUMMARY_HEADER, 'ETag'],
         }),
     )
     .use(

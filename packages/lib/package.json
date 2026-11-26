@@ -63,6 +63,7 @@
     "./chat/format-preview": "./src/core/chat/format-preview.ts",
     "./clipboard": "./src/core/clipboard/index.ts",
     "./collab": "./src/core/collab/index.ts",
+    "./collab/collab-state": "./src/core/collab/collab-state.ts",
     "./collab/yjs-utils": "./src/core/collab/yjs-utils.ts",
     "./command-palette": "./src/core/command-palette/index.ts",
     "./comments": "./src/core/comments/index.ts",

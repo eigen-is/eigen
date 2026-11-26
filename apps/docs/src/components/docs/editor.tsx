@@ -161,7 +161,7 @@ export const CollaborativeEditor = ({
 
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
-            {provider && yDoc && (
+            {yDoc && (
                 <>
                     <UnsyncedEditsGuard active={unsyncedEdits} />
                     <TiptapEditor
@@ -199,7 +199,7 @@ const TiptapEditor = ({
     initialSearchTerm,
 }: {
     yDoc: Y.Doc;
-    provider: WebsocketProvider;
+    provider: WebsocketProvider | null;
     path: DrivePath;
     canWrite: boolean;
     offline: boolean;
