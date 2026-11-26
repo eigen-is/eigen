@@ -442,6 +442,27 @@ test("an activity row opens the card's dialog over the column, and closing the d
     expect(column()).not.toBeNull();
 });
 
+test("a card deleted from the activity keeps the entry's flag, so the column's X still goes back", async () => {
+    await openBoard(['/']);
+    await toggleActivity();
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    await act(async () => editButton()?.click());
+    await act(async () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Delete"]')?.click());
+    await settle();
+    const confirm = [...document.querySelectorAll('[role="dialog"]')].find((d) =>
+        d.textContent?.includes('Delete card'),
+    );
+    await act(async () => confirm?.querySelector<HTMLElement>('button[data-variant="destructive"]')?.click());
+    await settle();
+    expect(param('chat')).toBeNull();
+    expect(param('panel')).toBe('activity');
+
+    await act(async () => columnButton('Close')?.click());
+    await settle();
+    expect(history.location.state.__TSR_index).toBe(1);
+});
+
 test('on a phone the activity covers the board, which never remounts, and ‹ closes it', async () => {
     await openBoard(['/'], { isMobile: true });
     expect(seen.toolbar?.onToggleActivityPanel).toBeDefined();

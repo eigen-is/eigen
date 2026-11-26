@@ -8,7 +8,7 @@ import type { HistoryState } from '@tanstack/react-router';
 import { useRouter } from '@tanstack/react-router';
 
 // What a host passes on as its navigate's `state`: true keeps the entry's state, an updater writes the new entry's.
-type DetailHistoryOptions = { replace: boolean; state: true | ((prev: HistoryState) => HistoryState) };
+export type DetailHistoryOptions = { replace: boolean; state: true | ((prev: HistoryState) => HistoryState) };
 
 type UseDetailHistoryReturn<T> = {
     open: (next: T) => void;
