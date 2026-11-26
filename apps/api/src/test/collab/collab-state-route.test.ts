@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { collabStateEpoch } from '@workspace/lib/collab/collab-state';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as encoding from 'lib0/encoding';
@@ -304,6 +306,31 @@ describe('one version is built once and then served from its file', () => {
         }
     });
 
+    // Another version's write prunes this one's file at any moment, such as between a look at the file and its send.
+    test('a state file that goes as it is read is built again, and the request answers it', async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('kept');
+        expect((await visit(doc.id)).status).toBe(200);
+        const [cached] = (await cachedFiles(doc.id)).filter((name) => name.endsWith('.yjs'));
+        const cacheFile = join((await mountOf(doc.id)).previewsDir, cached);
+        const createReadStream = fs.createReadStream;
+        const open = spyOn(fs, 'createReadStream').mockImplementation((file, options) => {
+            if (file === cacheFile) fs.rmSync(cacheFile, { force: true });
+            return createReadStream(file, options);
+        });
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            const res = await visit(doc.id);
+            expect((await docOf(res)).getText('probe').toString()).toBe('kept');
+            expect(stateJobs(run).length).toBe(1);
+        } finally {
+            open.mockRestore();
+            run.mockRestore();
+        }
+        expect(await cachedFiles(doc.id)).toContain(cached);
+    });
+
     test("a miss runs in the background for whoever reads only through the link, and a named reader's in the foreground", async () => {
         const readers = [
             ['a visitor', null, 'background'],
@@ -385,6 +412,74 @@ describe('one version is built once and then served from its file', () => {
         }, 'the prune of the older state file');
         expect(kept.filter((name) => name.endsWith('.json'))).toEqual(both.filter((name) => name.endsWith('.json')));
     });
+});
+
+// The version names the rows of one data.db, so a data.db replaced by an older copy can name a cached state again.
+describe('a data.db replaced by a version', () => {
+    test('drops the cached state, so the same row ids answer the restored content', async () => {
+        const doc = await newPublicDoc();
+        const home = await getHome(aliceId);
+        const { drive } = home;
+        const first = await member(doc.id);
+        await first.write('v1');
+        const saved = await drive.saveVersion(mountId, doc.id);
+        await first.write(' v2');
+        const before = await visit(doc.id);
+        expect((await docOf(before)).getText('probe').toString()).toBe('v1 v2');
+
+        // A data.db whose stored object is gone takes the version's bytes in place.
+        for (const ws of sockets) ws.close();
+        await drive.closeCollabDocument(mountId, doc.id, { skipFinalSnapshot: true });
+        const mount = await mountOf(doc.id);
+        const dataDb = await mount.getChildByName(doc.id, CONTAINER_DATA_DB);
+        if (!dataDb) throw new Error('the container lacks its data.db');
+        await mount.reindexQueue?.drain();
+        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        await mount.storage.delete(await mount.getStorageKey(dataDb.id));
+        await drive.restoreContainer(mountId, doc.id, saved.name, home.user);
+
+        // The version's next update takes the id the cached state's last one had.
+        const restored = (await serverDoc(doc.id)).getText('probe');
+        restored.insert(restored.length, ' restored');
+        const after = await visit(doc.id);
+        expect(after.headers.get('etag')).toBe(before.headers.get('etag'));
+        expect((await docOf(after)).getText('probe').toString()).toBe('v1 restored');
+    });
+});
+
+// A build that ran out of time or memory would again, each time on the only transform slot, and a link reader's tab
+// would retry a 5xx every few seconds. So the version answers the 413 an export or an index answers, once remembered.
+describe('a state whose build keeps failing', () => {
+    test.each(['timeout', 'out-of-memory'] as const)(
+        'one that hit %s runs once for three requests, and a new version tries again',
+        async (code) => {
+            const doc = await newPublicDoc();
+            const { write } = await member(doc.id);
+            await write('huge');
+            const run = spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
+                ok: false as const,
+                error: { code, message: 'Document transform failed' },
+            }));
+            const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                const answers = [await visit(doc.id), await visit(doc.id), await visit(doc.id)];
+                expect(answers.map((res) => res.status)).toEqual([413, 413, 413]);
+                expect(answers.map((res) => res.headers.get('etag'))).toEqual([null, null, null]);
+                expect(stateJobs(run).length).toBe(1);
+                expect((await cachedFiles(doc.id)).some((name) => name.endsWith('.yjs.failed'))).toBe(true);
+
+                await write(' and more');
+                expect((await visit(doc.id)).status).toBe(413);
+                expect(stateJobs(run).length).toBe(2);
+            } finally {
+                errorSpy.mockRestore();
+                run.mockRestore();
+            }
+            expect((await visit(doc.id)).status).toBe(413);
+            await write('!');
+            expect((await docOf(await visit(doc.id))).getText('probe').toString()).toBe('huge and more!');
+        },
+    );
 });
 
 describe('who is served', () => {

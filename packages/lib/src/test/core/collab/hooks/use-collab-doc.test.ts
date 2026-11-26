@@ -687,6 +687,16 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         expect(active.state.loaded).toBe(false);
     });
 
+    // The 413 of a state the server could not build in its time or memory, which it would not build on a retry either.
+    test('a state too large to build is asked for once and reads as no outage', async () => {
+        server.refuse = 413;
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        expect(active.state.loaded).toBe(false);
+        expect(active.state.storageUnavailable).toBe(false);
+    });
+
     test('a link closed while the document is open reloads at the next focus', async () => {
         const reload = jest.fn();
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
