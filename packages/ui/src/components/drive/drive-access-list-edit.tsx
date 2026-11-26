@@ -13,7 +13,7 @@ import { useMyTeams } from '@workspace/lib/home';
 import { usePublicConfig } from '@workspace/lib/public';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_FILE, DRIVE_TYPE_FOLDER, isCollabType } from '@workspace/lib/types/drive';
+import { canHaveLink } from '@workspace/lib/types/drive';
 import type { DirectAccessItem, DriveACL, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
@@ -77,9 +77,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     const generalAccessId = useId();
 
     const { data: publicConfig } = usePublicConfig();
-    // The types the server lets have a link, which leaves out a chat.
-    const linkable = path.type === DRIVE_TYPE_FOLDER || path.type === DRIVE_TYPE_FILE || isCollabType(path.type);
-    const offersLink = path.visibility === 'link' || (publicConfig?.publicLinks === true && linkable);
+    const offersLink = path.visibility === 'link' || (publicConfig?.publicLinks === true && canHaveLink(path.type));
     const choices = GENERAL_ACCESS_CHOICES.filter((choice) => choice !== 'link' || offersLink);
     const linkNote = publicConfig?.publicLinks === false ? PUBLIC_LINKS_OFF_NOTE : PUBLIC_LINK_NOTE;
 
