@@ -5,14 +5,14 @@ type: reference
 tags: [calendar, keyboard, shortcuts, navigation]
 related: [calendar/views, calendar/create-event]
 order: 25
-updated: 2026-11-24
+updated: 2026-11-25
 ---
 
 Calendar has single-key shortcuts in the style of Google Calendar: **t** goes to today, **w** shows the week, **c** creates an event. They are on from the start, with nothing to turn on. This page lists every key.
 
 <div class="eigen-callout">
 
-The keys go quiet while a dialog is open, such as **New event** or an event's details, while a menu or the view list is open, and while you type in a field, so typing an **m** in a title never switches the view.
+The keys go quiet while a dialog is open, such as **New event**, while a menu or the view list is open, while you type in a field, and while you work in an event's details panel. So typing an **m** in a title never switches the view.
 
 </div>
 

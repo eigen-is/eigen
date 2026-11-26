@@ -323,7 +323,7 @@ export function DriveList({
 
     const contentDiv = (
         <div
-            className="h-full flex flex-col relative border-r"
+            className="h-full flex flex-col relative"
             {...targetProps}
             onContextMenu={createItems.length > 0 ? (e) => createMenu.handleContextMenu(e, true) : undefined}
         >

@@ -5,10 +5,10 @@ type: how-to
 tags: [calendar, navigation, day, week, month, schedule]
 related: [calendar/get-started, calendar/create-event, calendar/keyboard-shortcuts]
 order: 20
-updated: 2026-11-24
+updated: 2026-11-26
 ---
 
-Calendar opens in the week view on a computer and in the 3-day view on a phone. You can switch to a single day, 3 days, a week, a whole month or a schedule list, and use the navigation controls in the toolbar to move between periods.
+Calendar first opens in the week view on a computer and in the 3-day view on a phone. After that it opens on the view you last picked, and a computer and a phone each keep their own. You can switch to a single day, 3 days, a week, a whole month or a schedule list, and use the navigation controls in the toolbar to move between periods.
 
 ## Switch views
 
@@ -17,6 +17,10 @@ On a computer, pick **Day**, **3 days**, **Week**, **Month** or **Schedule** fro
 The view changes immediately and stays on the day you were looking at. If you are looking at 18 June in the month view, switching to the week view shows the week of 18 June. The 3-day view starts on that day and shows the two days after it.
 
 The schedule view starts on that day too and shows the next four weeks as a list. Only days with events appear, each with its events in time order: the time, or **All day**, the title and the place. Click an event to see its details. With nothing in those four weeks, the schedule says **Nothing planned**.
+
+::: grid columns="1"
+![The schedule view, a list of the days that have events](/data/about/media/calendar-still-schedule.webp)
+:::
 
 ::: grid columns="1"
 ![A week in the week view](/data/about/media/calendar-still-week.webp)
@@ -38,16 +42,20 @@ Each day shows as many events as fit, so a larger window shows more. When a day 
 
 Click a date number to open that day in the day view.
 
+::: grid columns="1"
+![A month in the month view, with an event of two days as one bar](/data/about/media/calendar-still-month.webp)
+:::
+
 ## Move to the next or previous period
 
-Use the arrow buttons in the toolbar to step through time:
+Use the arrow buttons at the right of the toolbar, beside the view choice, to step through time:
 
 - The **left arrow** moves back by the length of the view: one day, 3 days, one week, one month or, in the schedule, four weeks.
 - The **right arrow** moves forward by the same amount.
 
 In the month view the arrows keep the day of the month, so 31 January steps to 28 February.
 
-The title next to the arrows updates to show where you are. In the month view it reads something like **June 2026**. In the day view it shows the date, for example **Tuesday, 2 Jun 2026**. In the week, 3-day and schedule views it shows the date range, for example **1 – 7 Jun 2026**.
+The title at the left of the toolbar updates to show where you are. In the month view it reads something like **June 2026**. In the day view it shows the date, for example **Tuesday, 2 Jun 2026**. In the week, 3-day and schedule views it shows the date range, for example **1 – 7 Jun 2026**.
 
 ## Jump to today
 
@@ -67,6 +75,6 @@ On a computer, single keys do the same as the toolbar: **t** for today, **j** an
 
 ## Create an event by clicking the grid
 
-In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. See [Create and edit an event](/support/calendar/create-event) for the full steps.
+In the month view, you can click an empty part of any day to open the event creation dialog with that date pre-filled. In the day, 3-day and week views, click an empty time to open it at that time, or drag over a range of time with a mouse to fill in the start and the end. While an event's details are open, a click on an empty part of the grid only closes them, and a drag over a range still starts a new event. See [Create and edit an event](/support/calendar/create-event) for the full steps.
 
 With a mouse or a pen you can also drag an existing event to another time or day, or drag its bottom edge to change when it ends. See [Move an event by dragging](/support/calendar/create-event#move-an-event-by-dragging).

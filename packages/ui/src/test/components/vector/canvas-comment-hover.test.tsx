@@ -1,7 +1,7 @@
 // Resting the pointer on a comment mark shows the card, and only the mark does: the canvas reports where the mark is
 // and when the pointer leaves, a press opens the thread without a hover card over it, and the shell both canvas apps
-// render through draws the card the host's hover names, whose click runs the opener the mark uses. Its image picker is
-// titled Insert image, as in Docs and Sheets.
+// render through draws the card the host's hover names, whose click runs the opener the mark uses and, as the card sits
+// on its element, moves nothing. Its image picker is titled Insert image, as in Docs and Sheets.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard, CommentHoverTarget } from '@workspace/lib/types/comments';
@@ -17,15 +17,15 @@ const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, useEffect, useRef, useState } = await import('react');
 const realCollab = await import('@workspace/lib/collab');
 const realAuth = { ...(await import('@workspace/lib/auth')) };
-const realComments = { ...(await import('@workspace/lib/comments')) };
 const realDialogs = { ...(await import('../../../components/comments/comment-lifecycle-dialogs')) };
+const realColumn = { ...(await import('../../../components/comments/use-comments-column')) };
 const realGuard = { ...(await import('../../../components/layout/app/unsynced-edits-guard')) };
 const realBrowser = { ...(await import('../../../components/drive/drive-browser')) };
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
 type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
 
-const CARD: CommentCard = { id: 'card-1', title: 'The title', description: '<p>The note</p>' };
+const CARD: CommentCard = { id: 'card-1', title: 'The title', description: '<p>The note</p>', chatName: 'c.eigenchat' };
 const cards: Record<string, CommentCard> = { 'card-1': CARD };
 const entries: CommentEntry[] = [];
 const RECT = new DOMRect(100, 200, 10, 20);
@@ -54,22 +54,23 @@ mock.module('@workspace/lib/collab', () => ({
     },
 }));
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: { email: 'me@example.com' } }) }));
-mock.module('@workspace/lib/comments', () => ({
-    ...realComments,
-    useCommentLifecycle: () => ({
-        allComments: entries,
-        cards,
-        createCard: async () => null,
-        assignComment: { mutate: () => {} },
-        members: [],
-        assignedCount: 0,
-        setOpenCardId,
-        openChat: () => {},
-        isCardDeleted: () => false,
-    }),
-}));
+const lifecycle = {
+    allComments: entries,
+    cards,
+    createCard: async () => null,
+    assignComment: { mutate: () => {} },
+    members: [],
+    assignedCount: 0,
+    setOpenCardId,
+    openChat: () => {},
+    isCardDeleted: () => false,
+};
 mock.module('../../../components/comments/comment-lifecycle-dialogs', () => ({
     CommentLifecycleDialogs: () => null,
+}));
+// The column's state lives in the route's URL, which a test of the hover has no need of.
+mock.module('../../../components/comments/use-comments-column', () => ({
+    useCommentsColumn: () => ({ lifecycle, column: { open: false } }),
 }));
 // The guard asks the router, which a test of the shell's comments has no need of.
 mock.module('../../../components/layout/app/unsynced-edits-guard', () => ({ UnsyncedEditsGuard: () => null }));
@@ -78,8 +79,8 @@ mock.module('../../../components/drive/drive-browser', () => ({ DriveBrowser: ()
 afterAll(() => {
     mock.module('@workspace/lib/collab', () => realCollab);
     mock.module('@workspace/lib/auth', () => realAuth);
-    mock.module('@workspace/lib/comments', () => realComments);
     mock.module('../../../components/comments/comment-lifecycle-dialogs', () => realDialogs);
+    mock.module('../../../components/comments/use-comments-column', () => realColumn);
     mock.module('../../../components/layout/app/unsynced-edits-guard', () => realGuard);
     mock.module('../../../components/drive/drive-browser', () => realBrowser);
     provider.destroy();
@@ -185,7 +186,6 @@ async function renderShell({
             mediaFolderId: null,
             chatFolderId: null,
             doc: canvas,
-            isMobile: false,
             onReveal: (el) => reveal(el.id),
         });
         return createElement(CanvasDocumentShell, {
@@ -204,7 +204,7 @@ async function renderShell({
             children: createElement(CanvasEditor, {
                 ...canvasProps,
                 doc: canvas,
-                onOpenCard: comments.openCard,
+                onOpenCard: comments.lifecycle.setOpenCardId,
                 onCommentHover: comments.onCommentHover,
             }),
         });
@@ -312,14 +312,14 @@ test('a mark that goes within the pause opens no card', async () => {
     expect(hoverCard()).toBeNull();
 });
 
-test('a click on the card opens it as the mark does, revealing its element', async () => {
+test('a click on the card opens it as the mark does, moving nothing', async () => {
     const reveal = await renderShell();
     await send(theMark(), 'pointerover');
     await wait(350);
     const note = hoverCard()?.querySelector<HTMLElement>('.cursor-pointer');
     if (!note) throw new Error('no card to click');
     await act(async () => note.click());
-    expect(reveal).toHaveBeenCalledWith('box');
+    expect(reveal).not.toHaveBeenCalled();
     expect(setOpenCardId).toHaveBeenCalledWith('card-1');
     expect(hoverCard()).toBeNull();
 });

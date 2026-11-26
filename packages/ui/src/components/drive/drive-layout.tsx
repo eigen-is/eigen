@@ -1,7 +1,7 @@
 // The list-and-detail page every Drive listing shares, such as a folder, Shared with me or a filter by
-// type: the sorted rows with their toolbar, the selected item's detail beside them, and the dialogs
-// their actions open. The caller fetches the rows and says through its capabilities what the viewer
-// may do; this lays them out and wires the actions.
+// type: the sorted rows with their toolbar, the selected item's detail column beside them, and the dialogs
+// their actions open. The caller fetches the rows, says through its capabilities what the viewer may do
+// and how the detail closes; this lays them out and wires the actions.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator } from '@workspace/lib/drive';
@@ -12,7 +12,7 @@ import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import { useDriveActionRunner } from './drive-action-runner';
-import { DriveDetail, DriveDetailToolbar } from './drive-detail';
+import { DriveDetail } from './drive-detail';
 import { DriveList, DriveListToolbar } from './drive-list';
 import type { DriveListDate, DriveSortControl } from './drive-table';
 import { useDriveSort } from './drive-table';
@@ -30,7 +30,7 @@ export type DriveLayoutProps = {
     onRowActivate: (path: DrivePath) => void;
     onOpenSharedWithMe?: () => void;
     // Left out where there is no list to go back to, such as a visitor's lone file: no close button is drawn.
-    onBackToList?: () => void;
+    onClose?: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
     capabilities: DriveCapabilities;
     // The toolbar's title where there is no breadcrumb, such as in a filter by type or the watched feed.
@@ -51,7 +51,7 @@ export function DriveLayout({
     onRowSelect,
     onRowActivate,
     onOpenSharedWithMe,
-    onBackToList,
+    onClose,
     onAfterAction,
     pathId,
     selectedPath = null,
@@ -147,9 +147,6 @@ export function DriveLayout({
     );
     const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
 
-    const detailToolbar =
-        showDetail && detailPath && onBackToList ? <DriveDetailToolbar onClose={onBackToList} /> : null;
-
     return (
         <>
             <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
@@ -157,14 +154,7 @@ export function DriveLayout({
                     <DriveList {...listProps} />
                 </Column>
                 {showDetail && (
-                    <Column
-                        id="detail"
-                        width={isMobile ? 'flex' : '400px'}
-                        onBack={onBackToList}
-                        toolbar={detailToolbar}
-                    >
-                        <DriveDetail path={detailPath} siblings={sortedContents} actions={actions} />
-                    </Column>
+                    <DriveDetail path={detailPath} siblings={sortedContents} actions={actions} onClose={onClose} />
                 )}
             </ColumnLayout>
 

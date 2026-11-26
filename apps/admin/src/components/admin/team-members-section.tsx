@@ -8,7 +8,7 @@ import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMembers } from '@workspace/lib/team';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { Button } from '@workspace/ui/components/button';
-import { EmptyState } from '@workspace/ui/components/layout/app';
+import { DetailSection, EmptyState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserItem } from '@workspace/ui/components/user';
 import { UserRoundPlus, X } from 'lucide-react';
@@ -36,15 +36,15 @@ export function TeamMembersSection({ team, organizationId }: TeamMembersSectionP
     const availableMembers = allMembers.filter((m) => !teamMemberUserIds.has(m.userId));
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Members ({teamMembers.length})</h3>
+        <DetailSection
+            label={`Members (${teamMembers.length})`}
+            action={
                 <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
                     <UserRoundPlus className="h-4 w-4 mr-1" />
                     Add
                 </Button>
-            </div>
-
+            }
+        >
             <AddMemberDialog
                 open={showAddDialog}
                 onOpenChange={setShowAddDialog}
@@ -83,6 +83,6 @@ export function TeamMembersSection({ team, organizationId }: TeamMembersSectionP
             )}
 
             <RemoveFromTeamDialog open={confirmOpen} onOpenChange={setConfirmOpen} team={team} member={removing} />
-        </div>
+        </DetailSection>
     );
 }

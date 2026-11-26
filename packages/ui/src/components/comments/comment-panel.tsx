@@ -1,8 +1,8 @@
-// The comment list in a document's side panel: one card per comment the document still anchors, narrowed by the
-// comment filter, with a line saying how many the filter hides. Each card shows its title, its replies, status and
-// assignee, and a dot while its thread holds an unread notification. A host may put a prefix before the title, such as
-// another sheet's name. A card whose thread is gone shows the deleted state instead. Opening a card is the host's to
-// handle.
+// A document's comment list, such as the comments column's: one card per comment the document still anchors, narrowed
+// by the comment filter, with a line saying how many the filter hides. Each card shows its title, its replies, status
+// and assignee, and a dot while its thread holds an unread notification. A host may put a prefix before the title, such
+// as another sheet's name. A card whose thread is gone shows the deleted state instead. The frame around it scrolls it,
+// and opening a card is the host's to handle.
 
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
@@ -12,7 +12,6 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
-import { PropertiesPanel } from '../properties-panel';
 import { CommentCardTile } from './comment-card-tile';
 import { FilterSummary } from './comment-filter-summary';
 
@@ -27,7 +26,6 @@ type CommentPanelProps = {
     filter: ReturnType<typeof useCommentFilter>;
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
-    className?: string;
 };
 
 export function CommentPanel({
@@ -41,7 +39,6 @@ export function CommentPanel({
     filter,
     onCommentClick,
     onCommentContextMenu,
-    className,
 }: CommentPanelProps) {
     const { user } = useAuth();
     const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', pathId);
@@ -52,7 +49,7 @@ export function CommentPanel({
         for (const cardId of activeCardIds) {
             const card = cards[cardId];
             if (!card) continue;
-            const entry = card.chatName ? byChatName.get(card.chatName) : undefined;
+            const entry = byChatName.get(card.chatName);
             all.push({ card, entry });
             if (matchesCommentFilter(card, entry, filter.filter, currentUserEmail)) shown.push({ card, entry });
         }
@@ -62,7 +59,7 @@ export function CommentPanel({
     const hidden = active - visible.length;
 
     return (
-        <PropertiesPanel className={className}>
+        <>
             {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} />}
 
             {visible.length === 0 ? (
@@ -91,7 +88,7 @@ export function CommentPanel({
                                     card={card}
                                     entry={entry}
                                     title={prefix ? `${prefix} · ${title}` : title}
-                                    unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                                    unread={unreadChatNames.has(card.chatName)}
                                     deleted={isCardDeleted(card)}
                                     onClick={() => onCommentClick?.(card.id)}
                                     onContextMenu={
@@ -111,6 +108,6 @@ export function CommentPanel({
                     )}
                 </>
             )}
-        </PropertiesPanel>
+        </>
     );
 }

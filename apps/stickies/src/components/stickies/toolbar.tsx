@@ -35,8 +35,8 @@ type ToolbarProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
-    onToggleActivityPanel?: () => void;
-    activityPanelOpen?: boolean;
+    onToggleActivity?: () => void;
+    activityOpen: boolean;
 };
 
 export function Toolbar({
@@ -50,8 +50,8 @@ export function Toolbar({
     filter,
     members,
     currentUserEmail,
-    onToggleActivityPanel,
-    activityPanelOpen,
+    onToggleActivity,
+    activityOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const isCompact = useIsCompactToolbar();
@@ -115,22 +115,20 @@ export function Toolbar({
                                 </Tooltip>
                             );
                         })}
-                        {filter.isActive && <FilterSummary filter={filter} onClear={() => filter.clear()} inline />}
+                        {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} inline />}
                     </div>
                 )
             }
             right={
-                <div className="flex items-center gap-1">
-                    <DocumentShareCluster
-                        canWrite={canWrite}
-                        offline={offline}
-                        storageUnavailable={storageUnavailable}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleActivityPanel={onToggleActivityPanel}
-                        activityPanelOpen={activityPanelOpen}
-                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                    />
-                </div>
+                <DocumentShareCluster
+                    canWrite={canWrite}
+                    offline={offline}
+                    storageUnavailable={storageUnavailable}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onToggleActivity={onToggleActivity}
+                    activityOpen={activityOpen}
+                    watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                />
             }
         />
     );

@@ -16,16 +16,40 @@ The marketing routes in `apps/index` use `AppShell` without `EigenApp`, so `Pale
 
 ## Every page is a `ColumnLayout` of `Column`s with the toolbar as a prop
 
-The toolbar is the `toolbar` prop of a `Column`, never part of the page content. `Column` draws it in a fixed `h-12` bar, so every page has the same toolbar height and the mobile back arrow has one home.
+The toolbar is the `toolbar` prop of a `Column`, never part of the page content. `Column` draws it in a fixed `h-12` bar, so every page has the same toolbar height and the phone's back has one home.
 
 ```tsx
 <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-    <Column id="list" width="350px" onBack="sidebar" toolbar={<ListToolbar />}>…</Column>
+    <Column id="list" width="large" onBack="sidebar" toolbar={<ListToolbar />}>…</Column>
     <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<DetailToolbar />}>…</Column>
 </ColumnLayout>
 ```
 
-A list whose items open a detail is `ListDetailLayout`, as on the contacts and admin users and teams pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page.
+A list whose items open a detail is `ListDetailLayout`, as on the contacts, admin users, teams and waitlist pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`, `?entryId=`), keeping every other param. The detail draws in the column's own body, which scrolls and pads it as Drive's, so a detail sets no gutter, height or overflow of its own.
+
+Mail's page is a `ListDetailLayout` too, which `useMailDetail` opens and closes over `?mailId=` and `?mode=compose`. Its virtualized list scrolls itself inside the list's body, and its reader and composer fill the detail's body themselves (`fillDetail`), so the column neither scrolls nor pads them ([MAIL.md](MAIL.md#the-open-message-and-the-composer-share-one-detail-column)).
+
+Drive's `DriveLayout` draws its `DriveDetail` as a `large` `DetailColumn` beside the `flex` list, with Share, Watch and the item's ⋮ in the bar and Open under the name. Every Drive listing and the editor apps' file lists open and close it through `useDetailHistory` in `useDriveListRoute`, so an arrow key's next row replaces the entry like a click on another row, and a delete closes it only when the open item went. A listing of many owners writes `?pid=&uid=&mid=` through `selectInSearch`; the folder page, whose URL names the owner and mount, writes `?pid=` alone.
+
+## A side column is small, medium or large
+
+**A `Column`'s `width` is a name, never a pixel value: `flex` for the main, or `small` (256), `medium` (320) or `large` (400).** `small` is for navigation and tools, such as the sidebar, the properties panels and the Docs outline, and for the comments and activity list, which takes turns with properties in the right slot and so keeps its width; `medium` for a detail beside a work surface, such as the calendar's event; `large` for a list or a detail beside one, such as Mail's list or Drive's detail. On a tablet `large` steps down to 320, so there every column that isn't `small` is 320 and a 1024 tablet keeps a 640 main beside the sidebar's rail. The numbers and that step live once, in `column-widths.ts` beside `Column`, which reads `isTablet` itself, so no page writes its own tablet branch. A host that lays out around a column or draws one as a plain element, such as `PropertiesPanel` or `SidebarContainer`, reads the number from `columnWidthPx`, and in React from `useColumnWidthPx`, which knows the tablet step, as the Docs overlay's maths and the find bar's inset beside a column do. The sidebar's 64px tablet rail is a mode of the sidebar, not a width a column picks.
+
+The line between two columns is drawn once, by the column that opens beside the other, such as `DetailColumn`'s full-height `border-l` or the Docs outline's `border-r`. A `Column`'s bar draws only its bottom edge, so the line is one pixel in the bar row too.
+
+Slides' slide rail is the one side column with its own width: 208 (`w-52`), and 256 from 1920 wide, where it matches the properties panel across from it. Its thumbnails read no better wider, so the slide keeps the room.
+
+## A detail column opens at the right, under the bar that spans the screen
+
+**A detail column shows one thing the user opened, such as a calendar event or a document's comments, at the right of the page, under the bar that spans the screen.** `DetailColumn` (`layout/app/detail-column.tsx`) draws it. Its bar names a list, never an item: a title over a list, "‹" with the list's name once it drilled into one item, the item's actions, then X. The actions sit at the right, before the X, except in Mail, whose reader and composer fill the bar from the left as they did before the detail column, the owner's ruling (26 Nov 2026) ([MAIL.md](MAIL.md#the-open-message-and-the-composer-share-one-detail-column)). It is `medium` beside a work surface, such as the calendar grid, and `large` beside a list. The comments list and Stickies' activity are `small`, the properties panel's width, and a comment thread is the one detail that grows to `large` beside a surface ([COMMENTS.md](COMMENTS.md#in-docs-sheets-slides-and-vector-comments-open-in-a-column-the-url-names)).
+
+The URL names what is open, so a link and a reload show it. `useDetailHistory` (`packages/ui/src/hooks/use-detail-history.ts`) gives every detail one history rule: an open from closed pushes an entry flagged as its own, a switch to another item replaces, and close goes back over that entry and replaces anywhere else, such as on a link. So X and back do the same, and back after X never reopens the item. The host keeps the item in its URL, and the hook asks only whether one is open, so a host may open with more than its URL holds, such as a Drive row's owner and mount or Mail's compose prefill. X, Esc and back close it. The column hears Esc on `window`, after every `document` listener, so a handler that uses an Esc, such as a canvas deselecting or a list clearing a selection of several rows, calls `preventDefault` and the column closes on the next one.
+
+In an editor the bar that spans the screen is the editor bar. The detail takes the right slot under it and a right tool, such as the properties panel, yields while it is open; a left tool, such as Slides' rail, stays, with one top edge across. Under the bar no bar refolds as a detail opens, and the editor never remounts as the column opens, grows or closes, since it holds the document's collab session and undo. On a phone `PhoneDetail` gives the detail the whole screen and hides the main with a class, never a wrapper swap, so an editor or a grid stays mounted, and the bar's "‹" at the left closes it in place of X: "‹" with the title over a list, such as "‹ Comments", the same button a thread's back is (the owner's ruling, 26 Nov 2026), and a lone "‹" in a column without a title. Docs keeps its own `hidden` wrapper instead, which its outline pane shares. Sheets draws its bar inside the `Workbook`, so its right slot is the workbook's own `rightSlot`, under the menu bar and beside the formula bar, the grid and the tabs ([SHEETS.md](SHEETS.md)). Docs is the one editor whose right slot is an overlay rather than a sibling: the column lies over the page's right margin, never its text, and the page moves only as far as it must ([DOCS.md](DOCS.md#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
+
+## A properties panel's sections come in one order
+
+Every properties panel, in Vector, Slides, Docs and Sheets, writes its sections in one order: geometry (Transform, Layout), content (Text, Spacing, Image), paint (Fill, Color, Background, Stroke, Border, Shape, Arrowheads, Sketch), appearance, actions (Arrange, Align), then Delete. It is a convention, not a sort: a panel's titles are literals and its guards only filter, so the written order is the drawn order, and the tab order follows what the eye sees. A new section slots into its group, and a group a panel lacks is absent.
 
 ## Every horizontal inset is the one gutter
 
@@ -35,9 +59,11 @@ The wide gutter is 20px because that clears a macOS overlay scrollbar, which tak
 
 ## On a phone only the `mobileColumn` renders
 
-On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` renders only the `Column` whose `id` matches, at full width. Without a `mobileColumn`, or outside a `ColumnLayout`, every `Column` renders, which is how an editor mounts a full-width pane as a sibling. So `PanelColumn`, the comments and activity pane, must mount outside any `ColumnLayout` that sets one: a wrapped pane silently never shows ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)).
+On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` renders only the `Column` whose `id` matches, at full width. Without a `mobileColumn`, or outside a `ColumnLayout`, every `Column` renders, which is how an editor mounts a full-width detail column as a sibling. So a `DetailColumn`, such as Stickies' activity, must mount in a `ColumnLayout` that sets none: a wrapped column silently never shows ([COMMENTS.md](COMMENTS.md#on-a-phone-the-column-hides-the-editor-never-unmounts-it)).
 
-`onBack` gives a column the mobile back arrow. **The first column of a page passes `onBack="sidebar"`,** or a phone user has no way back to navigation. The sentinel opens the sidebar as a column and checks `sidebarMode` itself, so a surface without a sidebar never shows a dead arrow.
+`onBack` gives a column the phone's back, a lone "‹" from `BackButton`. **The first column of a page passes `onBack="sidebar"`,** or a phone user has no way back to navigation. The sentinel opens the sidebar as a column and checks `sidebarMode` itself, so a surface without a sidebar never shows a dead back.
+
+**`BackButton` is the one back in a bar: a lone "‹" with the tooltip Back, or "‹" beside the name of where it goes, such as Drive's text editor's "‹ Files".** One glyph for every back, on a phone and a desktop, so the same move never looks two ways.
 
 ## The sidebar is a rail on a tablet and a column on a phone
 
@@ -141,7 +167,7 @@ Three things keep the bar from closing under the user:
 
 A bar trigger is a `role="menuitem"` inside `role="menubar"`, so a test looks for a menu's rows inside `[role="menu"]`.
 
-The bar of every document app is a `CenteredToolbar`: menus left, the icon row at the true center, the share cluster right. The icon row folds into the menus as the bar narrows, so every icon it folds away is a menu row. Sheets reads the bar's own width through a container query, because a panel beside the workbook narrows the bar; the other editors read the viewport.
+The bar of every document app is a `CenteredToolbar`: menus left, the icon row at the true center, the share cluster right. The icon row folds into the menus as the bar narrows, so every icon it folds away is a menu row. Sheets reads the bar's own width through a container query, the other editors the viewport. Its panes open under the bar, in the workbook's right slot, so no pane narrows the bar or folds its format row.
 
 ## The app switcher is a NavigationMenu that opens on hover
 
@@ -201,7 +227,7 @@ Cards in Stickies, comments in the document apps and events in Calendar are draw
 
 The color is `colorSurface(color, tone)` in one of two tones, which the caller always names: `'tile'` for a small item you scan by color, such as a card on the board or an event on the grid, and the paler `'panel'` for the reading block of an opened item ([STICKIES.md](STICKIES.md)).
 
-An opened item's body is built from the parts in `packages/ui/src/components/layout/app/detail-item.tsx`, in this order: `DetailItemBlock`, the item's block with its title inside, in its color's panel tone or `bg-muted` without one; `DetailMeta`, one muted line, such as who created it; then `DetailSection`s, each an `eigen-section-label` caption over its rows. An opened card or comment takes all three. An opened event, in its dialog or an `.ics` quick look, skips the block and shows its title as a plain heading, as its color only names its calendar ([CALENDAR.md](CALENDAR.md#an-event-on-the-grid-is-drawn-as-a-card-is-and-opened-it-has-no-block)).
+An opened item's body is built from the parts in `packages/ui/src/components/layout/app/detail-item.tsx`, in this order: `DetailItemBlock`, the item's block with its title inside, in its color's panel tone or `bg-muted` without one; `DetailMeta`, one muted line, such as who created it; then `DetailSection`s, each an `eigen-section-label` caption over its rows, with any button that acts on the whole section, such as Admin's Add, at the caption's right, 24px under what comes before it and with no gap when it is first in its parent, so a contact's first section lines up with the photo beside it. An opened card or comment takes all three. An opened event, in its dialog or an `.ics` quick look, skips the block and shows its title as a plain heading, as its color only names its calendar ([CALENDAR.md](CALENDAR.md#an-event-on-the-grid-is-drawn-as-a-card-is-and-opened-it-has-no-block)).
 
 ## A choice is a submenu with a check
 
@@ -229,6 +255,8 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`: `useListSelection`, `useKeyboardListNavigation`, `useListDrag`, `useListDropTarget` and `useContextMenu`. `email-list.tsx`, `PersonList` and `use-drive-item-controller.ts` are the working examples.
 
+**A list's Esc clears a selection of two or more rows and does nothing else.** With one row selected, which is the open one, `useKeyboardListNavigation` leaves the key alone and calls no `preventDefault`, so the detail column beside the list closes on it. In Drive the open row is the one selected row too, so Esc closes its detail.
+
 A row's state is a class in `globals.css`, painted in the current app's color:
 
 | Class | State | Paint |
@@ -243,7 +271,9 @@ A row or tile takes every class that holds, so a selected tile under the cursor 
 
 One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it from the button's own rect, because a click made with Enter reports 0,0. `ContextMenuAnchor` portals its trigger to `document.body`, because a transformed ancestor, such as a dialog's centering translate, would otherwise move the menu.
 
-The menu key (Shift+F10 or ContextMenu) opens the same menu from the row's rect, through the list's `onMenu`; a virtualized list finds the row by its `data-index` and opens a frame after scrolling it in. On Windows and Linux the browser follows the key with a native `contextmenu` event that a keydown `preventDefault` can't stop, which would open the browser's menu over ours. `isKeyboardContextMenu` (`use-context-menu.ts`) tells a key's event from a pointer's, and the list's native listener opens the cursor row's menu for it before React's handlers run. Inside an open menu the event lands on the focused row, and `DropdownMenuContent` cancels it, so the browser's menu never opens over a dropdown or a context menu.
+The menu key (Shift+F10 or ContextMenu) opens the same menu from the row's rect, through the list's `onMenu`; a virtualized list finds the row by its `data-index` and opens a frame after scrolling it in. On Windows and Linux the browser follows the key with a native `contextmenu` event that a keydown `preventDefault` can't stop, on Windows only once the key comes up, which would open the browser's menu, or the menu of the page behind the list such as Drive's New, over ours. `isKeyboardContextMenu` (`use-context-menu.ts`) tells a key's event from a pointer's, and the list's native listener opens the cursor row's menu for it before React's handlers on the rows and around the list run; a pointer's `contextmenu` passes on to them, and a screen reader's, with no key before it, opens the row's menu too. The listener is bound again on every render, so it reads that render's cursor and finds a list that mounts late, such as Mail's after its loading state. Inside an open menu the event lands on the focused row, and `DropdownMenuContent` cancels it, so the browser's menu never opens over a dropdown or a context menu.
+
+**A list takes the focus back when it falls to `<body>`.** The list owns the keyboard, so `useKeyboardListNavigation` focuses it on mount and whenever the focus falls to `<body>`: a click on something that can't take focus, such as the detail column or a toolbar, leaves nothing focused, and so does a page restored from the back/forward cache, and every key would then do nothing until the user clicked a row. A field the user types in keeps the focus, and so does an open dialog, such as a Rename whose field gets the focus back a moment after its question closes. Turning `reclaimFocus` back on, as when Mail's inline composer closes, starts over: the composer's `focusout` fires as it unmounts, before the list listens again. A key that moves the cursor also takes the focus back from a row's own button, such as its ⋮ after its menu closed.
 
 A menu row's icon gap lives in the item primitives (`gap-4`); never add `mr-*` or a `gap-*` override to a menu icon.
 
@@ -269,7 +299,7 @@ A touch device has no hover, so a hover reveal adds the matching `pointer-coarse
 
 Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for labels. Manual listeners stay for list navigation and for editors that own their keys. Mod+K is a raw window listener, so the palette opens from inside a text field too. A `'*'` chord needs a capture-phase listener, and `'Shift+8'` never matches.
 
-**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key on a dialog button would act on the document behind it: Delete on a confirm button deleting the canvas selection. The hook watches the DOM for an open `role="dialog"` or `alertdialog`, so it keeps no registry. A bar menu leaves the page live, so the canvas also folds in `useMenuOpen()`, or ArrowRight in File would nudge the selected shape.
+**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key on a dialog button would act on the document behind it: Delete on a confirm button deleting the canvas selection. The hook watches the DOM for an open `role="dialog"` or `alertdialog`, so it keeps no registry. A bar menu leaves the page live, so the canvas also folds in `useMenuOpen()`, or ArrowRight in File would nudge the selected shape. A detail column has no focus trap, so the canvas folds in `useFocusInDetail()` too, in its keymap, its own Esc and its drawing tools' keys: Delete on a comment thread's Resolve or ⌘Z in its reply box would otherwise act on the drawing, and an Esc there would deselect before the column heard it.
 
 Two keymaps may register one key, such as the canvas's nudges and the file preview's paging, and their gates keep them apart. The hotkeys library warns on every second registration of a key, a disabled one included, so `EigenApp` passes `conflictBehavior: 'allow'`. A new keymap that shares a key needs a gate of its own: nothing warns about the overlap.
 
@@ -319,7 +349,7 @@ Each looks like a bug in our own code:
 - [FORMS.md](FORMS.md): how a form in a dialog, a card or a page behaves
 - [MOBILE.md](MOBILE.md): the breakpoints and how the shell behaves on phones and touch
 - [COMMAND-PALETTE.md](COMMAND-PALETTE.md): the ⌘K palette the shell mounts
-- [COMMENTS.md](COMMENTS.md): the comments and activity pane
+- [COMMENTS.md](COMMENTS.md): the comments column and its comments, activity and thread levels
 - [PREVIEWS.md](PREVIEWS.md): the quick-look overlay, file subjects and file actions
 - [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md): every shared component, hook and type, generated
 - [TYPOGRAPHY.md](TYPOGRAPHY.md): type scale and fonts

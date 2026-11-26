@@ -3,7 +3,7 @@
 // reader that decides what a missing value means, such as celebrationsOn or themeOf, sits beside its type,
 // so the API and every app read it the same way.
 
-import type { CalendarItem } from './calendar';
+import type { CalendarItem, CalendarViewMode } from './calendar';
 import type { DriveViewPreferences } from './drive-view';
 import type { MountStorageType, S3Config } from './mount';
 
@@ -47,7 +47,11 @@ export type UserSettings = {
     // A finished checklist now and then gets a small burst of confetti. Read it through celebrationsOn.
     celebrations?: boolean;
     docsView?: DocsViewPreferences;
+    calendarView?: Partial<Record<CalendarViewLayout, CalendarViewMode>>;
 };
+
+// A phone and a computer each keep their own Calendar view.
+export type CalendarViewLayout = 'desktop' | 'phone';
 
 // How wide a page-less doc draws its text for this user, Google's Text width: the same on every page-less doc they
 // open, whatever their collaborators chose. Read it through docsTextWidth.

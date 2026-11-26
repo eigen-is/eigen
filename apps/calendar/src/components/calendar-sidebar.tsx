@@ -1,16 +1,14 @@
-// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day (a computer picks
-// the view in the toolbar), the calendar lists (the user's own, those shared with them, and their teams'), each with a
-// checkbox that shows or hides its events, and at its foot the mini month above the storage meter. The lists scroll,
-// so the month stays in view however many calendars there are.
+// Calendar's sidebar: the Create event button, the calendar lists, such as the user's own and those shared with them,
+// with a checkbox each that shows or hides its events, and parts such as a phone's view links and the mini month at its
+// foot. The lists scroll, so the month stays in view however many calendars there are.
 
 import { useMatch } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
     CALENDAR_VIEW_LABELS,
-    CALENDAR_VIEW_MODES,
     toLocalDateString,
     useCalendars,
+    useCalendarViewPreference,
     useExportCalendar,
     useImportCalendar,
     useImportCalendarFromDevice,
@@ -21,7 +19,8 @@ import {
 } from '@workspace/lib/calendar';
 import { readableTextColor } from '@workspace/lib/constants/colors';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarItem, CalendarViewMode, SharedCalendar } from '@workspace/lib/types/calendar';
+import { CALENDAR_VIEW_MODES } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/file-kinds';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
@@ -85,7 +84,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
 }
 
 // No onExport means the calendar cannot be downloaded here: it lives in another user's home, or the viewer is a guest.
-// No onImport means nothing can be brought in either: the same two cases, plus a team calendar the viewer may only read.
+// No onImport means nothing can be brought in either: those two cases, plus a team calendar the viewer may only read.
 function CalendarRow({
     color,
     label,
@@ -162,6 +161,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const importFromDevice = useImportCalendarFromDevice();
     const isGuest = useIsGuest();
     const { isMobile } = useLayout();
+    const { setMode } = useCalendarViewPreference();
     // Outside a view, such as on the not-found page, the views open on today.
     const view = useMatch({ from: '/_auth/view/$mode/$date', shouldThrow: false })?.context;
     const focus = view?.focus ?? new Date();
@@ -229,6 +229,10 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                     label={CALENDAR_VIEW_LABELS[mode]}
                                     to="/view/$mode/$date"
                                     params={{ mode, date: focusKey }}
+                                    keepSearch
+                                    onClick={() => {
+                                        if (mode !== view?.mode) setMode(mode);
+                                    }}
                                     condensed={condensed}
                                 />
                             );
@@ -279,21 +283,18 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     {teamShared.length > 0 && (
                         <SidebarSection condensed={condensed} title="Team calendars" loading={sharedLoading}>
                             {teamShared.map((sc) => {
-                                const display = {
-                                    ...sc,
-                                    calendarName: sharedCalendarLabel(sc),
-                                };
+                                const label = sharedCalendarLabel(sc);
                                 return (
                                     <CalendarRow
                                         key={sc.id}
-                                        color={display.color || display.calendarColor}
-                                        label={display.calendarName}
-                                        checked={display.visible}
+                                        color={sc.color || sc.calendarColor}
+                                        label={label}
+                                        checked={sc.visible}
                                         condensed={condensed}
                                         onToggle={() =>
                                             updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
                                         }
-                                        onEdit={() => handleEditSharedCalendar(display)}
+                                        onEdit={() => handleEditSharedCalendar({ ...sc, calendarName: label })}
                                         onImport={
                                             isGuest || sc.permission !== 'write'
                                                 ? undefined

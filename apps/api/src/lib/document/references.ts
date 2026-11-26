@@ -70,7 +70,7 @@ export function documentReferences(type: DriveCollabType, doc: Y.Doc): DocumentR
     const chat = new Set<string>();
     for (const card of Object.values(cards)) {
         if (!inUse.has(card.id)) continue;
-        if (card.chatName) chat.add(card.chatName);
+        chat.add(card.chatName);
         for (const attachment of card.attachments ?? []) {
             if (typeof attachment === 'string') media.add(attachment);
         }
@@ -89,7 +89,7 @@ function readCards(doc: Y.Doc, mapName: CommentMapName): Record<string, CommentC
         const attachments: unknown = card.get('attachments') ?? [];
         const deletedAt: unknown = card.get('deletedAt');
         if (
-            (chatName !== undefined && typeof chatName !== 'string') ||
+            typeof chatName !== 'string' ||
             !Array.isArray(attachments) ||
             // An attachment is a file name in media/, or a Drive reference as toAttachmentReference writes it.
             !attachments.every(

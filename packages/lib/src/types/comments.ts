@@ -10,7 +10,7 @@ export type CommentCard = {
     title: string;
     description: string;
     color?: string;
-    chatName?: string;
+    chatName: string;
     creator?: string;
     createdAt?: number;
     attachments?: ChatAttachment[];

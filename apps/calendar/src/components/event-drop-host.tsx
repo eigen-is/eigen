@@ -1,7 +1,8 @@
 // Saves an event a drag dropped in a calendar view, such as the time grid or the month. A view mounts it for one drop,
 // bound to the event's owner as Edit event is. A series first asks which events move, and an event with guests asks
 // before its new time is sent to them; a cancel at either puts the event back. A drop with nothing to ask saves at
-// once. A refused save reloads and toasts through the save's own error path, and an open question stays for a retry.
+// once, and a save hands the stored event back to the view. A refused save reloads and toasts through the save's own
+// error path, and an open question stays for a retry.
 
 import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
@@ -11,6 +12,7 @@ import type { CalendarEventOccurrence, RecurrenceScope } from '@workspace/lib/ty
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { useEffect, useEffectEvent, useState } from 'react';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { RecurringActionDialog } from './recurring-action-dialog';
 
 export type EventDropHostProps = {
@@ -18,10 +20,11 @@ export type EventDropHostProps = {
     event: CalendarEventOccurrence;
     moved: EventTimes;
     ownerId: string;
+    onSaved: (save: EventSave) => void;
     onDone: () => void;
 };
 
-export function EventDropHost({ event, moved, ownerId, onDone }: EventDropHostProps) {
+export function EventDropHost({ event, moved, ownerId, onSaved, onDone }: EventDropHostProps) {
     const { user } = useAuth();
     const held = useHeldEtag(event.etag, false);
     const save = useSaveOccurrence(ownerId, held);
@@ -39,7 +42,8 @@ export function EventDropHost({ event, moved, ownerId, onDone }: EventDropHostPr
     // The absolute slot it was dropped on, so a retry after a reload lands there too.
     const write = (picked: RecurrenceScope) =>
         held.saveHeld(async () => {
-            await save({ occurrence: event, scope: picked, edited: { ...event, ...moved } });
+            const saved = await save({ occurrence: event, scope: picked, edited: { ...event, ...moved } });
+            onSaved({ occurrence: event, saved, startTime: moved.startTime });
         });
 
     const saveAtOnce = useEffectEvent(() => {

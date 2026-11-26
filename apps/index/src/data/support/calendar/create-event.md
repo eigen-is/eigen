@@ -32,9 +32,11 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 
 ## Edit an event
 
-1. Click the event in the calendar. A detail panel opens showing the time, location, description, and any guests.
-2. Click the pencil icon in the bottom-left corner of the panel. The **Edit event** dialog opens with all the same fields.
-3. Make your changes, then click **Save**, or press Enter in the title field.
+1. Click the event in the calendar. Its details open in a panel at the right, showing the time, location, description, and any guests. On a phone they fill the screen.
+2. Click **Edit event** (the pencil icon) in the bar at the top of the panel. The **Edit event** dialog opens with all the same fields.
+3. Make your changes, then click **Save**, or press Enter in the title field. The panel stays open and shows the event as you saved it.
+
+To close the panel, click **Close** (the X) at its top right or press Escape. On a phone, tap **‹** at the top left. While the panel is open, a click on an empty part of the calendar only closes it, so it never creates an event by accident. Dragging over a range of time still opens **New event**.
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).
 
@@ -64,8 +66,8 @@ If the event repeats, Calendar asks which occurrences to move, as it does for ot
 
 ## Delete an event
 
-1. Click the event to open its detail panel.
-2. Click the trash icon in the bottom-left corner.
+1. Click the event to open its details.
+2. Click **Delete event** (the trash icon) in the bar at the top of the panel.
 3. Confirm the deletion. For recurring events, Calendar asks the same scope question as when editing: you can remove this occurrence, this and following, or the whole series.
 
 If the event changed elsewhere since it last loaded, the deletion is refused and a message says so. The event reloads, so check it and confirm again.

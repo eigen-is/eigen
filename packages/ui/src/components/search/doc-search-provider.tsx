@@ -14,7 +14,7 @@ import { FindReplaceBar } from '@workspace/ui/components/search/find-replace-bar
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 // The find bar's own shortcuts, which the Edit menus show next to Find and Find and replace.
 export const FIND_HOTKEY = 'Mod+F';
@@ -22,6 +22,8 @@ export const FIND_REPLACE_HOTKEY = 'Mod+Shift+H';
 
 const DEFAULT_OPTIONS: DocSearchOptions = { matchCase: false, wholeWord: false, regex: false };
 const DEBOUNCE_MS = 150;
+// The bar's own gap from the right edge, its right-4, which an inset adds to.
+const BAR_GUTTER_PX = 16;
 
 type DocSearchBarContextValue = {
     // Opens the bar, or focuses and selects its field when it is open, as ⌘F, a toolbar button or Edit › Find do.
@@ -49,30 +51,26 @@ export type DocSearchProviderProps = {
     // The focus stays in the document, not in the bar's field. The route latches it once.
     initialSearchTerm?: string;
     children: React.ReactNode;
-    // Where the bar floats. By default it sits at the top right of the wrapped content, and a surface passes offsets
-    // to clear its own chrome, such as Docs' toolbar and side panel. It is merged over the default with cn.
+    // Offsets merged over the bar's top-right default, to clear a surface's own chrome such as Docs' toolbar.
     barClassName?: string;
-    // Tells the host when the bar opens or closes. Slides uses it to know which layer an Escape closes, and an app
-    // may use it to close its phone pane, so a find session never opens inside a hidden editor. The bar closes
-    // itself.
+    // The width of what holds the right slot beside the content, such as an open column, which the bar floats clear of.
+    rightInsetPx?: number;
+    // Such as a phone pane closing as the bar opens, so a find session never opens inside a hidden editor.
     onOpenChange?: (open: boolean) => void;
-    // The surface's own undo and redo, which ⌘Z and ⇧⌘Z in the bar's fields call, so a Replace can be undone
-    // without leaving the bar. A surface that only searches leaves them out and keeps the browser's own.
+    // ⌘Z and ⇧⌘Z in the bar's fields, so a Replace can be undone without leaving the bar; else the browser's own.
     onUndo?: () => void;
     onRedo?: () => void;
 };
 
-// Owns the find session, its keys and the floating bar. A surface implements the DocSearchController over its live
-// state and hands in a new one when the document changes. The provider then runs the open session's search again,
-// so the count stays live while a collaborator types. The active match is kept by its index, so a collaborator's
-// edit may move it to another occurrence, and a reveal is best effort. A surface hands in a new controller for a
-// collaborator's edits only now and then, not per keystroke, so the count and the highlights stay settled.
+// A surface hands in a new controller when its document changes, and the open session searches again, so the count
+// stays live while a collaborator types.
 export function DocSearchProvider({
     controller,
     commentSearch,
     initialSearchTerm,
     children,
     barClassName,
+    rightInsetPx,
     onOpenChange,
     onUndo,
     onRedo,
@@ -89,8 +87,7 @@ export function DocSearchProvider({
     const [preserveCase, setPreserveCase] = useState(false);
     const [replacedCount, setReplacedCount] = useState<number | null>(null);
     const canReplace = controller.canReplace ?? false;
-    // ⇧⌘H opens replace everywhere, as in Google Docs, whose ⌥⌘F inserts a footnote. Ctrl+H does too off macOS.
-    // On macOS ⌘H hides the app and never reaches the page.
+    // ⇧⌘H opens replace, as in Google Docs, since ⌘H hides the app on macOS; Ctrl+H does too elsewhere.
     const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -104,9 +101,8 @@ export function DocSearchProvider({
     // off, so stepping through matches never takes the focus from the document.
     const pendingFocusRef = useRef(false);
 
-    // Runs a search and highlights the matches, then makes one active and reveals it. That one is an index, clamped
-    // to the matches, or a palette hit's match id. A hit that is gone reveals the first match, as a collaborator may
-    // have changed the doc since the palette searched.
+    // Reveals an index, clamped to the matches, or a palette hit's match id; a hit a collaborator's edit took away
+    // reveals the first match.
     const runSearch = useCallback((q: string, opts: DocSearchOptions, revealTarget: number | { matchId: string }) => {
         const c = controllerRef.current;
         const found = c.search(q, opts);
@@ -136,9 +132,8 @@ export function DocSearchProvider({
         [runSearch],
     );
 
-    // A palette hit in the document opens the bar with the palette's query and reveals the match that was clicked.
-    // The focus stays in the document, as for a ?q= term. The palette searches without options, so the options go
-    // back to their defaults, or the count would be wrong. The search runs at once, so the reveal answers the click.
+    // The focus stays in the document, as for a ?q= term. The palette searches without options, so they go back to
+    // their defaults, or the count would differ from the palette's.
     const revealFromPalette = useCallback(
         (paletteQuery: string, matchId: string) => {
             clearTimeout(debounceRef.current);
@@ -161,9 +156,12 @@ export function DocSearchProvider({
         [],
     );
 
+    const reportOpen = useEffectEvent((isOpen: boolean) => {
+        onOpenChange?.(isOpen);
+    });
     useEffect(() => {
-        onOpenChange?.(open);
-    }, [open, onOpenChange]);
+        reportOpen(open);
+    }, [open]);
 
     // The field exists only once the bar has mounted, after the render that opens it.
     useEffect(() => {
@@ -177,21 +175,17 @@ export function DocSearchProvider({
     // A ?q= term opens the bar with it and reveals the first match, with the focus left in the document. It runs once,
     // as the route latches the term and runSearch is stable.
     useEffect(() => {
-        if (initialSearchTerm && initialSearchTerm !== '') {
+        if (initialSearchTerm) {
             setQuery(initialSearchTerm);
             setOpen(true);
             runSearch(initialSearchTerm, DEFAULT_OPTIONS, 0);
         }
     }, [initialSearchTerm, runSearch]);
 
-    // A new controller means the document changed, so the open session searches again and its count stays live. The
-    // active index is clamped but not revealed, which would scroll the page away from the reader. This is a
-    // throttle, not a debounce. Some surfaces hand in a controller per Yjs transaction, so a steady stream of a
-    // collaborator's edits would push a debounce back forever. A scheduled tick is never canceled and reads the
-    // latest controller.
+    // A throttle, not a debounce, since a stream of a collaborator's edits would push a debounce back forever. It
+    // clamps the active index without a reveal, which would scroll the page away from the reader.
     const republishTickRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     useEffect(() => {
-        void controller;
         if (republishTickRef.current !== undefined) return;
         republishTickRef.current = setTimeout(() => {
             republishTickRef.current = undefined;
@@ -265,7 +259,7 @@ export function DocSearchProvider({
         setMatches(fresh);
         setActiveIndex(nextIndex ?? -1);
         controllerRef.current.highlightAll(fresh);
-        if (nextIndex != null && fresh[nextIndex]) controllerRef.current.reveal(fresh[nextIndex].id);
+        if (nextIndex != null) controllerRef.current.reveal(fresh[nextIndex].id);
     }, []);
 
     const flashReplaced = useCallback((n: number) => {
@@ -276,7 +270,7 @@ export function DocSearchProvider({
 
     const onReplace = useCallback(() => {
         const c = controllerRef.current;
-        if (!c.replace || activeIndex < 0 || !matches[activeIndex]) return;
+        if (!c.replace || activeIndex < 0) return;
         const fresh = c.replace(matches[activeIndex].id, query, replacement, options, preserveCase);
         // When the replace removed a match, the next one moved into its index, which stays. When the count held,
         // such as cat replaced by cats, the index steps forward, or Replace would loop on the same match.
@@ -392,9 +386,7 @@ export function DocSearchProvider({
         [openBar, openReplace, canReplace],
     );
 
-    // The controller is published so the palette's `doc:` scope lists the matches in the document, with
-    // revealFromPalette, so a hit opens this bar and reveals its match. usePaletteDocSearch keeps both stable by
-    // their shape, so its effect doesn't loop while the app builds a new controller on every render.
+    // The palette's `doc:` scope lists the matches through it, and a hit opens this bar through revealFromPalette.
     usePaletteDocSearch(controller, commentSearch, { revealFromPalette });
 
     return (
@@ -404,7 +396,10 @@ export function DocSearchProvider({
                     30, never share a stacking context with the bar. */}
                 <div className="isolate flex-1 min-h-0">{children}</div>
                 {open && (
-                    <div className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)}>
+                    <div
+                        className={cn('absolute top-2 right-4 z-10 max-sm:inset-x-2', barClassName)}
+                        style={rightInsetPx ? { right: rightInsetPx + BAR_GUTTER_PX } : undefined}
+                    >
                         <FindReplaceBar
                             query={query}
                             options={options}

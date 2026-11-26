@@ -78,31 +78,36 @@ const text = () => document.body.textContent ?? '';
 const buttons = () =>
     [...document.querySelectorAll('button')].map((b) => b.textContent?.trim() || b.getAttribute('aria-label'));
 
-function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
-    return renderInDocument(
-        createElement(
-            PreviewProvider,
-            null,
-            createElement(CardDialog, {
-                open: true,
-                onOpenChange: () => {},
-                card: shown,
-                entry,
-                ownerId: 'owner-1',
-                mountId: 'm1',
-                pathId: 'doc-1',
-                canWrite: true,
-                deleted,
-                isEditing: false,
-                onEditingChange: () => {},
-                members: [member],
-                currentUserEmail: 'ada@example.com',
-                onUpdate: () => {},
-                onResolve: () => {},
-                onAssign: () => {},
-            }),
-        ),
+// On a page, as every host renders the dialog: its edit form's leave guard needs the router.
+async function renderDialog(deleted: boolean, shown: CommentCard | null = card) {
+    const router = await import('@tanstack/react-router');
+    const dialog = createElement(
+        PreviewProvider,
+        null,
+        createElement(CardDialog, {
+            open: true,
+            onOpenChange: () => {},
+            card: shown,
+            entry,
+            ownerId: 'owner-1',
+            mountId: 'm1',
+            pathId: 'doc-1',
+            canWrite: true,
+            deleted,
+            isEditing: false,
+            onEditingChange: () => {},
+            members: [member],
+            currentUserEmail: 'ada@example.com',
+            onUpdate: () => {},
+            onResolve: () => {},
+            onAssign: () => {},
+        }),
     );
+    const root = router.createRootRoute({ component: router.Outlet });
+    const page = router.createRoute({ getParentRoute: () => root, path: '/', component: () => dialog });
+    const memory = router.createRouter({ routeTree: root.addChildren([page]), history: router.createMemoryHistory() });
+    await memory.load();
+    return renderInDocument(createElement(router.RouterProvider, { router: memory }));
 }
 
 test('the dialog of a deleted comment shows its title and the line, and nothing that acts', async () => {

@@ -21,12 +21,12 @@ type DocumentShareClusterProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRename?: () => void;
-    onToggleCommentPanel?: () => void;
-    commentPanelOpen?: boolean;
+    onToggleComments?: () => void;
+    commentsOpen?: boolean;
     assignedCommentCount?: number;
     watchTarget?: DrivePathRef;
-    onToggleActivityPanel?: () => void;
-    activityPanelOpen?: boolean;
+    onToggleActivity?: () => void;
+    activityOpen?: boolean;
     // Collab socket down after first load: edits stay local until it reconnects.
     offline?: boolean;
     // The server's storage is failing and the collab socket is retrying; edits stay local meanwhile.
@@ -67,12 +67,12 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         canWrite,
         onAccessDialogOpen,
         onRename,
-        onToggleCommentPanel,
-        commentPanelOpen,
+        onToggleComments,
+        commentsOpen,
         assignedCommentCount,
         watchTarget,
-        onToggleActivityPanel,
-        activityPanelOpen,
+        onToggleActivity,
+        activityOpen,
     } = props;
 
     return (
@@ -80,24 +80,24 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
             {offlineBadge}
             {onRename && <TooltipButton icon={Pencil} tooltipText="Edit" onClick={onRename} />}
             <FindInDocumentButton />
-            {onToggleActivityPanel && (
+            {onToggleActivity && (
                 <TooltipButton
                     icon={Activity}
                     tooltipText="Activity"
-                    onClick={onToggleActivityPanel}
-                    active={activityPanelOpen}
+                    onClick={onToggleActivity}
+                    active={activityOpen}
                 />
             )}
             {watchTarget && <WatchToggleButton {...watchTarget} />}
-            {onToggleCommentPanel && (
+            {onToggleComments && (
                 <div className="relative">
                     <TooltipButton
                         icon={MessageSquare}
                         tooltipText={
                             assignedCommentCount ? `Comments (${assignedCommentCount} assigned to you)` : 'Comments'
                         }
-                        onClick={onToggleCommentPanel}
-                        active={commentPanelOpen}
+                        onClick={onToggleComments}
+                        active={commentsOpen}
                     />
                     <CountBadge count={assignedCommentCount ?? 0} />
                 </div>
@@ -117,10 +117,10 @@ function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,
     onRename,
-    onToggleCommentPanel,
+    onToggleComments,
     assignedCommentCount,
     watchTarget,
-    onToggleActivityPanel,
+    onToggleActivity,
     mobileMenuItems,
 }: DocumentShareClusterProps) {
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
@@ -145,14 +145,14 @@ function MobileClusterKebab({
                         }
                         collaborate={
                             <>
-                                {onToggleActivityPanel && (
-                                    <DropdownMenuItem onClick={onToggleActivityPanel}>
+                                {onToggleActivity && (
+                                    <DropdownMenuItem onClick={onToggleActivity}>
                                         <Activity />
                                         Activity
                                     </DropdownMenuItem>
                                 )}
-                                {onToggleCommentPanel && (
-                                    <DropdownMenuItem onClick={onToggleCommentPanel}>
+                                {onToggleComments && (
+                                    <DropdownMenuItem onClick={onToggleComments}>
                                         <MessageSquare />
                                         {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
                                     </DropdownMenuItem>
@@ -169,7 +169,7 @@ function MobileClusterKebab({
                     />
                 </DropdownMenuContent>
             </DropdownMenu>
-            {onToggleCommentPanel && <CountBadge count={assignedCommentCount ?? 0} />}
+            {onToggleComments && <CountBadge count={assignedCommentCount ?? 0} />}
         </div>
     );
 }

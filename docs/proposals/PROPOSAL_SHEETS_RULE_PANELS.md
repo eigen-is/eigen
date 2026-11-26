@@ -2,7 +2,7 @@
 
 This proposal moves the two rule editors of Sheets, conditional formatting and data validation, out of their modal dialogs and into the right-hand panel, where comments, activity and the chart panel already live. Each panel is a list of the sheet's rules with an editor behind every row, as in Google Sheets.
 
-**Status:** approved on 2026-11-11 with every recommendation below; not built. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) has its row. The owner asked on 2026-11-11 whether Sheets can use the sidebar more, after seeing Google's "Data validation rules" sidebar. What this proposal says about the code was true on 2026-11-11, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it.
+**Status:** approved on 2026-11-11 with every recommendation below; not built. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) has its row. The design below names `useDocumentPanels` and `PanelColumn`, which the detail column replaced ([PROPOSAL_DETAIL_COLUMN.md](PROPOSAL_DETAIL_COLUMN.md)): the build reads `useCommentsColumn`'s `panel` where it says `useDocumentPanels`, and puts a rules panel in the workbook's `rightSlot` beside `CommentsColumn` where it says `PanelColumn`. The owner asked on 2026-11-11 whether Sheets can use the sidebar more, after seeing Google's "Data validation rules" sidebar. What this proposal says about the code was true on 2026-11-11, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it.
 
 > **TLDR**: Sheets has one right-hand slot. Comments and activity use it, and so does the panel of a selected chart or image. Conditional formatting and data validation are modal dialogs: they cover the grid, they can't show the rules a sheet already has next to the cells, and data validation swaps to a second dialog to pick a range. This proposal gives each a panel: a list of the current sheet's rules with **Add rule** and **Remove all**, and an editor view that reuses the dialogs' fields. The grid stays usable, so a range is picked on it directly. The Sheets editor holds the slot in one app-level hook, so the shared comments type stays as it is. Data validation can move first, because its rules already have ids. Editing a conditional format from a panel needs rules with ids, which is finding F9 of the simplification audit, a stored-format change the owner approved on 2026-11-11. No new API route, database migration or npm package is needed. About 6 to 9 days in four phases.
 
@@ -23,7 +23,7 @@ This proposal moves the two rule editors of Sheets, conditional formatting and d
 
 ## Current state
 
-**One slot, two tenants.** `SheetEditor` (`apps/sheets/src/components/sheets/editor.tsx`) draws the workbook and, to its right, one of two things. `useDocumentPanels` (`packages/lib/src/core/comments/hooks/use-document-panels.ts`) holds `DocumentPanel = 'comments' | 'activity'` (`packages/lib/src/types/comments.ts`), and `PanelColumn` (`packages/ui/src/components/comments/panel-column.tsx`) draws it: a `Column` of `PROPERTIES_PANEL_WIDTH_PX` (256), with the title and the close button in its toolbar and the back arrow on a phone. When no such panel is open and a chart or image is selected, `FloatingObjectPanel` (`floating-object-panel.tsx`) takes the place, on desktop only.
+**One slot, two tenants.** `SheetEditor` (`apps/sheets/src/components/sheets/editor.tsx`) draws the workbook and hands its `rightSlot` one of two things. `useCommentsColumn` (`packages/ui/src/components/comments/use-comments-column.ts`) holds the URL's `?panel=` (`DocumentPanel = 'comments' | 'activity'`, `packages/lib/src/types/comments.ts`) and `?chat=`, and `CommentsColumn` draws them as a detail column ([COMMENTS.md](../COMMENTS.md#in-docs-sheets-slides-and-vector-comments-open-in-a-column-the-url-names)). When that column is closed and a chart or image is selected, `FloatingObjectPanel` (`floating-object-panel.tsx`) takes the slot, on desktop only.
 
 **A sheet-owned panel body already exists.** The Workbook reports the selected chart through the `onChartPanelChange` hook (`ChartPanelState` in `packages/sheet/src/state/settings.ts`), and the app mounts `ChartPanelSections`, exported from `@workspace/sheet`, inside its panel. The body writes through the `WorkbookInstance` API (`setChartSpec`, `setChartLook`, `setChartDataRange`, which returns a refusal), not through the Workbook's React context ([SHEETS.md](../SHEETS.md#a-selected-charts-panel-is-a-canvas-charts-and-a-typed-edit-is-one-undo-step)).
 
@@ -131,7 +131,7 @@ The chart panel writes every keystroke inside a gesture, and peers see the title
 
 ## The rule store comes first
 
-Finding F9 of [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md#f9) proposes one keyed, ordered store for both rule kinds: `Record<id, { ranges, order, … }>` with `order` a fractional key, as images and charts have. It sizes itself at about 400 lines rewritten for about 130 fewer, high risk.
+Finding F9 of [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md) proposes one keyed, ordered store for both rule kinds: `Record<id, { ranges, order, … }>` with `order` a fractional key, as images and charts have. It sizes itself at about 400 lines rewritten for about 130 fewer, high risk.
 
 What each part of this proposal needs from it:
 
@@ -189,8 +189,8 @@ Phases 2 and 3 can ship without phase 4. Phase 3 before 4 leaves conditional for
 ## Related
 
 - [SHEETS.md](../SHEETS.md): the dialog slot, the chart panel, how each rule kind is stored
-- [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md#f9): F9, the keyed rule store
+- [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md): F9, the keyed rule store
 - [SHEETS-TODO.md](../SHEETS-TODO.md#sync-and-undo): the rows F9 closes
-- [COMMENTS.md](../COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it): the pane on a phone
+- [COMMENTS.md](../COMMENTS.md#on-a-phone-the-column-hides-the-editor-never-unmounts-it): the pane on a phone
 - [LAYOUT.md](../LAYOUT.md) and [MOBILE.md](../MOBILE.md): `Column`, the phone's one column
 - [PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md): a Workbook mounted with no panel slot

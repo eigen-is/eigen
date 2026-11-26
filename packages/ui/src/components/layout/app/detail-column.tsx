@@ -1,0 +1,81 @@
+// The column a page opens at its right to show one thing the user opened, such as a calendar event or a document's
+// comments. Its bar names a list, never an item: a list's title, a "‹" back once it drilled into one item, the
+// item's actions, and the X that closes it. A phone has no X: its "‹" at the left closes the column, beside the
+// title as a thread's back is. Esc closes it too, unless a dialog, a menu or a field has the key, or a handler that
+// heard it first used it, such as a canvas canceling a drag. It mounts at its width and eases to a new one.
+
+import { cn } from '@workspace/ui/lib/utils';
+import { X } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { useDialogOpen, useMenuOpen } from '../../../hooks/use-dialog-open';
+import { BackButton } from '../toolbar/back-button';
+import { ToolbarTitle } from '../toolbar/toolbar-title';
+import { TooltipButton } from '../toolbar/tooltip-button';
+import { Column } from './column-layout';
+import type { ColumnWidth } from './column-widths';
+import { useLayout } from './layout-context';
+
+type DetailColumnProps = {
+    width: ColumnWidth;
+    // Only over a list, such as the comments list: an item names itself in its body.
+    title?: string;
+    // Back from an item to the list it was opened from inside the column.
+    onBack?: () => void;
+    actions?: ReactNode;
+    // Left out where there is nothing to close back to, such as a visitor's lone file: no X, back or Esc.
+    onClose?: () => void;
+    // The body fills the column and scrolls itself, such as a comment thread over its pinned composer.
+    fill?: boolean;
+    children: ReactNode;
+};
+
+export function DetailColumn({ width, title, onBack, actions, onClose, fill, children }: DetailColumnProps) {
+    const { isMobile } = useLayout();
+    const dialogOpen = useDialogOpen();
+    const menuOpen = useMenuOpen();
+
+    // On the window, so every document listener hears the key first and one that uses it calls preventDefault.
+    useEffect(() => {
+        if (!onClose || dialogOpen || menuOpen) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !e.defaultPrevented && !isTypingTarget()) onClose();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [dialogOpen, menuOpen, onClose]);
+
+    const back = onBack ?? (isMobile ? onClose : undefined);
+
+    // Column gets no onBack: its own phone back would be a second "‹" beside this one.
+    return (
+        <div data-slot="detail-column" className="contents">
+            <Column
+                id="detail"
+                width={width}
+                className={cn(
+                    'bg-background',
+                    !isMobile && 'border-l transition-[width] duration-200 ease-out motion-reduce:transition-none',
+                )}
+                toolbar={
+                    <>
+                        {back ? (
+                            <BackButton onClick={back} label={title} />
+                        ) : (
+                            title && <ToolbarTitle>{title}</ToolbarTitle>
+                        )}
+                        <div className="flex flex-1 items-center justify-end gap-1">
+                            {actions}
+                            {!isMobile && onClose && (
+                                <TooltipButton icon={X} tooltipText="Close" className="ml-2" onClick={onClose} />
+                            )}
+                        </div>
+                    </>
+                }
+            >
+                {fill ? children : <div className="h-full overflow-y-auto app-gutter-x pt-4 pb-6">{children}</div>}
+            </Column>
+        </div>
+    );
+}

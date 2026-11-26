@@ -147,6 +147,8 @@ type DrawingToolsParams = {
     deleteElements: (ids: string[]) => void;
     setSelectedIds: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
+    // The keys stand down then, since the column beside the canvas has no focus trap.
+    focusInDetail: boolean;
 };
 
 type DrawingTools = {
@@ -203,6 +205,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         deleteElements,
         setSelectedIds,
         undoManager,
+        focusInDetail,
     } = params;
 
     // Every screen-px threshold below divides by this, never by the `zoom` prop: that one is the last
@@ -970,7 +973,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
-            if (isTypingTarget()) return;
+            if (isTypingTarget() || focusInDetail) return;
             if (e.key === 'Escape') {
                 if (apiRef.current.escape()) {
                     e.preventDefault();
@@ -1000,7 +1003,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             document.removeEventListener('dblclick', onDbl);
             window.removeEventListener('blur', onBlur);
         };
-    }, []);
+    }, [focusInDetail]);
 
     // Switching tools abandons a stroke or erase but commits a line or arrow's placed points, so a line↔arrow switch
     // leaves no draft the other tool would keep appending to. A ref keeps the effect dependent on `tool` alone.

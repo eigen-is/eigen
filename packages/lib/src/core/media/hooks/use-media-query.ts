@@ -1,12 +1,11 @@
 // React hooks over CSS media queries, such as whether the window is phone-sized or the pointer is a finger. Layout
-// and components across the apps read them, and code outside React that needs the phone breakpoint, such as a route's
-// redirect, reads its query from here so the breakpoint is written once.
+// and components across the apps read them, so the phone breakpoint is written once.
 
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
 const MOBILE_MAX_WIDTH = 768;
 
-export const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_MAX_WIDTH}px)`;
+const MOBILE_MEDIA_QUERY = `(max-width: ${MOBILE_MAX_WIDTH}px)`;
 
 // A prerender reads false, the desktop, so it agrees with the first client render; the client reads the real value
 // at once, so it never flashes. The memoized query keeps subscribe stable across renders.

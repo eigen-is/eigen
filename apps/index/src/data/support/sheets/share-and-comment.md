@@ -76,17 +76,17 @@ You need write access to add comments. If you only have view access, the option 
 
 A small triangle appears in the corner of the cell to show it has a comment attached. Rest your mouse on the cell to read the comment's card, and click the card to open the thread.
 
-## Open the comments panel
+## Open the comments column
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you. The comments column opens on the right, under the toolbar, in place of any image or chart panel. Click **Comments** again or the X at the top of the column to close it.
 
-The panel slides open on the right and lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread.
+The column lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 
 ## Filter comments
 
-Click the filter button (the funnel icon) at the top of the panel to narrow the list:
+Click the filter button (the funnel icon) at the top of the column to narrow the list:
 
 - **Assigned to**: show comments assigned to **Anyone**, to **Me**, to **Unassigned**, or to one particular person.
 - **Color**: show only comments with the colors you tick.
@@ -97,9 +97,9 @@ Click the filter button (the funnel icon) at the top of the panel to narrow the 
 When a discussion is finished, you can mark the comment resolved.
 
 - Right-click the cell and choose **Resolve comment** from the menu.
-- Or open the comment thread and click the checkmark icon (**Resolve**) near the top of the dialog.
+- Or open the comment thread and click the checkmark icon (**Resolve**) at the top of the column.
 
-Resolved comments stay in the spreadsheet. Switch the panel filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
+Resolved comments stay in the spreadsheet. Switch the filter to **Resolved** or **All** to see them. To reopen one, right-click the cell and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Reopen**).
 
 ## Edit, change color, or delete a comment
 
@@ -110,10 +110,10 @@ Right-click a cell that has a comment to see its options:
 - **Resolve comment** / **Reopen comment**: toggle the status.
 - **Delete comment**: removes the comment from the cell, once you confirm. To bring it back, press **Ctrl+Z** (Mac: **⌘Z**) before you close the spreadsheet.
 
-To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top of the dialog. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
+To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) at the top of the column. The trash icon (**Delete**) at the bottom of the edit form deletes the comment, after you confirm.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) at the top of the column. The link opens the spreadsheet with that comment thread already visible, so you can share it directly with a collaborator.
 
 If the comment is deleted later, the link still opens it, but only its title shows, grayed out, with **This comment was deleted** below it. Its replies are gone, and it can't be replied to, resolved or assigned.

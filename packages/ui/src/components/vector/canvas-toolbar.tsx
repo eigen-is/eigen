@@ -61,13 +61,13 @@ type CanvasToolbarProps = {
     // The canvas the Insert menu places into (Insert → Chart) and the Edit menu's clipboard rows act on.
     canvasRef: RefObject<CanvasHandle | null>;
     onAccessDialogOpen: () => void;
-    // Document-level comments, always offered, and activity, which a visitor doesn't get. Desktop draws the side panel,
-    // mobile the Column.
-    onToggleCommentPanel: () => void;
-    commentPanelOpen: boolean;
+    // Document-level comments, always offered, and activity, which a visitor doesn't get. The column sits at the right,
+    // or covers a phone.
+    onToggleComments: () => void;
+    commentsOpen: boolean;
     assignedCommentCount: number;
-    onToggleActivityPanel?: () => void;
-    activityPanelOpen: boolean;
+    onToggleActivity?: () => void;
+    activityOpen: boolean;
     // The File menu's per-app identity.
     createLabel: string;
     createIcon: LucideIcon;
@@ -99,11 +99,11 @@ export function CanvasToolbar({
     onAddComment,
     canvasRef,
     onAccessDialogOpen,
-    onToggleCommentPanel,
-    commentPanelOpen,
+    onToggleComments,
+    commentsOpen,
     assignedCommentCount,
-    onToggleActivityPanel,
-    activityPanelOpen,
+    onToggleActivity,
+    activityOpen,
     createLabel,
     createIcon,
     createType,
@@ -237,11 +237,11 @@ export function CanvasToolbar({
                             storageUnavailable={storageUnavailable}
                             onAccessDialogOpen={onAccessDialogOpen}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                            onToggleCommentPanel={onToggleCommentPanel}
-                            commentPanelOpen={commentPanelOpen}
+                            onToggleComments={onToggleComments}
+                            commentsOpen={commentsOpen}
                             assignedCommentCount={assignedCommentCount}
-                            onToggleActivityPanel={onToggleActivityPanel}
-                            activityPanelOpen={activityPanelOpen}
+                            onToggleActivity={onToggleActivity}
+                            activityOpen={activityOpen}
                         />
                     </div>
                 }

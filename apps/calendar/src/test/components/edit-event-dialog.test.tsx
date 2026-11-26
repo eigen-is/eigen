@@ -5,7 +5,8 @@
 // unhandled rejection. A series occurrence asks which events the change applies to, and a move to another owner asks
 // first, and each closes Edit event once its save is done. A move retried after a failed delete copies again.
 // "This event" saves the date's whole guest list, and "All events" from a date with its own list saves the series' own
-// list with only the guests added or removed there. Copying an invitation's guests saves nothing.
+// list with only the guests added or removed there. Copying an invitation's guests saves nothing. A save hands back
+// what the server stored and where the occurrence starts now.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarEventOccurrence, CalendarItem, UpdateEventInput } from '@workspace/lib/types/calendar';
 import { expectFormContract, type } from '@workspace/ui/test/form-contract';
@@ -77,7 +78,10 @@ const sharedCalendars = { data: [] };
 const noMaster = { data: undefined };
 const standupMaster = { data: standup };
 let master: { data: CalendarEventOccurrence | undefined } = noMaster;
-const idle = { mutateAsync: mock(async (_input: unknown) => {}), isPending: false };
+const idle = {
+    mutateAsync: mock(async (_input: unknown): Promise<CalendarEventOccurrence | undefined> => undefined),
+    isPending: false,
+};
 const notFromOthers = () => false;
 const fromOthers = () => true;
 let isFromOthers = notFromOthers;
@@ -127,6 +131,7 @@ const { onMutationError } = await import('@workspace/lib/api-error');
 const { EditEventDialog } = await import('../../components/edit-event-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
+const onSaved = mock((_save: unknown) => {});
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
@@ -137,6 +142,7 @@ beforeEach(() => {
     deleteEvent.mutateAsync.mockReset();
     deleteEvent.mutateAsync.mockImplementation(async () => {});
     onOpenChange.mockClear();
+    onSaved.mockClear();
     calendars = oneCalendar;
     master = noMaster;
     isFromOthers = notFromOthers;
@@ -146,12 +152,18 @@ beforeEach(() => {
 // The dialog under a parent that owns `open`, as the event's detail does.
 function Harness() {
     const [open, setOpen] = useState(true);
-    return createElement(EditEventDialog, { open, onOpenChange: setOpen, event: dentist, ownerId: session.user.id });
+    return createElement(EditEventDialog, {
+        open,
+        onOpenChange: setOpen,
+        event: dentist,
+        ownerId: session.user.id,
+        onSaved,
+    });
 }
 
 async function open(event = dentist, ownerId = session.user.id) {
     ({ unmount } = await renderInDocument(
-        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerId }),
+        createElement(EditEventDialog, { open: true, onOpenChange, event, ownerId, onSaved }),
     ));
 }
 
@@ -245,6 +257,18 @@ test('Save updates the event and closes the dialog', async () => {
     await settle();
     expect(updateEvent.mutateAsync.mock.calls.map(([input]) => [input.id, input.title])).toEqual([['e1', 'Dentist']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a save hands back the occurrence, what the server stored and where the occurrence starts now', async () => {
+    const split = { ...standup, id: 's2', uid: 's2@eigen' };
+    idle.mutateAsync.mockImplementationOnce(async () => split);
+    master = standupMaster;
+    await open(standup);
+    await save();
+    await act(async () => document.querySelector<HTMLButtonElement>('#recurring-this-and-following')?.click());
+    await click('OK');
+    await settle();
+    expect(onSaved.mock.calls).toEqual([[{ occurrence: standup, saved: split, startTime: standup.startTime }]]);
 });
 
 test('a save the server refuses keeps the dialog open, with no unhandled rejection', async () => {

@@ -45,7 +45,7 @@ That first etag check only answers early. The one that decides runs again inside
 There is no auto-save: the file changes on disk only when the user saves. `use-editor-save.ts` owns the whole save story:
 
 - `Mod+S` saves and stays in edit mode. The toolbar's Save runs the same save, then returns to view mode.
-- A `LeaveGuard` asks while the buffer is unsaved before any navigation, the Back arrow and a sidebar link alike, and before a reload or a closed tab.
+- A `LeaveGuard` asks while the buffer is unsaved before any navigation, the **‹ Files** back and a sidebar link alike, and before a reload or a closed tab.
 - `confirmClose` gates Cancel, which leaves edit mode without navigating, behind a discard dialog when the buffer is dirty, and passes straight through when it is clean.
 - A conflict response opens `ConflictDialog`.
 

@@ -1,8 +1,8 @@
 // The Docs editor page: the collaborative document opened from a route, drawn as one sheet of paper with its header
 // and footer bands, its body and its notes, scaled to fit a narrow window, or, for a page-less doc, as a column of
 // text at the reader's own width with room beside it for wide tables and images. Around the page it wires the
-// toolbar and menus, the outline, the selection's properties panel, comments, chat and search, all through the
-// body's, a band's or an open story's editor, whichever holds the selection.
+// toolbar and menus, the outline, the selection's properties panel or the comments column in its place, and search,
+// all through the body's, a band's or an open story's editor, whichever holds the selection.
 
 import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
@@ -11,7 +11,7 @@ import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
 import { useCollabDoc, useYjsUndoState } from '@workspace/lib/collab';
-import { useCommentFilter, useCommentHover, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentHover } from '@workspace/lib/comments';
 import { useDocsTextWidth } from '@workspace/lib/docs';
 import type { BandEdge, BandRoot, PageSetup, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
@@ -31,7 +31,6 @@ import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
-import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { CardFormDialog } from '@workspace/ui/components/cards';
@@ -42,7 +41,9 @@ import {
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
-    PanelColumn,
+    CommentsColumn,
+    THREAD_BLOCK_TOP_PX,
+    useCommentsColumn,
 } from '@workspace/ui/components/comments';
 import {
     ClipboardMenuItems,
@@ -54,11 +55,18 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui/components/layout/app';
-import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
+import {
+    CollabDocumentGate,
+    Column,
+    columnWidthPx,
+    UnsyncedEditsGuard,
+    useColumnWidthPx,
+    useLayout,
+} from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
+import { prefersReducedMotion } from '@workspace/ui/hooks/prefers-reduced-motion';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
@@ -101,7 +109,7 @@ import { LinkDialog, linkDialogTarget } from './link-dialog';
 import type { LinkAtPointer } from './link-menu-sections';
 import { linkAtPointer, linkMenuSections } from './link-menu-sections';
 import { updateNormalStyle } from './normal-style';
-import { OUTLINE_WIDTH_PX, OutlineColumn } from './outline-sidebar';
+import { OutlineColumn } from './outline-sidebar';
 import { BandControls, PageBands } from './page-band';
 import type { PageNumberPreset } from './page-numbers';
 import { applyPageNumberPreset } from './page-numbers';
@@ -118,8 +126,6 @@ type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
 type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommands> & { cellBackground: string } };
 type EquationMenuItem = NodeMenuItem & { display: boolean };
 
-// The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
-const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
 // A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
@@ -133,7 +139,6 @@ export const CollaborativeEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
     initialSearchTerm,
 }: {
     path: DrivePath;
@@ -141,7 +146,6 @@ export const CollaborativeEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
     // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
@@ -175,7 +179,6 @@ export const CollaborativeEditor = ({
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        initialChatName={initialChatName}
                         initialSearchTerm={initialSearchTerm}
                     />
                 </>
@@ -195,7 +198,6 @@ const TiptapEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
     initialSearchTerm,
 }: {
     yDoc: Y.Doc;
@@ -208,7 +210,6 @@ const TiptapEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
@@ -216,17 +217,6 @@ const TiptapEditor = ({
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { isMobile } = useLayout();
-    const {
-        panel,
-        commentPanelOpen,
-        activityPanelOpen,
-        mobilePanelOpen,
-        toggleComments,
-        toggleActivity,
-        openComments,
-        closePanels,
-        onSearchOpenChange,
-    } = useDocumentPanels(isMobile);
     const outline = useOutlineShown(isMobile);
     const outlinePaneOpen = isMobile && outline.shown;
     const outlineOverlayShown = !isMobile && outline.shown;
@@ -240,6 +230,8 @@ const TiptapEditor = ({
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
+    const openCommentRef = useRef((_cardId: string) => {});
+    const toggleCommentsRef = useRef(() => {});
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
     // The extensions keep the closures they were created with, so the figure, table, equation and table of contents
@@ -271,14 +263,11 @@ const TiptapEditor = ({
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
         if (!card) return null;
-        const entry = card.chatName ? allCommentsRef.current.find((c) => c.chatName === card.chatName) : undefined;
+        const entry = allCommentsRef.current.find((c) => c.chatName === card.chatName);
         return { card, entry };
     };
 
     const [setScrollContainer, scrollSize] = useElementSize(scrollContainerRef);
-    // Past this the panel clears the centered page outright and every value below is pinned, so the math stops there.
-    const panelClearWidth = 2 * (textColumnRight + PANEL_INTRUSION_PX) - page.width;
-    const containerWidth = Math.min(scrollSize.width, panelClearWidth);
 
     // This measures the border box, which useElementSize does not. It also stays quiet while the page is unscaled,
     // so a doc that needs no scaling never re-renders when it grows.
@@ -299,18 +288,11 @@ const TiptapEditor = ({
         };
     }, []);
 
-    // The mobile pane hides the document, so a mark tap only opens the card dialog over it.
-    const handleCommentClick = useCallback(
-        (cardId: string) => {
-            if (!isMobile) openComments();
-            setOpenCardId(cardId);
-        },
-        [isMobile, openComments],
-    );
+    const openComment = (cardId: string) => openCommentRef.current(cardId);
 
     // The body's images, charts and text boxes open their card and the one figure menu.
     const figureFrame: FigureFrameOptions = {
-        onOpenComment: handleCommentClick,
+        onOpenComment: openComment,
         onContextMenu: (...args) => figureContextMenuRef.current(...args),
     };
     // Every editor's equations open the one Equation panel and menu.
@@ -332,7 +314,7 @@ const TiptapEditor = ({
             target: { undoManager, cardIds: () => new Set(Object.keys(cardsRef.current)) },
             figure: figureFrame,
             chart: { ...figureFrame, onEditData: () => setChartDataOpen(true) },
-            equation: { ...equation, onOpenComment: handleCommentClick },
+            equation: { ...equation, onOpenComment: openComment },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
             textBox: { ...figureFrame, onOpen: (pos, at) => openBoxRef.current(pos, at) },
@@ -340,21 +322,21 @@ const TiptapEditor = ({
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
-                    onCommentClick: handleCommentClick,
+                    onCommentClick: openComment,
                     onCommentContextMenu: (cardId, event) => {
                         const item = commentMenuItem(cardId);
                         if (item) commentContextMenu.openAt(item, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => selectionContextMenuRef.current(event),
                     onAddComment: () => handleAddCommentRef.current?.(),
-                    onToggleCommentPanel: toggleComments,
+                    onToggleComments: () => toggleCommentsRef.current(),
                 }),
             ],
         },
-        [handleCommentClick, isMobile],
+        [isMobile],
     );
-    // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc
-    // then.
+    // The body's editor is built anew on a switch to or from a phone, and an upload settles into whichever holds the
+    // doc then.
     const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
 
@@ -488,17 +470,8 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = canWrite && chatFolderId ? handleAddComment : null;
 
-    const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
-        activeEditor,
-        isMobile,
-        closePanels,
-    );
-    editEquationRef.current = editEquation;
-    const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
-    if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
-
     const activeComments = useActiveComments(editor);
-    const lifecycle = useCommentLifecycle({
+    const { lifecycle, column } = useCommentsColumn({
         ownerId: path.ownerId,
         mountId: path.mountId,
         pathId: path.id,
@@ -506,12 +479,38 @@ const TiptapEditor = ({
         mediaFolderId,
         doc: yDoc,
         activeCardIds: activeComments.ids,
-        initialChatName,
         ready: activeComments.ready,
+        // A list row, an activity row and a landing select the comment's anchor in the body, and scroll it level with
+        // the comment's block in the thread beside it, whose top is the scroller's.
+        reveal: (cardId) => {
+            if (!selectCommentAnchor(editor, cardId)) return;
+            setEditingBand(null);
+            const scroller = scrollContainerRef.current;
+            if (scroller) {
+                const top = editor.view.coordsAtPos(editor.state.selection.from).top;
+                scroller.scrollTo({
+                    top: scroller.scrollTop + top - scroller.getBoundingClientRect().top - THREAD_BLOCK_TOP_PX,
+                    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+                });
+            }
+        },
     });
-    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId, isCardDeleted } =
-        lifecycle;
-    // The page owns the filter, so it survives when the comments panel closes and opens again.
+    const { allComments, cards, createCard, assignComment, members, assignedCount } = lifecycle;
+    // A comment's own anchor, such as its highlighted text, opens its thread without a reveal, so the caret stays where
+    // the click put it.
+    openCommentRef.current = lifecycle.setOpenCardId;
+    toggleCommentsRef.current = column.toggleComments;
+
+    const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
+        activeEditor,
+        isMobile,
+        column.close,
+    );
+    editEquationRef.current = editEquation;
+    const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
+    if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
+
+    // The page owns the filter, so it survives when the comments column closes and opens again.
     const commentFilter = useCommentFilter();
     const commentHover = useCommentHover();
     allCommentsRef.current = allComments;
@@ -583,15 +582,13 @@ const TiptapEditor = ({
         tableOfContentsContextMenu.openAt(target, event.clientX, event.clientY);
     };
 
-    const removeCommentMarks = (cardId: string) => removeCommentAnchors(editor, cardId);
-
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!pendingMarkRange) return;
             const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (created) =>
                 addCommentAnchor(editor, pendingMarkRange, created.id),
             );
-            if (assignee !== undefined && card?.chatName) {
+            if (assignee !== undefined && card) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setPendingMarkRange(null);
@@ -609,35 +606,37 @@ const TiptapEditor = ({
             const card = cards[cardId];
             if (!card) continue;
             if (card.color) colorMap.set(cardId, card.color);
-            if (card.chatName) {
-                const entry = allComments.find((c) => c.chatName === card.chatName);
-                if (entry?.status === 'resolved') resolved.add(cardId);
-            }
+            const entry = allComments.find((c) => c.chatName === card.chatName);
+            if (entry?.status === 'resolved') resolved.add(cardId);
         }
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     // Find searches the body, so ⌘F leaves a band.
-    const handleSearchOpenChange = useCallback(
-        (open: boolean) => {
-            if (open) setEditingBand(null);
-            onSearchOpenChange(open);
-        },
-        [onSearchOpenChange],
-    );
+    const handleSearchOpenChange = (open: boolean) => {
+        if (open) setEditingBand(null);
+        column.onSearchOpenChange(open);
+    };
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     // The properties panels follow the editor that has the selection. A chart's edits its data through the body's undo
     // manager, so a note's chart opens none.
     const showSidebar =
         !isMobile &&
-        (panel !== null ||
+        (column.open ||
             (canWrite && selectionPanel !== 'document' && (selectionPanel !== 'chart' || activeEditor === editor)));
+    // The right slot's width: a properties panel's or the comments list's, or a thread's while one is open. The slot is
+    // an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
+    const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
+    const panelIntrusionPx = slotPx - 16;
+    // Past this the panel clears the centered page outright and every value below is pinned, so the math stops there.
+    const panelClearWidth = 2 * (textColumnRight + panelIntrusionPx) - page.width;
+    const containerWidth = Math.min(scrollSize.width, panelClearWidth);
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centeredSlack = Math.max(0, (containerWidth - page.width) / 2);
-    const panelLeft = containerWidth - PANEL_INTRUSION_PX;
+    const panelLeft = containerWidth - panelIntrusionPx;
     const panelOverlap = showSidebar ? Math.max(0, centeredSlack + textColumnRight - panelLeft) : 0;
     const canShift = containerWidth > 0 && panelOverlap <= centeredSlack;
     const canvasShift = canShift ? panelOverlap : 0;
@@ -652,8 +651,8 @@ const TiptapEditor = ({
     const widest = isMobile ? room : (TEXT_WIDTHS[textWidth].px ?? room - 2 * FULL_WIDTH_GUTTER_PX);
     // The outline is an absolute overlay too. It covers the scroll box's p-4 gutter as well, which a page-less column
     // keeps as room between the outline and the text.
-    const roomStart = outlineOverlayShown ? OUTLINE_WIDTH_PX : 0;
-    const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
+    const roomStart = outlineOverlayShown ? columnWidthPx('small') : 0;
+    const roomEdge = showSidebar ? room - panelIntrusionPx : room;
     const centeredWidth = Math.min(widest, room);
     const centeredLeft = (room - centeredWidth) / 2;
     const clearLeft = Math.max(centeredLeft, roomStart);
@@ -675,45 +674,20 @@ const TiptapEditor = ({
         if (needsScale && documentRef.current) setDocHeight(documentRef.current.offsetHeight);
     }, [needsScale]);
 
-    // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
-    // the editor, so it just opens the card.
-    const openCard = (cardId: string) => {
-        setEditingBand(null);
-        if (!isMobile) {
-            openComments();
-            selectCommentAnchor(editor, cardId);
-        }
-        setOpenCardId(cardId);
-    };
-    // A comment named by its chat name opens like a tap on its card, anchor and all. One whose card is gone opens
-    // as deleted.
-    const openChat = (chatName: string) => lifecycle.openChat(chatName, openCard);
-
-    const panelProps = {
-        onClose: closePanels,
-        path,
-        cards,
-        entries: allComments,
-        members,
-        currentUserEmail: auth.user?.email ?? '',
-        filter: commentFilter,
-        activeComments,
-        isCardDeleted,
-        commentContextMenu,
-        onOpenCard: openCard,
-        onOpenChat: openChat,
-    };
-
-    // A new object on each render, which usePaletteDocSearch stabilizes, so reveal sees the current cards.
-    const commentSearch: DocCommentSearch = {
-        ...commentSearchHalf,
-        // openCard opens the comments panel on a desktop only, as a tap on a phone comes from the pane. A search hit
-        // comes from the palette, so it opens the pane on a phone too.
-        reveal: (chatName) => {
-            openComments();
-            openChat(chatName);
-        },
-    };
+    // A new object on each render, which usePaletteDocSearch stabilizes, so a hit sees the current cards.
+    const commentSearch = { ...commentSearchHalf, reveal: column.openChat };
+    const commentsColumn = column.open && (
+        <CommentsColumn
+            column={column}
+            lifecycle={lifecycle}
+            path={path}
+            canWrite={canWrite}
+            currentUserEmail={auth.user?.email ?? ''}
+            filter={commentFilter}
+            activeComments={activeComments}
+            commentContextMenu={commentContextMenu}
+        />
+    );
 
     // A node's comment rows: the card's under the pointer, else Add comment where one anchors, which is in the body
     // only. The card's Delete goes last, with the node's own.
@@ -751,9 +725,9 @@ const TiptapEditor = ({
         );
 
     const tableOfContentsItem = tableOfContentsContextMenu.item;
-    // An open comments or activity panel holds the slot the table of contents panel needs.
+    // An open comments or activity column holds the slot the table of contents panel needs.
     const tableOfContentsRows =
-        tableOfContentsItem && tableOfContentsMenuSections(tableOfContentsItem, isMobile ? undefined : closePanels);
+        tableOfContentsItem && tableOfContentsMenuSections(tableOfContentsItem, isMobile ? undefined : column.close);
 
     const bandControls = editingBand && (
         <BandControls
@@ -781,22 +755,24 @@ const TiptapEditor = ({
         <>
             <div className="flex h-full w-full overflow-hidden">
                 {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
-                <div className={cn('flex-1 min-w-0 h-full', (mobilePanelOpen || outlinePaneOpen) && 'hidden')}>
+                <div
+                    className={cn('flex-1 min-w-0 h-full', ((isMobile && column.open) || outlinePaneOpen) && 'hidden')}
+                >
                     <DocSearchProvider
                         controller={docSearchController}
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
                         onOpenChange={handleSearchOpenChange}
-                        // Beside an open panel the find bar moves left by the panel's width and the bar's own gutter.
-                        barClassName={cn('top-14', showSidebar && 'right-68')}
+                        barClassName="top-14"
+                        rightInsetPx={showSidebar ? slotPx : undefined}
                         // These don't focus the editor, so the focus stays in the bar and the user can keep replacing
                         // after ⌘Z.
                         onUndo={() => editor.commands.undo()}
                         onRedo={() => editor.commands.redo()}
                     >
                         <Column
-                            id={'doc-editor'}
-                            width={'w-full'}
+                            id="doc-editor"
+                            width="flex"
                             toolbarBorder="always"
                             toolbar={
                                 <EditorToolbar
@@ -819,12 +795,12 @@ const TiptapEditor = ({
                                             : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
                                     }
                                     onAccessDialogOpen={onAccessDialogOpen}
-                                    // Always offered: desktop draws the side panel, mobile the Column.
-                                    onToggleCommentPanel={toggleComments}
-                                    commentPanelOpen={commentPanelOpen}
-                                    closePanels={closePanels}
-                                    onToggleActivityPanel={toggleActivity}
-                                    activityPanelOpen={activityPanelOpen}
+                                    // Always offered: the column lies over the page on a desktop and fills a phone.
+                                    onToggleComments={column.toggleComments}
+                                    commentsOpen={column.commentsOpen}
+                                    closeColumn={column.close}
+                                    onToggleActivity={column.toggleActivity}
+                                    activityOpen={column.activityOpen}
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={
                                         mediaFolderId
@@ -1012,8 +988,8 @@ const TiptapEditor = ({
                                         )}
                                         {showSidebar && (
                                             <div className="pointer-events-auto absolute inset-y-0 right-0">
-                                                {panel ? (
-                                                    <PanelColumn activePanel={panel} {...panelProps} />
+                                                {column.open ? (
+                                                    commentsColumn
                                                 ) : lastPanelRef.current === 'figure' ? (
                                                     <FigurePropertiesPanel
                                                         editor={activeEditor}
@@ -1049,7 +1025,7 @@ const TiptapEditor = ({
                     </DocSearchProvider>
                 </div>
 
-                {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
+                {isMobile && commentsColumn}
                 {outlinePaneOpen && <OutlineColumn editor={editor} onJump={jumpToHeading} onClose={outline.close} />}
             </div>
 
@@ -1085,16 +1061,15 @@ const TiptapEditor = ({
                 cards={cards}
                 entries={allComments}
                 side="bottom"
-                isCardDeleted={isCardDeleted}
-                onOpenCard={handleCommentClick}
+                isCardDeleted={lifecycle.isCardDeleted}
+                onOpenCard={openComment}
             />
 
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
-                path={path}
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
-                onDelete={removeCommentMarks}
+                onDelete={(cardId) => removeCommentAnchors(editor, cardId)}
             />
 
             <ContextMenuAnchor contextMenu={figureContextMenu}>

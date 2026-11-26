@@ -4,12 +4,12 @@
 // one closes the host's menu.
 
 import { useAuth } from '@workspace/lib/auth';
-import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentMenuItems } from './comment-menu-items';
+import type { CommentLifecycleBundle } from './use-comment-host';
 
 type CommentLifecycleMenuItemsProps = {
-    lifecycle: ReturnType<typeof useCommentLifecycle>;
+    lifecycle: CommentLifecycleBundle;
     item: CommentContextMenuItem | null;
     canWrite: boolean;
     noun?: string;

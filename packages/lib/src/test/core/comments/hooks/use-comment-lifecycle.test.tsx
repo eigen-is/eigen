@@ -1,6 +1,6 @@
-// One rule opens a comment wherever it is reached, in every host. A landing, a search hit or an activity row that names
-// a thread whose card is gone from the map, such as a card deleted from its board, opens the comment as deleted: no
-// card, only the index row and the title it keeps. A name that neither a card nor a row knows is reported, so the host can drop it.
+// The open thread is the host's ?chat=: while it names a chat, the open comment is the card that holds it, else the
+// index row that keeps it, which opens as deleted. A chat waits for the host to be ready and for the rows, and then a
+// chat that names neither reads as missing, so the host can drop it.
 // A visitor without a login reads only the cards in the document, never the server's index rows or members.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
@@ -41,7 +41,7 @@ const entry = (chatName: string, title: string | null): CommentEntry => ({
 const rows = [entry('kept.eigenchat', 'Kept'), entry('removed.eigenchat', 'Ship it')];
 const listKey = commentKeys.list('owner-1', 'm1', 'board-1');
 
-// A board that holds one card. The card of `removed.eigenchat` was deleted from it, and its index row stayed.
+// A board that holds a card with a thread. The card of `removed.eigenchat` was deleted from it, and its index row stayed.
 function board(): Y.Doc {
     const doc = new Y.Doc();
     const card = new Y.Map<unknown>();
@@ -62,17 +62,16 @@ afterAll(() => fetchSpy.mockRestore());
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function mountBoard(options: { initialChatName?: string; initialCardId?: string; rows?: CommentEntry[] }) {
+// A host whose ?chat= is `chat` and whose `ready` is `ready`, which a test changes as the host would.
+async function mountBoard(options: { chat?: string; rows?: CommentEntry[]; ready?: boolean }) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
     });
     if (options.rows) queryClient.setQueryData(listKey, options.rows);
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'board-1'), []);
-    const onChatNotFound = mock(() => {});
-    const onCardNotFound = mock(() => {});
     const doc = board();
     const seen: { lifecycle: ReturnType<typeof useCommentLifecycle> | null } = { lifecycle: null };
-    function Harness() {
+    function Harness({ ready }: { ready: boolean }) {
         seen.lifecycle = useCommentLifecycle({
             ownerId: 'owner-1',
             mountId: 'm1',
@@ -81,116 +80,66 @@ async function mountBoard(options: { initialChatName?: string; initialCardId?: s
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1']),
-            initialChatName: options.initialChatName,
+            chat: options.chat,
             mapName: 'tasks',
-            ready: true,
-            onChatNotFound,
-            initialCardId: options.initialCardId,
-            onCardNotFound,
+            ready,
         });
         return null;
     }
     const root = createRoot(document.createElement('div'));
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness)));
-    });
+    const render = (ready: boolean) =>
+        act(async () => {
+            root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness, { ready })));
+        });
+    await render(options.ready ?? true);
     unmount = async () => act(() => root.unmount());
     const lifecycle = () => {
         if (!seen.lifecycle) throw new Error('not rendered');
         return seen.lifecycle;
     };
-    return { lifecycle, onChatNotFound, onCardNotFound, queryClient, doc };
+    return { lifecycle, setReady: render, queryClient };
 }
 
-test('a landing on a comment whose card is gone opens it as deleted, with the title of its row', async () => {
-    const { lifecycle, onChatNotFound } = await mountBoard({ initialChatName: 'removed.eigenchat', rows });
-    expect(lifecycle().openCard).toBeNull();
-    expect(lifecycle().openEntry?.title).toBe('Ship it');
-    expect(lifecycle().openCardDeleted).toBe(true);
-    expect(onChatNotFound).not.toHaveBeenCalled();
+test('a chat a card holds opens that card', async () => {
+    const { lifecycle } = await mountBoard({ chat: 'kept.eigenchat', rows });
+    expect(lifecycle().openCard?.id).toBe('card-1');
+    expect(lifecycle().openEntry?.title).toBe('Kept');
+    expect([lifecycle().openCardDeleted, lifecycle().chatMissing]).toEqual([false, false]);
 });
 
-test('a landing waits for the rows, then reports a name nothing knows', async () => {
-    const { lifecycle, onChatNotFound, queryClient } = await mountBoard({ initialChatName: 'unknown.eigenchat' });
-    expect(onChatNotFound).not.toHaveBeenCalled();
+test('a chat whose card is gone opens as deleted, with the title of its row', async () => {
+    const { lifecycle } = await mountBoard({ chat: 'removed.eigenchat', rows });
+    expect(lifecycle().openCard).toBeNull();
+    expect(lifecycle().openEntry?.title).toBe('Ship it');
+    expect([lifecycle().openCardDeleted, lifecycle().chatMissing]).toEqual([true, false]);
+});
+
+test('a chat waits for the host and the rows, and then a chat nothing names is missing', async () => {
+    const { lifecycle, queryClient, setReady } = await mountBoard({ chat: 'unknown.eigenchat', ready: false });
     await act(async () => {
         queryClient.setQueryData(listKey, rows);
     });
-    // React Query tells its observers a task later, and the render that follows runs the landing.
+    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().chatMissing]).toEqual([null, undefined, false]);
+    await setReady(true);
+    // React Query tells its observers a task later.
     for (let i = 0; i < 10; i++) {
         await act(async () => {
             await new Promise((resolve) => setTimeout(resolve, 0));
         });
     }
-    expect(onChatNotFound).toHaveBeenCalledTimes(1);
-    expect(lifecycle().openCard).toBeNull();
+    expect(lifecycle().chatMissing).toBe(true);
 });
 
-test('a search hit or an activity row opens a live card live, and one whose card is gone as deleted', async () => {
+test('no chat opens nothing and misses nothing', async () => {
     const { lifecycle } = await mountBoard({ rows });
-    await act(async () => {
-        expect(lifecycle().openChat('kept.eigenchat')).toBe(true);
-    });
-    expect(lifecycle().openCard?.id).toBe('card-1');
-    expect(lifecycle().openCardDeleted).toBe(false);
-
-    await act(async () => {
-        expect(lifecycle().openChat('removed.eigenchat')).toBe(true);
-    });
-    expect(lifecycle().openCard).toBeNull();
-    expect(lifecycle().openEntry?.title).toBe('Ship it');
-    expect(lifecycle().openCardDeleted).toBe(true);
-
-    await act(async () => {
-        expect(lifecycle().openChat('unknown.eigenchat')).toBe(false);
-    });
-    expect(lifecycle().openEntry?.title).toBe('Ship it');
-});
-
-test("a host's own openCard opens a live card it finds, and the lifecycle one whose card is gone", async () => {
-    const { lifecycle } = await mountBoard({ rows });
-    const openCard = mock((_cardId: string) => {});
-    await act(async () => {
-        expect(lifecycle().openChat('kept.eigenchat', openCard)).toBe(true);
-    });
-    expect(openCard.mock.calls).toEqual([['card-1']]);
-    expect(lifecycle().openCard).toBeNull();
-
-    await act(async () => {
-        expect(lifecycle().openChat('removed.eigenchat', openCard)).toBe(true);
-    });
-    expect(openCard).toHaveBeenCalledTimes(1);
-    expect(lifecycle().openEntry?.title).toBe('Ship it');
-    expect(lifecycle().openCardDeleted).toBe(true);
-});
-
-test('a live card opened by its chat name closes when it is deleted, as one opened by its id does', async () => {
-    const { lifecycle, doc } = await mountBoard({ rows });
-    await act(async () => {
-        expect(lifecycle().openChat('kept.eigenchat')).toBe(true);
-    });
-    expect(lifecycle().openCard?.id).toBe('card-1');
-    await act(async () => {
-        doc.getMap('tasks').delete('card-1');
-    });
-    expect(lifecycle().openCard).toBeNull();
-    expect(lifecycle().openCardDeleted).toBe(false);
-});
-
-test('a card link opens its card before the rows arrive, and reports an id no card holds', async () => {
-    const live = await mountBoard({ initialCardId: 'card-1' });
-    expect(live.lifecycle().openCard?.id).toBe('card-1');
-    await unmount();
-
-    const unknown = await mountBoard({ initialCardId: 'card-9' });
-    expect(unknown.onCardNotFound).toHaveBeenCalledTimes(1);
+    expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().chatMissing]).toEqual([null, undefined, false]);
 });
 
 test('a visitor lands on a card by its chat name and asks for no index row or member', async () => {
     session.user = null;
     fetchSpy.mockClear();
     try {
-        const { lifecycle } = await mountBoard({ initialChatName: 'kept.eigenchat' });
+        const { lifecycle } = await mountBoard({ chat: 'kept.eigenchat' });
         expect(lifecycle().openCard?.id).toBe('card-1');
         expect(lifecycle().allComments).toEqual([]);
         expect(fetchSpy).not.toHaveBeenCalled();

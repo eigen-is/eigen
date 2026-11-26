@@ -112,7 +112,13 @@ test('the workbook mounts with A1 selected', async () => {
 });
 
 test("a comment card's new colour repaints the grid with it", async () => {
-    const card = (color: string): CommentCard => ({ id: 'card', title: '', description: '', color });
+    const card = (color: string): CommentCard => ({
+        id: 'card',
+        title: '',
+        description: '',
+        color,
+        chatName: 'card.eigenchat',
+    });
     const { render, draws } = await mountHost({ commentCards: { card: card('#111111') } });
     draws.mockClear();
     await render({ commentCards: { card: card('#222222') } });

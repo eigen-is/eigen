@@ -17,6 +17,8 @@ export type SidebarItemProps = {
     to?: string;
     href?: string;
     params?: Record<string, string>;
+    // Keeps the page's search on the way, such as an event Calendar has open while its view changes.
+    keepSearch?: true;
     colorDot?: string;
     onClick?: (e: MouseEvent) => void;
     condensed?: boolean;
@@ -31,6 +33,7 @@ export function SidebarItem({
     to,
     href,
     params,
+    keepSearch,
     colorDot,
     onClick,
     condensed = false,
@@ -60,6 +63,7 @@ export function SidebarItem({
             <Link
                 to={to}
                 params={params}
+                search={keepSearch}
                 // A caller's onClick runs first and may call preventDefault to navigate its own way. The sidebar
                 // closes here and not on navigation, because a tap on the page already open navigates nowhere.
                 onClick={(e) => {

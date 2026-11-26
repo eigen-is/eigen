@@ -1,8 +1,9 @@
-// The event detail panel's icon buttons carry their names, so a screen reader can find Edit event and Delete event,
-// and each opens its dialog. Its body is the event's title and time with no
-// block, the calendar under them, then the event's sections.
+// The event's detail column has its actions in its bar, each named so a screen reader finds them, and another owner's
+// read-only event has none. Edit and Delete open their dialogs, and a save or a reply keeps the column open while a
+// delete closes it. Its body is the event's title and time with no block, the calendar under them, then the event's
+// sections.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import type { CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { dialogTitles } from '../dialog-titles';
@@ -49,6 +50,18 @@ const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 // Stable across renders, as React Query's results are, or the dialogs' effects would rerun on every render.
 const calendars = { data: [work] };
 const sharedCalendars = { data: [] };
+const readOnly: SharedCalendar = {
+    id: 'sc1',
+    ownerUserId: 'u2',
+    calendarId: 'team',
+    calendarName: 'Team',
+    calendarColor: '#22c55e',
+    permission: 'read',
+    color: null,
+    visible: true,
+    createdAt: created,
+    updatedAt: created,
+};
 const noMaster = { data: undefined };
 const idle = {
     mutate: mock((_input: unknown) => {}),
@@ -92,47 +105,35 @@ afterAll(() => {
     mock.module('@workspace/lib/contacts', () => realContacts);
 });
 
-const { act, createElement, useState } = await import('react');
-const { EventDetailDialog } = await import('../../components/event-detail-dialog');
+const { act, createElement } = await import('react');
+const { EventDetail } = await import('../../components/event-detail');
 
+const onClose = mock(() => {});
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     isFromOthers = notFromOthers;
     rsvp.mutateAsync.mockClear();
     deleteEvent.mutateAsync.mockClear();
+    onClose.mockClear();
 });
 
-async function open(event: CalendarEventOccurrence = dentist) {
+async function open(event: CalendarEventOccurrence = dentist, sharedCalendar: SharedCalendar | null = null) {
     ({ unmount } = await renderInDocument(
-        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work, ownerId: 'u1' }),
+        createElement(EventDetail, {
+            event,
+            calendar: sharedCalendar ? null : work,
+            sharedCalendar,
+            ownerId: sharedCalendar ? sharedCalendar.ownerUserId : 'u1',
+            onClose,
+            onSaved: () => {},
+        }),
     ));
 }
 
-const click = (name: string) =>
-    act(async () => {
-        const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${name}"]`);
-        if (!found) throw new Error(`the panel has no button named ${name}`);
-        found.click();
-    });
-
-// A chip that opens the panel, as a calendar view's does.
-function Chip() {
-    const [open, setOpen] = useState(false);
-    return createElement(
-        'div',
-        null,
-        createElement('button', { type: 'button', onClick: () => setOpen(true) }, 'Dentist chip'),
-        createElement(EventDetailDialog, {
-            open,
-            onOpenChange: setOpen,
-            event: dentist,
-            calendar: work,
-            ownerId: 'u1',
-        }),
-    );
-}
-
+const column = () => document.querySelector('[data-slot="detail-column"]');
+const barButtons = () =>
+    [...(column()?.querySelectorAll('button[aria-label]') ?? [])].map((b) => b.getAttribute('aria-label'));
 const press = (element: HTMLElement | null | undefined) =>
     act(async () => {
         if (!element) throw new Error('nothing to press');
@@ -141,54 +142,57 @@ const press = (element: HTMLElement | null | undefined) =>
     });
 // Radix gives the focus back a tick after the dialog is gone.
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-const chip = () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Dentist chip');
-const dialogButton = (label: string) =>
-    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-        (b) => b.lastChild?.textContent === label || b.getAttribute('aria-label') === label,
-    );
+const button = (label: string) =>
+    [
+        ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button, [data-slot="detail-column"] button'),
+    ].find((b) => b.lastChild?.textContent === label || b.getAttribute('aria-label') === label);
+const click = (name: string) => press(button(name));
 
-test('closing Edit event gives the focus back to the chip the panel opened from', async () => {
+test("the bar holds the event's actions and then X, and another owner's read-only event has none", async () => {
+    await open();
+    expect(barButtons()).toEqual(['Edit event', 'Delete event', 'Export event', 'Close']);
+    await unmount();
+    await open({ ...dentist, calendarId: 'team' }, readOnly);
+    expect(barButtons()).toEqual(['Close']);
+});
+
+test('closing Edit event gives the focus back to its button, and the column stays open', async () => {
     for (const close of ['Cancel', 'Save']) {
-        ({ unmount } = await renderInDocument(createElement(Chip)));
-        await press(chip());
-        await press(dialogButton('Edit event'));
+        await open();
+        await click('Edit event');
         await settle();
-        await press(dialogButton(close));
+        await click(close);
         await settle();
         expect([close, document.querySelectorAll('[role="dialog"]').length]).toEqual([close, 0]);
-        expect([close, document.activeElement?.textContent]).toEqual([close, 'Dentist chip']);
+        expect([close, document.activeElement?.getAttribute('aria-label')]).toEqual([close, 'Edit event']);
+        expect([close, onClose.mock.calls.length]).toEqual([close, 0]);
         await unmount();
     }
 });
 
-test('a reply to an invitation keeps the panel open with its button busy until the write ends', async () => {
+test('a reply to an invitation keeps its button busy until the write ends, and the column open after it', async () => {
     isFromOthers = () => true;
     let finish = () => {};
     rsvp.mutateAsync.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve(undefined))));
-    const onOpenChange = mock((_open: boolean) => {});
-    const invite = {
+    await open({
         ...dentist,
-        data: { attendees: [{ email: session.user.email, status: 'pending' as const, role: 'required' as const }] },
-    };
-    ({ unmount } = await renderInDocument(
-        createElement(EventDetailDialog, { open: true, onOpenChange, event: invite, calendar: work, ownerId: 'u1' }),
-    ));
-    await press(dialogButton('Accept'));
-    expect(dialogButton('Accept')?.getAttribute('aria-busy')).toBe('true');
-    await press(dialogButton('Decline'));
-    await press(dialogButton('Close'));
+        data: { attendees: [{ email: session.user.email, status: 'pending', role: 'required' }] },
+    });
+    await click('Accept');
+    expect(button('Accept')?.getAttribute('aria-busy')).toBe('true');
+    await click('Decline');
     expect(rsvp.mutateAsync.mock.calls.map(([input]) => input)).toEqual([
         { calendarId: 'work', eventId: 'e1', status: 'accepted' },
     ]);
-    expect(onOpenChange).not.toHaveBeenCalled();
 
     await act(async () => finish());
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
+    expect(button('Accept')?.getAttribute('aria-busy')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
 });
 
-test('an event with no title names its dialog (No title)', async () => {
+test('an event with no title heads its column (No title)', async () => {
     await open({ ...dentist, title: '' });
-    expect(dialogTitles()).toEqual(['(No title)']);
+    expect(column()?.querySelector('h2')?.textContent).toBe('(No title)');
 });
 
 test('the button named Edit event opens Edit event', async () => {
@@ -197,10 +201,13 @@ test('the button named Edit event opens Edit event', async () => {
     expect(dialogTitles()).toEqual(['Edit event']);
 });
 
-test('the button named Delete event asks to delete it', async () => {
+test('the button named Delete event asks to delete it, and the delete closes the column', async () => {
     await open();
     await click('Delete event');
     expect(dialogTitles()).toEqual(['Delete event']);
+    await click('Delete');
+    expect(deleteEvent.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 test('deleting this and following occurrences of an invitation declines them and keeps the series', async () => {
@@ -210,12 +217,7 @@ test('deleting this and following occurrences of an invitation declines them and
     await act(async () => {
         document.querySelector<HTMLElement>('[role="dialog"] label[for="recurring-this-and-following"]')?.click();
     });
-    await act(async () => {
-        const ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
-            (button) => button.textContent === 'OK',
-        );
-        ok?.click();
-    });
+    await click('OK');
     expect(rsvp.mutateAsync).toHaveBeenCalledTimes(1);
     expect(rsvp.mutateAsync.mock.calls[0]?.[0]).toMatchObject({
         status: 'declined',
@@ -243,8 +245,8 @@ test('deleting a changed occurrence offers no this and following, as it has no r
 
 test("the event has no block, in its calendar's color or not, and the calendar is in the line under it", async () => {
     await open({ ...dentist, location: 'Grote Markt' });
-    expect(document.querySelector('[role="dialog"] .eigen-block')).toBeNull();
-    const title = document.querySelector<HTMLElement>('[role="dialog"] h2:not(.sr-only)');
+    expect(column()?.querySelector('.eigen-block')).toBeNull();
+    const title = column()?.querySelector<HTMLElement>('h2');
     expect(title?.textContent).toBe('Dentist');
     expect(title?.nextElementSibling?.nextElementSibling?.textContent).toBe('Work');
     expect(title?.parentElement?.querySelector('section h3')?.textContent).toBe('Location');

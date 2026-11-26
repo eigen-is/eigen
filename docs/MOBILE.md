@@ -22,15 +22,17 @@ The media hooks answer `false` during a prerender, so a build-time render and th
 
 `ColumnLayout`'s `mobileColumn` picks the one `Column` a phone renders, and the first column's `onBack="sidebar"` arrow opens the sidebar as a column ([LAYOUT.md](LAYOUT.md#on-a-phone-only-the-mobilecolumn-renders)). The sidebar column closes on every navigation, including one that changes only the search params, such as Mail's `?mode=compose`.
 
-What steps aside is hidden, not unmounted: `<main>` under the sidebar column, and docs, sheets and the canvas under the comments pane ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection and undo history across the visit.
+What steps aside is hidden, not unmounted: `<main>` under the sidebar column, docs under the comments column through its own `hidden` wrapper, sheets, slides and vector under the comments column and a Stickies board under its activity column, through `PhoneDetail` ([COMMENTS.md](COMMENTS.md#on-a-phone-the-column-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection and undo history across the visit. A list page is the exception: `ListDetailLayout` hands the phone the detail as its `mobileColumn`, so the list unmounts while the detail shows: a list holds nothing a remount loses but its scroll.
+
+The comments column is a screen of its own, as a mail is. Its list's bar shows "‹ Comments", which closes the column back to the document, and a thread's bar the same "‹ Comments" button, back to the list: one look for both, the owner's ruling of 26 November 2026. The system back closes the column from either, since the list and a thread share one history entry ([LAYOUT.md](LAYOUT.md#a-detail-column-opens-at-the-right-under-the-bar-that-spans-the-screen)).
 
 ## A hidden surface can't be scrolled or focused
 
-A scroll or a focus call on a `display: none` subtree does nothing. So a phone opens a comment card with plain `setOpenCardId` instead of revealing its anchor first, and opening find (⌘F, an in-document palette hit) closes the comments pane through `useDocumentPanels`' `onSearchOpenChange`, because the find bar floats inside the hidden editor. The sheet re-measures its canvas when its container shows again ([SHEETS.md](SHEETS.md#comments-are-eigen-comment-cards)).
+A scroll or a focus call on a `display: none` subtree does nothing. So a phone opens a comment card without revealing its anchor first, and opening find (⌘F, an in-document palette hit) closes the comments column, or a board's activity column, through the find bar's `onOpenChange`, because the find bar floats inside the hidden editor. The sheet re-measures its canvas when its container shows again ([SHEETS.md](SHEETS.md#comments-are-eigen-comment-cards)).
 
 ## Docs panels need 769px
 
-The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left and scales down only when the slack runs out; the shift keeps the text column clear, so a wide table may tuck under the panel. A phone has no form of these panels. Format › Table and Format › Image hold what a table and an image need there, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
+The docs properties panels, and the comments column over the page, render beside it whenever the viewport is not a phone; on a phone the column takes the screen with the editor hidden, not unmounted. With a panel or the column open, the page first slides left and scales down only when the slack runs out; the shift keeps the text column clear, so a wide table may tuck under the panel. A phone has no form of these panels. Format › Table and Format › Image hold what a table and an image need there, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
 
 ## A phone views canvas documents, never edits them
 
@@ -61,12 +63,12 @@ On a phone a `DropdownMenu`, and every app-bar menu, shows a `DropdownMenuSub` a
 ## Two small differences are decided, not bugs
 
 - The read-only Eye marker is dropped on a phone: its tooltip can't show on touch.
-- On desktop, tapping a card in the docs activity panel switches to the comments panel to reveal its anchor. Every phone pane stays put.
+- On desktop a comment opened from the list or the activity selects its anchor in the doc; on a phone the column covers the doc, so nothing moves.
 
 Open mobile work, a check on real devices included, is the Mobile row in [ROADMAP.md](ROADMAP.md). The [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md) covers checking at phone sizes.
 
 ## See also
 
 - [LAYOUT.md](LAYOUT.md): the shell, `ColumnLayout` and the hover rule
-- [COMMENTS.md](COMMENTS.md): the comments and activity pane
+- [COMMENTS.md](COMMENTS.md): the comments and activity column
 - [SLIDES.md](SLIDES.md) and [CANVAS.md](CANVAS.md): the view-only canvas

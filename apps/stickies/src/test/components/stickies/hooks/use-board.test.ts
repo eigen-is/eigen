@@ -3,12 +3,19 @@ import { boardCardIds } from '@workspace/lib/collab';
 import * as Y from 'yjs';
 import { readBoard } from '../../../../components/stickies/hooks/use-board';
 
+// A card as the board stores one, with its thread.
+function card(): Y.Map<unknown> {
+    const map = new Y.Map<unknown>();
+    map.set('chatName', 'thread.eigenchat');
+    return map;
+}
+
 describe('readBoard', () => {
     it("reads a column's fields by type and skips a peer's scalar entry", () => {
         const doc = new Y.Doc();
         const columns = doc.getMap<unknown>('columns');
         doc.transact(() => {
-            doc.getMap<unknown>('tasks').set('t1', new Y.Map());
+            doc.getMap<unknown>('tasks').set('t1', card());
 
             const good = new Y.Map<unknown>();
             good.set('title', 'To Do');
@@ -28,16 +35,18 @@ describe('readBoard', () => {
         });
     });
 
-    // The board looks up every listed column and card, so an id it could not read must not be listed.
-    it('lists only the columns and cards it could read', () => {
+    // The board looks up every listed column, so a column it could not read must not be listed. A card id stays while
+    // it names a map, as the server's in-use rule counts it, and the board's join with the read cards drops the rest.
+    it('lists only the columns it could read and the card ids that name a map', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
-            tasks.set('t1', new Y.Map());
+            tasks.set('t1', card());
             tasks.set('t2', 'not-a-card');
+            tasks.set('t3', new Y.Map());
 
             const column = new Y.Map<unknown>();
-            column.set('taskIds', Y.Array.from(['t1', 't2', 'gone']));
+            column.set('taskIds', Y.Array.from(['t1', 't2', 't3', 'gone']));
             const columns = doc.getMap<unknown>('columns');
             columns.set('c1', column);
             columns.set('c2', 'not-a-column');
@@ -46,7 +55,7 @@ describe('readBoard', () => {
 
         const board = readBoard(doc);
         expect(board.columnOrder).toEqual(['c1']);
-        expect(board.columns.c1.taskIds).toEqual(['t1']);
+        expect(board.columns.c1.taskIds).toEqual(['t1', 't3']);
     });
 
     // The board and the server both count the cards boardCardIds finds as in use. A card the board shows that it missed
@@ -55,7 +64,7 @@ describe('readBoard', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
-            for (const id of ['t1', 't2', 't3']) tasks.set(id, new Y.Map());
+            for (const id of ['t1', 't2', 't3']) tasks.set(id, card());
             const columns = doc.getMap<unknown>('columns');
             const first = new Y.Map<unknown>();
             first.set('taskIds', Y.Array.from(['t1', 'gone']));

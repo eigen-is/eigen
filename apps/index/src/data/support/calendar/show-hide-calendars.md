@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, calendars, visibility, shared, team]
 related: [calendar/get-started, calendar/share-calendar, calendar/export-events]
 order: 60
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
 You can have several calendars in Calendar, for example one for work and one for personal events, plus calendars that other people have shared with you. The sidebar lets you show or hide any of them without deleting anything.
@@ -20,6 +20,10 @@ Each calendar has a small colored square next to its name. That square is a togg
 - When it is empty (no fill, no tick), the calendar is hidden. Its events are not shown.
 
 Click the square to switch between visible and hidden. The change takes effect straight away.
+
+::: grid columns="1"
+![A week of your own events, with a team calendar's meeting at the foot, each in its calendar's color](/data/about/media/calendar-still-today.webp)
+:::
 
 ## Show or hide a shared calendar
 

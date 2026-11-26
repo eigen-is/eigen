@@ -1,6 +1,8 @@
 // A document's comment cards as React reads them: readCards turns the Y.Map that holds them into plain
 // CommentCard objects, sanitizing each description on the way, and useCommentCards keeps that read live.
 // Every host reads its cards through here, such as the comment lifecycle bundle and a canvas's active set.
+// isCommentCard is the one test of what counts as a card, so a list of card ids, such as a board's, names
+// only cards this read holds.
 
 import { useEffect, useState } from 'react';
 import * as Y from 'yjs';
@@ -11,7 +13,7 @@ import { sanitizeCommentCardHtml } from '../../html-dom';
 
 export function useCommentCards(doc: Y.Doc | null, mapName: CommentMapName = 'comments'): Record<string, CommentCard> {
     // The first render reads the cards at once. A host that mounts after the Yjs sync, such as docs, must see its
-    // cards right away, or the ?chat= deep-link effect runs once against no cards and gives up.
+    // cards right away, or for one render a ?chat= landing finds no card and reads as deleted or closes.
     const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
         doc ? readCards(getItemMapRoot(doc, mapName)) : {},
     );
@@ -40,14 +42,22 @@ export function useCommentCards(doc: Y.Doc | null, mapName: CommentMapName = 'co
     return cards;
 }
 
+// A card's map with its thread's name. Its own get comes first, so it wins the overload.
+type YCommentCard = { get(key: 'chatName'): string } & Y.Map<unknown>;
+
+// A card is a comment card, so an entry without a thread is no card.
+export function isCommentCard(value: unknown): value is YCommentCard {
+    return value instanceof Y.Map && typeof value.get('chatName') === 'string';
+}
+
 function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
     for (const [id, yCard] of map) {
-        if (!(yCard instanceof Y.Map)) continue;
+        if (!isCommentCard(yCard)) continue;
+        const chatName = yCard.get('chatName');
         const title = yCard.get('title');
         const description = yCard.get('description');
         const color = yCard.get('color');
-        const chatName = yCard.get('chatName');
         const creator = yCard.get('creator');
         const createdAt = yCard.get('createdAt');
         const attachments = yCard.get('attachments');
@@ -59,7 +69,7 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
             // sanitized, before anything renders it as HTML.
             description: typeof description === 'string' ? sanitizeCommentCardHtml(description) : '',
             color: typeof color === 'string' ? color : undefined,
-            chatName: typeof chatName === 'string' ? chatName : undefined,
+            chatName,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
             // A peer can write anything into the list, and sameAttachments and the chips read each entry as a file name

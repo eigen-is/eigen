@@ -7,12 +7,12 @@ tags: [drive, getting-started, files, folders]
 related: [drive/share-a-file, connect/mount-drive-on-your-computer]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-26
 ---
 
 Drive is where your files live in Eigen. You upload files from your computer, create documents and spreadsheets without leaving the browser, organize everything into folders, and share any of it with other people.
 
-The screen has three parts: the sidebar on the left with the **New** button at the top, the list of files in the middle, and the details of the file you select on the right.
+The screen has three parts: the sidebar on the left with the **New** button at the top, the list of files in the middle, and the details of the file you select on the right. The top of the detail panel has **Share**, the bell that watches the file, and a **⋮** menu with everything else you can do with it. Click **Close** (the **X**) or press **Esc** to close the panel. On a phone the details fill the screen, and **‹** takes you back to the list.
 
 ::: video src="/data/about/media/drive-hero" caption="A team drive's photos: one selected with its details beside the list, then paged through in the preview."
 :::

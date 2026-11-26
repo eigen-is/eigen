@@ -15,6 +15,5 @@ export function useIsCardDeleted(activeCardIds: ReadonlySet<string>, ready: bool
     // resolveChatId runs first: a name the listing lacks asks for the refetch that isChatMissing waits on.
     return (card) =>
         ready &&
-        (!activeCardIds.has(card.id) ||
-            (!!user && !!card.chatName && !resolveChatId(card.chatName) && isChatMissing(card.chatName)));
+        (!activeCardIds.has(card.id) || (!!user && !resolveChatId(card.chatName) && isChatMissing(card.chatName)));
 }

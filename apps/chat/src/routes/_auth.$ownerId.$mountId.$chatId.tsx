@@ -103,7 +103,7 @@ function ChatRoomView() {
                             placeholder={`Message ${chat.chatName}`}
                             roomMembers={chat.roomMembers}
                             currentUserEmail={chat.currentUserEmail}
-                            messageCount={chat.messages.length + editing.focusTrigger}
+                            focusTrigger={editing.focusTrigger}
                             onKeyDown={editing.onKeyDown}
                             onAttachClick={() => setFilePickerOpen(true)}
                             driveAttachments={chat.driveAttachments}

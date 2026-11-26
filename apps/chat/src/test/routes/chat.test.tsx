@@ -263,3 +263,10 @@ test('an attachment that comes back after the user left its room stays out of th
     await act(async () => backInGeneral(['late.png']));
     expect(page.text()).not.toContain('late.png');
 });
+
+test('a chat opens with its message box focused, and so does the next room', async () => {
+    const page = await open('/me@test.eigen.is/default/c1');
+    expect(document.activeElement).toBe(messageInput());
+    await page.goToRoom('c2');
+    expect(document.activeElement).toBe(messageInput());
+});

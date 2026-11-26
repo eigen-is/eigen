@@ -102,11 +102,11 @@ type EditorToolbarProps = {
     onUpdateNormalStyle?: () => void;
     onAccessDialogOpen: () => void;
     path: DrivePath;
-    onToggleCommentPanel?: () => void;
-    commentPanelOpen?: boolean;
-    closePanels: () => void;
-    onToggleActivityPanel?: () => void;
-    activityPanelOpen?: boolean;
+    onToggleComments?: () => void;
+    commentsOpen?: boolean;
+    closeColumn: () => void;
+    onToggleActivity?: () => void;
+    activityOpen?: boolean;
     assignedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
@@ -143,11 +143,11 @@ export const EditorToolbar = ({
     onTextWidthChange,
     onUpdateNormalStyle,
     onAccessDialogOpen,
-    onToggleCommentPanel,
-    commentPanelOpen,
-    closePanels,
-    onToggleActivityPanel,
-    activityPanelOpen,
+    onToggleComments,
+    commentsOpen,
+    closeColumn,
+    onToggleActivity,
+    activityOpen,
     assignedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
@@ -285,7 +285,7 @@ export const EditorToolbar = ({
                                     editor={editor}
                                     active={active}
                                     keepEditorFocus={keepActiveEditorFocus}
-                                    closePanels={isMobile ? undefined : closePanels}
+                                    closeColumn={isMobile ? undefined : closeColumn}
                                     onLink={onLink}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
@@ -512,10 +512,10 @@ export const EditorToolbar = ({
                         offline={offline}
                         storageUnavailable={storageUnavailable}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleCommentPanel={onToggleCommentPanel}
-                        commentPanelOpen={commentPanelOpen}
-                        onToggleActivityPanel={onToggleActivityPanel}
-                        activityPanelOpen={activityPanelOpen}
+                        onToggleComments={onToggleComments}
+                        commentsOpen={commentsOpen}
+                        onToggleActivity={onToggleActivity}
+                        activityOpen={activityOpen}
                         assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                         mobileMenuItems={

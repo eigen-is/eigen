@@ -1,5 +1,5 @@
 // A visitor is someone without a login who opened a public link. The doc route runs the editors' visitor tests over the
-// real route tree and editor, and its editor is read-only to a visitor. The visitor's comments pane, ?chat= landing and
+// real route tree and editor, and its editor is read-only to a visitor. The visitor's comments column, ?chat= landing and
 // Print work from the document alone.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
@@ -78,7 +78,7 @@ test('a visitor opens the comments and reads a stored card, asking for nothing t
 test("a visitor's ?chat= link opens the card it names", async () => {
     await open(`${URL_OF('pub')}?chat=dates.eigenchat`, commented);
     await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Check the dates');
+    expect(document.querySelector('[data-slot="detail-column"]')?.textContent).toContain('Check the dates');
     expect(server.outsideTheLink()).toEqual([]);
 });
 

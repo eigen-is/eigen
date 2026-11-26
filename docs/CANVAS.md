@@ -160,6 +160,8 @@ A pan or zoom writes `viewportRef` and one animation frame sets the transform of
 
 Anything that must be exact mid-gesture reads the ref: scene conversion, hit-test thresholds, the drawing tools' screen-px radii. React's `zoom` lags behind a gesture, so only chrome layout may use it.
 
+The scroll is stored in scene units, Excalidraw's convention: a scene point sits at `(scene + scroll) × zoom` px in the container, and the scene layer, the overlay group and the chrome share that origin. While a drag runs (`frozenRef`) the wheel and a pan start wait, because the drag captured its scene scale and its rotate pivot at pointerdown and a pan or zoom under it would make both wrong; a pinch is the gesture itself, so it still zooms.
+
 ## Frame mode always shows the whole page
 
 Frame mode fits the page on open, on every resize, on every frame switch and on every change of the page's size (`fitFrameViewport` in `packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle` (`packages/ui/src/components/vector/hooks/use-viewport.ts`), which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
@@ -186,7 +188,7 @@ Double-click, or Enter on the one selected element, opens the text of any elemen
 
 Enter does what a double-click on the element does, so it also opens an arrow's label and a chart's data dialog. `useCanvasKeyboard` acts, and takes the key, only for a sole selection and only when focus is on the canvas or the page, so a focused button or rail thumbnail keeps its own Enter.
 
-During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. The viewport freezes so the editor stays on its element.
+During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. It is off while the focus sits in the comments column too, which has no focus trap, so Delete there or ⌘Z in a reply box leaves the canvas alone. The viewport freezes so the editor stays on its element.
 
 Outside a text editor the canvas cancels every `dragstart`. With text selected over the scene, Safari drags that selection from a press anywhere on the canvas, and Chrome from selectable text; the page then gets no pointerup, so the shape never moves and the text shows as a ghost image.
 
@@ -194,7 +196,7 @@ A text box's height only grows (`textBoxFitHeight`): the stored height is the us
 
 ## Escape is layered per host, on purpose
 
-On the canvas Escape goes to the innermost active mode: rich-text editing, then a mid-gesture cancel, then deselect, then the select tool. The text editor stops propagation. `ObjectTransform` claims a resize in the capture phase. The canvas' bubble-phase listener handles the rest. Slides adds present mode as the outer layer. Don't extract a shared Escape router: the per-host phase ordering is what makes the innermost mode win.
+On the canvas Escape goes to the innermost active mode: rich-text editing, then a mid-gesture cancel, then deselect, then the select tool. The text editor stops propagation. `ObjectTransform` claims a resize in the capture phase. The canvas' bubble-phase listener handles the rest, and calls `preventDefault` on an Escape it used, so the comments column beside it, which hears Escape last, closes only on one with nothing left to cancel. Slides adds present mode as the outer layer. Don't extract a shared Escape router: the per-host phase ordering is what makes the innermost mode win.
 
 ## Touch policy lives beside the canvas
 

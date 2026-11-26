@@ -19,11 +19,18 @@ const navigations: NavigateOptions[] = [];
 const navigate = async (options: NavigateOptions) => {
     navigations.push(options);
 };
-mock.module('@tanstack/react-router', () => ({ ...realRouter, useNavigate: () => navigate }));
+// No entry here is a detail's own push, so a close replaces.
+const router = { history: { location: { state: {} } } };
 const params = { filterType: 'mailbox', filterId: 'INBOX' };
+mock.module('@tanstack/react-router', () => ({
+    ...realRouter,
+    useNavigate: () => navigate,
+    useRouter: () => router,
+    useMatch: () => ({ params, search: {} }),
+}));
 mock.module('../../../../routes/_auth.$filterType.$filterId', () => ({
     ...realRoute,
-    Route: { fullPath: realRoute.Route.fullPath, useParams: () => params },
+    Route: { fullPath: realRoute.Route.fullPath, useParams: () => params, useSearch: () => ({}) },
 }));
 
 // The server deletes every message but m2, which fails, and m3, which is already gone.

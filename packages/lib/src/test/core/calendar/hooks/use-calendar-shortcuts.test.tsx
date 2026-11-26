@@ -2,7 +2,7 @@
 // previous one, d, x, w, m and a switch the view on the same day, and c creates. A key does nothing while the
 // shortcuts are off, while the user types in a field, or with a modifier held.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import type { CalendarViewMode } from '../../../../core/calendar/calendar-view';
+import type { CalendarViewMode } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '../../../happy-dom';
 
 const happyWindow = installHappyDom();

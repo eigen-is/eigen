@@ -1,7 +1,8 @@
-// The personal settings of the signed-in user, such as the theme, mail preferences and the drive view, which
-// the apps read and save. Only a full user reads or writes them, and only their own. A save sends just the
+// The personal settings of the signed-in user, such as the theme, mail preferences and the Drive or Calendar view,
+// which the apps read and save. Only a full user reads or writes them, and only their own. A save sends just the
 // fields it changes, and they merge into the stored settings.
 
+import { CALENDAR_VIEW_MODES } from '@workspace/lib/types/calendar';
 import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive-view';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS, USER_THEMES } from '@workspace/lib/types/settings';
@@ -60,6 +61,9 @@ export const spaceRouter = new Elysia({ name: 'space' })
                 ),
                 celebrations: t.Optional(t.Boolean()),
                 docsView: t.Optional(t.Object({ textWidth: optionalEnum(DOCS_TEXT_WIDTHS) })),
+                calendarView: t.Optional(
+                    t.Object({ desktop: optionalEnum(CALENDAR_VIEW_MODES), phone: optionalEnum(CALENDAR_VIEW_MODES) }),
+                ),
             }),
             auth: true,
         },

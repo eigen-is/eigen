@@ -31,7 +31,6 @@ type VectorEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
     initialSearchTerm?: string;
 };
 
@@ -42,7 +41,6 @@ export function VectorEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
     initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
@@ -71,12 +69,12 @@ export function VectorEditor({
 
     const canvasRef = useRef<CanvasHandle | null>(null);
 
-    // A reveal, such as a ⌘F match or a comment card, selects the element and brings it to the center. The infinite
-    // canvas has no slide to go to first, but the element may sit anywhere.
+    // A ⌘F match's or a comment's reveal selects the element and centers it at the current zoom. A comment centers it
+    // left of the room the comments column grows into as its thread opens.
     const revealElement = useCallback(
-        (el: VectorElement) => {
+        (el: VectorElement, growPx?: number) => {
             setSelectedIds([el.id]);
-            canvasRef.current?.centerOn(el);
+            canvasRef.current?.centerOn(el, growPx);
         },
         [setSelectedIds],
     );
@@ -87,9 +85,7 @@ export function VectorEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        initialChatName,
         doc,
-        isMobile,
         onReveal: revealElement,
     });
     const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
@@ -145,11 +141,11 @@ export function VectorEditor({
                     createLabel="New vector"
                     createIcon={Diamond}
                     createType="vector"
-                    onToggleCommentPanel={comments.toggleComments}
-                    commentPanelOpen={comments.commentPanelOpen}
+                    onToggleComments={comments.column.toggleComments}
+                    commentsOpen={comments.column.commentsOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.toggleActivity}
-                    activityPanelOpen={comments.activityPanelOpen}
+                    onToggleActivity={comments.column.toggleActivity}
+                    activityOpen={comments.column.activityOpen}
                 />
             }
             propertiesPanel={
@@ -198,7 +194,7 @@ export function VectorEditor({
                     publishCursor={publishCursor}
                     canvasRef={canvasRef}
                     onTextEditingChange={setTextEditing}
-                    onOpenCard={comments.openCard}
+                    onOpenCard={comments.lifecycle.setOpenCardId}
                     commentCards={comments.lifecycle.cards}
                     onAddComment={addComment}
                     onCommentHover={comments.onCommentHover}

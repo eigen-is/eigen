@@ -49,7 +49,6 @@ type SlideEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    initialChatName?: string;
     initialSearchTerm?: string;
 };
 
@@ -62,7 +61,6 @@ export function SlideEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
-    initialChatName,
     initialSearchTerm,
 }: SlideEditorProps) {
     const { isMobile } = useLayout();
@@ -112,7 +110,7 @@ export function SlideEditor({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
-    // Revealing an element goes to its slide first. ⌘F and the comment pane both span the whole deck,
+    // Revealing an element goes to its slide first. ⌘F and the comments column both span the whole deck,
     // so either can land on an element the canvas is not showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
@@ -130,9 +128,7 @@ export function SlideEditor({
         canWrite,
         mediaFolderId,
         chatFolderId,
-        initialChatName,
         doc,
-        isMobile,
         onReveal: revealElement,
     });
     const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
@@ -371,11 +367,11 @@ export function SlideEditor({
                             className="bg-[var(--app-current-color-soft)] text-[var(--app-current-color)] hover:bg-[var(--app-current-color-soft)] hover:text-[var(--app-current-color)]"
                         />
                     }
-                    onToggleCommentPanel={comments.toggleComments}
-                    commentPanelOpen={comments.commentPanelOpen}
+                    onToggleComments={comments.column.toggleComments}
+                    commentsOpen={comments.column.commentsOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.toggleActivity}
-                    activityPanelOpen={comments.activityPanelOpen}
+                    onToggleActivity={comments.column.toggleActivity}
+                    activityOpen={comments.column.activityOpen}
                 />
             }
             propertiesPanel={
@@ -447,7 +443,7 @@ export function SlideEditor({
                             publishCursor={publishCursor}
                             canvasRef={canvasRef}
                             onTextEditingChange={setTextEditing}
-                            onOpenCard={comments.openCard}
+                            onOpenCard={comments.lifecycle.setOpenCardId}
                             commentCards={comments.lifecycle.cards}
                             onAddComment={addComment}
                             onCommentHover={comments.onCommentHover}

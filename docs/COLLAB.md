@@ -171,7 +171,7 @@ The share cluster's offline icon waits 1.5 s after a disconnect, so a blip or th
 
 ## Unacknowledged edits guard the tab
 
-Nothing persists in the browser, so a reload loses whatever the server has not acknowledged. `unsyncedEdits` arms on an update while the socket is down. It also arms on the disconnect event when this tab made updates since the last handshake: a silently dead socket looks connected until y-websocket's 30 s silence check, so the close is the first honest signal. For that check, updates y-websocket applied itself (from the server or a sibling tab) don't count, so a reader is never warned about someone else's edits. The flag clears on the next sync. Every editor renders `UnsyncedEditsGuard` once, which asks before a reload, a close or an in-app navigation.
+Nothing persists in the browser, so a reload loses whatever the server has not acknowledged. `unsyncedEdits` arms on an update while the socket is down. It also arms on the disconnect event when this tab made updates since the last handshake: a silently dead socket looks connected until y-websocket's 30 s silence check, so the close is the first honest signal. For that check, updates y-websocket applied itself (from the server or a sibling tab) don't count, so a reader is never warned about someone else's edits. The flag clears on the next sync. Every editor renders `UnsyncedEditsGuard` once, which asks before a reload, a close or an in-app navigation to another page. A change of the page's search, such as opening a comment thread at `?chat=`, keeps the editor and its document, so it passes (`allowSearchChange`); a page form's guard still asks on one, since a switch such as Admin's `?userId=` replaces its draft.
 
 ## See also
 

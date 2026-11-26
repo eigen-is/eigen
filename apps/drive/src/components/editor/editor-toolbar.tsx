@@ -9,9 +9,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { useMountLabel } from '@workspace/ui/components/drive';
 import { DriveBreadcrumb } from '@workspace/ui/components/drive/drive-breadcrumb';
-import { Toolbar, TooltipButton } from '@workspace/ui/components/layout/toolbar';
+import { BackButton, Toolbar } from '@workspace/ui/components/layout/toolbar';
 import { FindInDocumentButton } from '@workspace/ui/components/search/find-in-document-button';
-import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type ViewToolbarProps = {
@@ -66,7 +65,7 @@ export function EditToolbar({ onBack, onCancel, onSave, isSaving, children }: Ed
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
-                <TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onBack} />
+                <BackButton onClick={onBack} label="Files" />
                 {children}
                 <FindInDocumentButton />
             </div>

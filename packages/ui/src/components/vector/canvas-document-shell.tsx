@@ -1,19 +1,21 @@
 // The chrome both canvas apps wrap their canvas in, such as the leave guard, the find-bar session, the toolbar Column,
-// the loading gate, the right-edge pane or panel, the image picker, and the comment dialogs and hover card. What differs
-// between the drawing app and the deck, such as the toolbar, the canvas area and the properties panel, arrives as props,
-// so neither app owns a copy of this layout.
+// the loading gate, the right slot under the toolbar, the image picker, and the comment dialogs and hover card. The
+// right slot holds the properties panel, or the comments column while it is open; on a phone the column covers the
+// canvas instead. What differs between the drawing app and the deck, such as the toolbar, the canvas area and the
+// properties panel, arrives as props, so neither app owns a copy of this layout.
 
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/file-kinds';
-import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode, RefObject } from 'react';
 import { CardFormDialog } from '../cards';
-import { CommentHoverCard, CommentLifecycleDialogs, PanelColumn } from '../comments';
+import { CommentHoverCard, CommentLifecycleDialogs, CommentsColumn } from '../comments';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
 import { CollabDocumentGate } from '../layout/app/collab-document-gate';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
+import { useColumnWidthPx } from '../layout/app/column-widths';
 import { useLayout } from '../layout/app/layout-context';
+import { PhoneDetail } from '../layout/app/phone-detail';
 import { UnsyncedEditsGuard } from '../layout/app/unsynced-edits-guard';
 import { DocSearchProvider } from '../search/doc-search-provider';
 import type { CanvasHandle } from './canvas-editor';
@@ -33,8 +35,8 @@ type CanvasDocumentShellProps = {
     onImagePickerOpenChange: (open: boolean) => void;
     canvasRef: RefObject<CanvasHandle | null>;
     toolbar: ReactNode;
-    // Shown on the right edge when the comment/activity pane is not; the host builds it because the
-    // deck adds its slide-background section.
+    // Shown in the right slot while the comments column is closed; the host builds it because the deck adds its
+    // slide-background section.
     propertiesPanel: ReactNode;
     // The canvas area itself, left of the right edge.
     children: ReactNode;
@@ -57,71 +59,68 @@ export function CanvasDocumentShell({
     children,
 }: CanvasDocumentShellProps) {
     const { isMobile } = useLayout();
-    const { panel, mobilePanelOpen, panelProps } = comments;
-    // A w-64 sibling holds the right edge whenever the comment/activity pane or the properties panel is up, so the find
-    // bar insets clear of it.
-    const rightPanelShown = (!isMobile && !!panel) || canEdit;
+    const { column } = comments;
+    const commentsColumn = column.open ? <CommentsColumn {...comments.columnProps} /> : null;
+    // The find bar floats clear of whatever holds the right slot. A phone's spans the screen.
+    const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
 
     return (
         // Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence.
         <CollabDocumentGate collab={doc} path={path} canWrite={canWrite}>
             <ColumnLayout>
                 <UnsyncedEditsGuard active={doc.unsyncedEdits} />
-                {/* The pane hides the canvas on mobile, which stays mounted so Yjs state and selection survive a pane
-                    visit. Hiding takes the find bar too: it floats in this wrapper, outside the Column. */}
-                <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
-                    <DocSearchProvider
-                        controller={searchController}
-                        initialSearchTerm={initialSearchTerm}
-                        onOpenChange={comments.onSearchOpenChange}
-                        // right-68 = the w-64 right panel + the bar's own gutter.
-                        barClassName={cn('top-14', rightPanelShown && 'right-68')}
-                    >
-                        <Column
-                            id="editor"
-                            width="flex"
-                            className="flex-1 h-full"
-                            toolbarBorder="always"
-                            toolbar={toolbar}
+                {/* On a phone the column covers the canvas, which stays mounted so Yjs state and selection survive the
+                    visit. Hiding takes the find bar too: it floats in this wrapper. */}
+                <PhoneDetail detail={commentsColumn}>
+                    <div className="flex-1 min-w-0 h-full">
+                        <DocSearchProvider
+                            controller={searchController}
+                            commentSearch={comments.commentSearch}
+                            initialSearchTerm={initialSearchTerm}
+                            onOpenChange={column.onSearchOpenChange}
+                            barClassName="top-14"
+                            rightInsetPx={!isMobile && (column.open || canEdit) ? slotPx : undefined}
                         >
-                            <div className="flex h-full w-full overflow-hidden">
-                                {children}
-                                {/* The pane wins over the properties panel, and mobile hosts the pane as an outside
-                                    sibling. The panel stays up: with nothing selected it edits the canvas itself. */}
-                                {!isMobile && panel ? (
-                                    <PanelColumn activePanel={panel} {...panelProps} />
-                                ) : canEdit ? (
-                                    propertiesPanel
-                                ) : null}
-                            </div>
+                            <Column
+                                id="editor"
+                                width="flex"
+                                className="flex-1 h-full"
+                                toolbarBorder="always"
+                                toolbar={toolbar}
+                            >
+                                <div className="flex h-full w-full overflow-hidden">
+                                    {children}
+                                    {/* The column takes the properties panel's place while it is open. The panel stays
+                                        up otherwise: with nothing selected it edits the canvas itself. */}
+                                    {!isMobile && commentsColumn ? commentsColumn : canEdit ? propertiesPanel : null}
+                                </div>
 
-                            {mediaFolderId && (
-                                <DrivePickerWithUpload
-                                    open={imagePickerOpen}
-                                    onOpenChange={onImagePickerOpenChange}
-                                    title="Insert image"
-                                    canPick={(item) => isImageMime(item.mimeType)}
-                                    multiSelect
-                                    onPickFromDrive={(paths) =>
-                                        void canvasRef.current?.insertDrivePaths(paths).catch(() => {})
-                                    }
-                                    onPickFromDevice={(files) => canvasRef.current?.insertFiles(files)}
-                                    accept="image/*"
-                                    multiple
-                                />
-                            )}
-                        </Column>
-                    </DocSearchProvider>
-                </div>
-
-                {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
+                                {mediaFolderId && (
+                                    <DrivePickerWithUpload
+                                        open={imagePickerOpen}
+                                        onOpenChange={onImagePickerOpenChange}
+                                        title="Insert image"
+                                        canPick={(item) => isImageMime(item.mimeType)}
+                                        multiSelect
+                                        onPickFromDrive={(paths) =>
+                                            void canvasRef.current?.insertDrivePaths(paths).catch(() => {})
+                                        }
+                                        onPickFromDevice={(files) => canvasRef.current?.insertFiles(files)}
+                                        accept="image/*"
+                                        multiple
+                                    />
+                                )}
+                            </Column>
+                        </DocSearchProvider>
+                    </div>
+                </PhoneDetail>
 
                 <CardFormDialog
                     open={comments.addOpen}
                     onOpenChange={comments.closeAdd}
                     onSave={comments.handleSaveNew}
                     allowAttachments={!!mediaFolderId}
-                    members={comments.members}
+                    members={comments.lifecycle.members}
                     currentUserEmail={comments.currentUserEmail}
                     dialogTitle="New comment"
                     submitLabel="Add comment"
@@ -131,7 +130,6 @@ export function CanvasDocumentShell({
 
                 <CommentLifecycleDialogs
                     lifecycle={comments.lifecycle}
-                    path={path}
                     canWrite={canWrite}
                     commentContextMenu={comments.commentContextMenu}
                     onDelete={comments.deleteCard}

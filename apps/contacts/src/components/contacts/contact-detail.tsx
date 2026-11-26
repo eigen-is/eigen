@@ -1,3 +1,6 @@
+// The open contact on the contacts page: its bar's actions, such as edit, label or delete, and its card. A team
+// member shows in the same card. The card is what Print prints.
+
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -42,11 +45,9 @@ export function ContactDetail({ contact }: ContactDetailProps) {
     const contactLabels = contact.labels ? labels.filter((label) => contact.labels?.includes(label.id)) : [];
 
     return (
-        <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
-            <div className="flex-1 overflow-auto app-gutter">
-                {labelsError && <p className="text-sm text-destructive">Error loading labels</p>}
-                <ContactDetailCard contact={contact} labels={contactLabels} />
-            </div>
+        <div data-document="contact-detail">
+            {labelsError && <p className="text-sm text-destructive">Error loading labels</p>}
+            <ContactDetailCard contact={contact} labels={contactLabels} />
         </div>
     );
 }

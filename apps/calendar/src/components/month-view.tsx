@@ -1,8 +1,8 @@
 // The Calendar app's month grid: every week the month touches as a row of seven days, its events in lanes under the
 // dates, a multi-day one as one bar across its days. A row holds as many lanes as its height fits, and a day with more
 // events than that shows "N more", which lists the whole day. A date links to that day's view, a click on an event
-// opens its detail dialog and a click on an empty part of a day creates an event there. A mouse or pen drags an event
-// to other days, and the drop saves it; the route fetches the events.
+// asks the route to open its detail and a click on an empty part of a day creates an event there. A mouse or pen drags
+// an event to other days, and the drop saves it; the route fetches the events and names the one it has open.
 
 import { Link } from '@tanstack/react-router';
 import type { EventTimes } from '@workspace/lib/calendar';
@@ -21,10 +21,10 @@ import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo, useRef, useState } from 'react';
 import { cellAt, isDragPointer } from './calendar-utils';
+import type { EventSurfaceProps } from './event-chip';
 import { EventBar, LaneGhost } from './event-chip';
-import { EventDetailDialog } from './event-detail-dialog';
 import { EventDropHost } from './event-drop-host';
-import { useEventDetailState } from './hooks/use-event-detail-state';
+import type { EventSave } from './hooks/use-event-detail-state';
 import { useEventDrop } from './hooks/use-event-drop';
 import { useViewDrag } from './hooks/use-view-drag';
 import { MonthDayPopover } from './month-day-popover';
@@ -35,7 +35,9 @@ type MonthViewProps = {
     calendars: readonly CalendarItem[];
     sharedCalendars: readonly SharedCalendar[];
     onDayClick: (date: Date) => void;
-    initialEventId?: string;
+    onEventClick: EventSurfaceProps['onClick'];
+    openKey: string | undefined;
+    onSaved: (save: EventSave) => void;
 };
 
 // In pixels: the lanes start under the date row (top-7), each lane is a text-xs line with py-0.5, gap-y-0.5 apart.
@@ -43,14 +45,17 @@ const DATE_ROW = 28;
 const LANE = 20;
 const GAP = 2;
 
-export function MonthView({ focus, events, calendars, sharedCalendars, onDayClick, initialEventId }: MonthViewProps) {
-    const { handleEventClick, detailDialogProps } = useEventDetailState({
-        events,
-        calendars,
-        sharedCalendars,
-        initialEventId,
-    });
-    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
+export function MonthView({
+    focus,
+    events,
+    calendars,
+    sharedCalendars,
+    onDayClick,
+    onEventClick,
+    openKey,
+    onSaved,
+}: MonthViewProps) {
+    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars, onSaved });
     // The rows share the height equally, so the first one measures them all.
     const [rowRef, rowSize] = useElementSize<HTMLDivElement>();
     const lanes = Math.max(1, Math.floor((rowSize.height - DATE_ROW) / (LANE + GAP)));
@@ -64,7 +69,7 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
         return Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7));
     }, [focus]);
     const currentMonth = focus.getMonth();
-    const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
+    const surfaceProps = { calendars, sharedCalendars, onClick: onEventClick, openKey };
 
     const moveEvent = (event: CalendarEventOccurrence, e: React.PointerEvent<HTMLElement>) => {
         const grid = weeksRef.current;
@@ -125,6 +130,7 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
                                             <Link
                                                 to="/view/$mode/$date"
                                                 params={{ mode: 'day', date: key }}
+                                                search
                                                 className={cn(
                                                     'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full',
                                                     today
@@ -172,7 +178,6 @@ export function MonthView({ focus, events, calendars, sharedCalendars, onDayClic
                 </div>
             </div>
 
-            <EventDetailDialog {...detailDialogProps} />
             {dropHostProps && <EventDropHost {...dropHostProps} />}
         </>
     );

@@ -26,26 +26,37 @@ describe('writeCardToDoc', () => {
 
     test('omits optional fields when not provided', () => {
         const doc = new Y.Doc();
-        writeCardToDoc(doc, 'comments', { id: 'c2', title: '', description: '' });
+        writeCardToDoc(doc, 'comments', { id: 'c2', title: '', description: '', chatName: 'c2.eigenchat' });
         const y = doc.getMap<Y.Map<unknown>>('comments').get('c2')!;
         expect(y.has('color')).toBe(false);
-        expect(y.has('chatName')).toBe(false);
         expect(y.has('creator')).toBe(false);
         expect(y.has('createdAt')).toBe(false);
     });
 
     test('persists attachments only when non-empty', () => {
         const doc = new Y.Doc();
-        writeCardToDoc(doc, 'comments', { id: 'c4', title: '', description: '', attachments: ['a.png'] });
+        writeCardToDoc(doc, 'comments', {
+            id: 'c4',
+            title: '',
+            description: '',
+            chatName: 'c4.eigenchat',
+            attachments: ['a.png'],
+        });
         expect(doc.getMap<Y.Map<unknown>>('comments').get('c4')!.get('attachments')).toEqual(['a.png']);
 
-        writeCardToDoc(doc, 'comments', { id: 'c5', title: '', description: '', attachments: [] });
+        writeCardToDoc(doc, 'comments', {
+            id: 'c5',
+            title: '',
+            description: '',
+            chatName: 'c5.eigenchat',
+            attachments: [],
+        });
         expect(doc.getMap<Y.Map<unknown>>('comments').get('c5')!.has('attachments')).toBe(false);
     });
 
     test('honours alternate mapName ("tasks" for stickies)', () => {
         const doc = new Y.Doc();
-        writeCardToDoc(doc, 'tasks', { id: 'c3', title: '', description: '' });
+        writeCardToDoc(doc, 'tasks', { id: 'c3', title: '', description: '', chatName: 'c3.eigenchat' });
         expect(doc.getMap('tasks').has('c3')).toBe(true);
         expect(doc.getMap('comments').has('c3')).toBe(false);
     });

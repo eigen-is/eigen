@@ -30,6 +30,7 @@ const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_CHAT, DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { THREAD_BLOCK_TOP_PX } = await import('@workspace/ui/components/comments');
 const { CommandPaletteProvider } = await import('@workspace/ui/components/layout/app');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
@@ -81,7 +82,8 @@ const { MediaResolverProvider } = await import('@workspace/lib/drive');
 
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
-// Every request answers empty, but the chat folder, which lists one thread, and an upload, which answers when the test
+// Every request answers empty, but the chat folder, which lists one thread, the thread's own path, which an open card
+// reads for its name, the thread's permissions, which let the writer reply, and an upload, which answers when the test
 // lets it.
 const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
 const finishUpload = answerUploads(path);
@@ -89,7 +91,9 @@ let commentRows: object[] = [];
 spyOn(globalThis, 'fetch').mockImplementation(
     Object.assign(
         async (input: RequestInfo | URL) => {
-            if (String(input).includes('/folder/chat')) return Response.json([thread]);
+            if (String(input).endsWith('/folder/chat')) return Response.json([thread]);
+            if (String(input).endsWith('/path/chat-a')) return Response.json(thread);
+            if (String(input).endsWith('/path/chat-a/permissions')) return Response.json({ canWrite: true });
             if (String(input).endsWith('/comments')) return Response.json(commentRows);
             return Response.json([]);
         },
@@ -102,6 +106,7 @@ beforeEach(() => {
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
     commentRows = [];
+    window.happyDOM.settings.device.prefersReducedMotion = 'no-preference';
     // The outline's shown or hidden, which the browser remembers.
     localStorage.clear();
 });
@@ -110,6 +115,9 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 let setCanWrite = (_canWrite: boolean) => {};
+let routerHistory = createMemoryHistory();
+// The page's ?chat=, the open comment thread.
+const chatParam = () => new URLSearchParams(routerHistory.location.search).get('chat');
 
 // What the command palette holds, such as the open doc's comment search, read beside the editor.
 let palette: ReturnType<typeof useCommandPalette> | null = null;
@@ -125,7 +133,7 @@ async function render({
     isMobile,
     mediaFolderId = null,
     chatFolderId = null,
-    initialChatName,
+    chat,
     width = 1920,
 }: {
     canWrite: boolean;
@@ -133,7 +141,7 @@ async function render({
     mediaFolderId?: string | null;
     chatFolderId?: string | null;
     // A `?chat=` landing, such as a notification's link.
-    initialChatName?: string;
+    chat?: string;
     // The toolbar folds its menus by the window's width, the panes by the layout's isMobile.
     width?: number;
 }) {
@@ -155,7 +163,6 @@ async function render({
                 mediaFolderId,
                 chatFolderId,
                 onAccessDialogOpen: () => {},
-                initialChatName,
             }),
         });
     }
@@ -172,7 +179,9 @@ async function render({
                     ),
                 ),
         }),
-        history: createMemoryHistory(),
+        history: (routerHistory = createMemoryHistory({
+            initialEntries: chat ? ['/', `/?chat=${chat}`] : ['/'],
+        })),
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
@@ -323,13 +332,13 @@ test('the outline over the left of a page-less doc narrows its column, at Wide a
 
     localStorage.setItem('eigen-docs-outline', 'shown');
     await render(WRITER);
-    // The outline's 240 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
-    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1152 });
+    // The outline's 256 px cover the scroll box's 16 px gutter too, which leaves that gutter between it and the text.
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 256, width: 1136 });
     await unmount();
 
     localStorage.setItem('eigen-docs-text-width:u1', 'wide');
     await render(WRITER);
-    expect(await pagelessColumnAt(1440)).toEqual({ left: 240, width: 1008 });
+    expect(await pagelessColumnAt(1440)).toEqual({ left: 256, width: 992 });
     // Room enough beside it, a Wide column stays centred.
     expect(await pagelessColumnAt(1920)).toEqual({ left: 432, width: 1056 });
 });
@@ -560,6 +569,7 @@ test('⌘F leaves the band: find searches the body', async () => {
 test('a click on a comment card leaves the band for the comment’s anchor in the body', async () => {
     const stored = new Y.Map<unknown>();
     stored.set('title', 'Check this');
+    stored.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', stored);
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     await render(WRITER);
@@ -581,13 +591,51 @@ test('a link to a comment whose text was deleted opens it as deleted, its thread
     stored.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', stored);
     write('default', 'Hello');
-    await render({ ...WRITER, chatFolderId: 'chat', initialChatName: 'thread-1.eigenchat' });
-    await waitUntil(
-        () => document.body.textContent?.includes('This comment was deleted') === true,
-        'the deleted state',
-    );
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Check this');
-    expect(document.querySelector('[role="dialog"] [contenteditable="true"]')).toBeNull();
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await waitUntil(() => threadText().includes('This comment was deleted'), 'the deleted state');
+    expect(threadText()).toContain('Check this');
+    expect(document.querySelector('[data-slot="detail-column"] [contenteditable="true"]')).toBeNull();
+});
+
+// The open thread is the URL's ?chat=, so closing the column takes it out, and a reload no longer opens it again. A
+// link is no push of ours, so the close replaces. The landing selects the comment's text, once it has loaded.
+test("a link opens its comment's thread and selects its text, and closing the column takes ?chat= out", async () => {
+    writeCard();
+    write('default', 'Intro');
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
+    expect(detailColumn()?.style.width).toBe('400px');
+    await waitUntil(() => bodyEditor().state.selection.from === 8, 'the anchor selected');
+    await act(async () => columnButton('Close')?.click());
+    await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(panelParam()).toBeNull();
+    expect(routerHistory.location.state.__TSR_index).toBe(1);
+    await waitUntil(() => detailColumn() === null, 'the column to close');
+});
+
+// The landing reveals once, so text that comes back later, such as through a peer's undo, leaves the caret alone.
+test("a link to a comment whose text is gone reveals nothing, even once a peer's edit brings the text back", async () => {
+    writeCard();
+    write('default', 'Intro');
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await waitUntil(() => threadText().includes('This comment was deleted'), 'the deleted state');
+    await act(async () => bodyEditor().commands.setTextSelection(2));
+    await act(async () => write('default', 'Hello', { comment: { cardId: 'c1' } }));
+    await waitUntil(() => threadText().includes('Check this') && !threadText().includes('deleted'), 'the live thread');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(bodyEditor().state.selection.from).toBe(2);
+});
+
+test('a link to a comment that does not exist lands on the list by replace', async () => {
+    write('default', 'Hello');
+    await render({ ...WRITER, chatFolderId: 'chats', chat: 'nothing' });
+    await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(panelParam()).toBe('comments');
+    expect(routerHistory.location.state.__TSR_index).toBe(1);
+    expect(detailColumn()?.style.width).toBe('256px');
+    expect(threadLayer()).toBeNull();
 });
 
 test('word count from a band counts the body, and gives focus back to the band', async () => {
@@ -1464,31 +1512,43 @@ test('a right-click on a text box offers a writer Cut, Copy and Delete, and Dele
 function writeCard() {
     const card = new Y.Map<unknown>();
     card.set('title', 'Check this');
-    card.set('chatName', 'thread-1');
+    card.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', card);
 }
 
-const commentsPanelShown = () =>
-    [...document.querySelectorAll('.eigen-toolbar-title')].some((title) => title.textContent === 'Comments');
-const cardDialogText = () => document.querySelector('[role="dialog"]')?.textContent ?? '';
+// The comments column, its bar's buttons, a row in its list, and the thread it drilled into.
+const detailColumn = () => document.querySelector<HTMLElement>('[data-slot="detail-column"] > div');
+const columnButton = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>('[data-slot="detail-column"] button')].find(
+        (b) => b.getAttribute('aria-label') === name || b.textContent?.trim() === name,
+    );
+const listRow = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-slot="detail-column"] .line-clamp-2')].find(
+        (title) => title.textContent === 'Check this',
+    );
+const threadLayer = () => document.querySelector('[data-slot="detail-column"] .absolute.flex-col');
+const threadText = () => threadLayer()?.textContent ?? '';
+const panelParam = () => new URLSearchParams(routerHistory.location.search).get('panel');
 
 test.each([
     ['an image', writeFigure],
     ['a chart', writeChart],
     ['a text box', writeTextBox],
-])('the comment mark on %s opens its card beside the comments panel', async (_, writeNode) => {
+])('the comment mark on %s opens its thread in the comments column', async (_, writeNode) => {
     writeNode();
     const paragraph = doc.getXmlFragment('default').get(0);
     const node = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
     if (!(node instanceof Y.XmlElement)) throw new Error('no node');
     node.setAttribute('commentCardId', 'c1');
     writeCard();
-    await render({ ...WRITER, chatFolderId: 'chats' });
+    await render({ ...WRITER, chatFolderId: 'chat' });
     const mark = bodyView()?.querySelector<HTMLElement>('button[aria-label="Open comment"]');
     if (!mark) throw new Error('no comment mark');
     await act(async () => mark.click());
-    expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
+    // The click writes ?chat=, and the thread opens from the URL.
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(chatParam()).toBe('thread-1.eigenchat');
+    expect(threadText()).not.toContain('This comment was deleted');
 });
 
 // The image's menu asks before it deletes a comment, as a card's own menu does.
@@ -1510,7 +1570,9 @@ test("Delete comment on an image's menu asks first: Cancel keeps the comment, De
     };
 
     await deleteComment();
-    expect(cardDialogText()).toContain('This deletes the comment and its replies');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+        'This deletes the comment and its replies',
+    );
     expect(figure.getAttribute('commentCardId')).toBe('c1');
     await act(async () => button('Cancel')?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -1585,18 +1647,18 @@ test('a press within the pause shows no card, as for a drag-select that starts o
     expect(hoverCardShown()).toBeFalsy();
 });
 
-test('a click on the hover card opens the card beside the comments panel', async () => {
+test('a click on the hover card opens its thread in the comments column', async () => {
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
-    await render({ ...WRITER, chatFolderId: 'chats' });
+    await render({ ...WRITER, chatFolderId: 'chat' });
     const span = bodyView()?.querySelector('.comment-highlight');
     if (!span) throw new Error('no highlight');
     await moveOver(span);
     await waitUntil(() => hoverCardShown() === true, 'the hover card');
     const card = document.querySelector<HTMLElement>('[data-slot="popover-content"] .line-clamp-2');
     await act(async () => card?.click());
-    expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
     expect(hoverCardShown()).toBeFalsy();
 });
 
@@ -1608,7 +1670,7 @@ test('a resolved comment shows no card from its text, while a corner mark still 
     if (!(equation instanceof Y.XmlElement)) throw new Error('no equation');
     equation.setAttribute('commentCardId', 'c1');
     writeCard();
-    commentRows = [{ chatName: 'thread-1', status: 'resolved', messageCount: 0 }];
+    commentRows = [{ chatName: 'thread-1.eigenchat', status: 'resolved', messageCount: 0 }];
     await render(WRITER);
     await waitUntil(() => bodyEditor().storage.comment.resolvedIds.has('c1'), 'the resolved card');
 
@@ -1863,21 +1925,190 @@ test("a viewer's right-click on a table of contents opens no menu and leaves the
     expect(event.defaultPrevented).toBe(false);
 });
 
-// The palette's comment search reveals a thread by its chat name: the card opens over the comments panel, and on a
-// desktop the caret goes to its anchor in the body. On a phone the comments pane takes the screen.
+// The palette's comment search reveals a thread by its chat name: it opens in the comments column, and on a desktop
+// the caret goes to its anchor in the body. On a phone the column takes the screen.
 test.each([
     ['a desktop', WRITER],
     ['a phone', PHONE],
-])('on %s a comment search hit opens its card over the comments panel', async (_, as) => {
+])('on %s a comment search hit opens its thread in the comments column', async (_, as) => {
     write('default', 'Intro');
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
-    await render({ ...as, chatFolderId: 'chats' });
+    await render({ ...as, chatFolderId: 'chat' });
     await waitUntil(() => palette?.docCommentSearch != null, 'the comment search');
-    await act(async () => palette?.docCommentSearch?.reveal('thread-1'));
-    expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
+    await act(async () => palette?.docCommentSearch?.reveal('thread-1.eigenchat'));
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
     // The caret goes to the anchor, at the start of the second paragraph, only where the body shows.
     expect(bodyEditor().state.selection.from).toBe(as.isMobile ? 1 : 8);
     expect(bodyView()?.closest('.hidden') != null).toBe(as.isMobile);
+});
+
+const pressEscapeOnPage = () =>
+    act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+
+// A click on a comment's highlighted text, as ProseMirror hands it to the comment mark after the browser placed the
+// caret.
+async function clickCommentText() {
+    const span = bodyView()?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    const click = new MouseEvent('click', { bubbles: true });
+    span.dispatchEvent(click);
+    const { view } = bodyEditor();
+    await act(async () => void view.someProp('handleClick', (handle) => handle(view, 9, click)));
+}
+
+// The toolbar's toggles open the comments column at its list, 256 wide like the properties panel it takes turns with,
+// pushing ?panel=, so X, Esc and back close it.
+test.each([
+    ['Comments', 'comments'],
+    ['Activity', 'activity'],
+])(
+    '%s in the toolbar pushes ?panel=%s and opens its list in the column, which X and Esc close',
+    async (label, panel) => {
+        write('default', 'Hello');
+        await render({ ...WRITER, chatFolderId: 'chat' });
+        await act(async () => button(label)?.click());
+        expect(panelParam()).toBe(panel);
+        expect(routerHistory.location.state.__TSR_index).toBe(1);
+        expect(detailColumn()?.style.width).toBe('256px');
+        expect(detailColumn()?.querySelector('.eigen-toolbar-title')?.textContent).toBe(label);
+
+        await act(async () => columnButton('Close')?.click());
+        await waitUntil(() => panelParam() === null, 'the URL without ?panel=');
+        expect(routerHistory.location.state.__TSR_index).toBe(0);
+        await waitUntil(() => detailColumn() === null, 'the column to close');
+
+        await act(async () => button(label)?.click());
+        expect(panelParam()).toBe(panel);
+        await pressEscapeOnPage();
+        await waitUntil(() => panelParam() === null, 'Esc to close it');
+        await waitUntil(() => detailColumn() === null, 'the column to close');
+    },
+);
+
+// A selected anchor would make the next keystroke replace the commented text, so the text's own click leaves the caret
+// where it landed; the list, which is away from the page, selects the anchor to show where the comment is.
+test("a click on a comment's text opens its thread and leaves the caret; a list row opens it and selects the text", async () => {
+    write('default', 'Intro');
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await act(async () => void bodyEditor().commands.setTextSelection(3));
+    await clickCommentText();
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(chatParam()).toBe('thread-1.eigenchat');
+    expect(detailColumn()?.style.width).toBe('400px');
+    expect(bodyEditor().state.selection.from).toBe(3);
+    expect(bodyEditor().state.selection.empty).toBe(true);
+
+    await act(async () => columnButton('Comments')?.click());
+    await waitUntil(() => chatParam() === null, 'back to the list');
+    expect(panelParam()).toBe('comments');
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    await act(async () => listRow()?.click());
+    await waitUntil(() => chatParam() === 'thread-1.eigenchat', 'the thread from the list');
+    expect(bodyEditor().state.selection.from).toBe(8);
+});
+
+// The row's press takes the focus off the page, so a reveal that focused the editor would take it back from the box.
+test("a list row's click leaves the focus in the thread's reply box", async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await act(async () => button('Comments')?.click());
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    (document.activeElement as HTMLElement | null)?.blur();
+    await inBrowserFrames(() => listRow()?.click());
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(document.activeElement === threadLayer()?.querySelector('textarea')).toBe(true);
+});
+
+// The scroller's top is 100 and the anchor's 700, so the anchor lands level with the comment's block in the column.
+test.each([
+    ['no-preference', 'smooth'],
+    ['reduce', 'auto'],
+] as const)(
+    "a list row scrolls its anchor level with the comment's block, with motion %s: %s",
+    async (motion, behavior) => {
+        window.happyDOM.settings.device.prefersReducedMotion = motion;
+        write('default', 'Hello', { comment: { cardId: 'c1' } });
+        writeCard();
+        await render({ ...WRITER, chatFolderId: 'chat' });
+        const scroller = bodyView()?.closest<HTMLElement>('.overflow-y-scroll');
+        if (!scroller) throw new Error('no scroller');
+        scroller.scrollTop = 300;
+        spyOn(scroller, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 800, 900));
+        spyOn(bodyEditor().view, 'coordsAtPos').mockReturnValue({ left: 0, right: 0, top: 700, bottom: 720 });
+        const scrollTo = spyOn(scroller, 'scrollTo').mockImplementation(() => {});
+        await act(async () => button('Comments')?.click());
+        await waitUntil(() => listRow() !== undefined, 'the list row');
+        await inBrowserFrames(() => listRow()?.click());
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+        expect(scrollTo).toHaveBeenCalledWith({ top: 300 + 700 - 100 - THREAD_BLOCK_TOP_PX, behavior });
+    },
+);
+
+test('the editor is never rebuilt or remounted as the column opens, drills into a thread, goes back and closes', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    const editor = bodyEditor();
+    const view = bodyView();
+    const same = () => bodyEditor() === editor && bodyView() === view;
+    await act(async () => button('Comments')?.click());
+    expect(same()).toBe(true);
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    await act(async () => listRow()?.click());
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(same()).toBe(true);
+    await act(async () => columnButton('Comments')?.click());
+    await waitUntil(() => chatParam() === null, 'back to the list');
+    expect(same()).toBe(true);
+    await act(async () => columnButton('Close')?.click());
+    await waitUntil(() => detailColumn() === null, 'the column to close');
+    expect(same()).toBe(true);
+});
+
+// The find bar floats clear of whatever holds the right slot, plus its own 16px gutter.
+test("the find bar keeps clear of the right slot: none empty, a panel's or the list's 256, a thread's 400", async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await inBrowserFrames(() => button(`Find in document (${formatForDisplay('Mod+F')})`)?.click());
+    const bar = () => document.querySelector<HTMLElement>('.top-14');
+    expect(bar()?.style.right).toBe('');
+    await act(async () => button('Comments')?.click());
+    expect(bar()?.style.right).toBe('272px');
+    await clickCommentText();
+    await waitUntil(() => chatParam() === 'thread-1.eigenchat', 'the thread');
+    expect(bar()?.style.right).toBe('416px');
+    await act(async () => columnButton('Close')?.click());
+    await waitUntil(() => detailColumn() === null, 'the column to close');
+    expect(bar()?.style.right).toBe('');
+    await act(async () => void bodyEditor().commands.insertTable({ rows: 2, cols: 2 }));
+    expect(bar()?.style.right).toBe('272px');
+});
+
+// The editor's undo is its own keymap, so a ⌘Z in the thread's reply box never reaches the document.
+test('⌘Z in the reply box leaves the document as it is', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await act(async () => void bodyEditor().chain().focus('end').insertContent(' world').run());
+    expect(bodyEditor().getText()).toBe('Hello world');
+    const replyBox = () => document.querySelector<HTMLTextAreaElement>('[data-slot="detail-column"] textarea');
+    await waitUntil(() => replyBox() !== null, 'the reply box');
+    await act(async () => replyBox()?.focus());
+    expect(document.activeElement).toBe(replyBox());
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+        await act(async () => {
+            replyBox()?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'z', bubbles: true, cancelable: true, ...modifier }),
+            );
+        });
+    }
+    expect(bodyEditor().getText()).toBe('Hello world');
 });
