@@ -16,7 +16,7 @@ import { useDriveQuickLook } from './use-drive-quick-look';
 
 type UseDriveListRouteOptions = {
     // The unsorted items backing the list: the fallback preview passes this whole set as siblings.
-    items: DrivePath[];
+    items: readonly DrivePath[];
     // The view's own capabilities: the preview's convert rows need somewhere to write.
     capabilities: DriveCapabilities;
     // Where a folder opens: the folder view, for example, stays in its own route.
