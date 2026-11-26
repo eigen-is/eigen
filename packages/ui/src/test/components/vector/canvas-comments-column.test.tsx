@@ -491,6 +491,26 @@ test('a click opens the thread with its reply box focused, a landing does not', 
     expect(thread.autoFocus).toBe(true);
 });
 
+// A click marks only the thread it opened while that stays open, so coming forward to it again is a landing.
+test('forward to a thread a click opened and X closed is a landing: no focus, and its anchor reveals', async () => {
+    const [key] = generateNKeysBetween(null, null, 1);
+    const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
+    writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box');
+    await openCanvas(['/']);
+    await act(async () => toggleComments());
+    await settle();
+    await click(listRow());
+    expect(thread.autoFocus).toBe(true);
+    await click(button('Close'));
+    expect(historyIndex()).toBe(0);
+    reveal.mockClear();
+    await act(async () => history.forward());
+    await settle();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(thread.autoFocus).toBe(false);
+    expect(reveal.mock.calls).toEqual([['box', 0]]);
+});
+
 test('the editor stays mounted through the list, a thread, back and close', async () => {
     await openCanvas(['/']);
     await act(async () => toggleComments());

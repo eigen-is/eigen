@@ -53,6 +53,12 @@ export function useCommentHost({ panel, chat, card, listPanel, ...lifecycleArgs 
     const lifecycle = useCommentLifecycle({ ...lifecycleArgs, chat });
     const { cards, allComments, openCard, missing } = lifecycle;
     const [clickedChat, setClickedChat] = useState<string | null>(null);
+    // A click marks its thread until the thread closes, so forward to it again is a landing.
+    const [shownChat, setShownChat] = useState(chat);
+    if (chat !== shownChat) {
+        setShownChat(chat);
+        if (!chat) setClickedChat(null);
+    }
     // Edit mode is pinned to a card id, so Edit can name a card before the URL opens it.
     const [editCardId, setEditCardId] = useState<string | null>(null);
 
