@@ -1,8 +1,8 @@
-// The toolbar above Calendar's views: Today, previous and next, the title with the view's days, and the view choice.
-// On a phone, Today folds into a kebab menu, the arrows sit beside it, away from the column's back, and the sidebar
-// picks the view. The URL holds the view and its focused day, so each control navigates to a new one, and switching
-// the view keeps the day. It also binds Google's keys for the same moves, and c for New event, while no dialog or menu
-// is open and the focus is not in the event's column.
+// The toolbar above Calendar's views: Today and the title with the view's days at the left, previous and next with the
+// view choice at the right, away from a phone's back. On a phone, Today folds into a kebab menu and the sidebar picks
+// the view. The URL holds the view and its focused day, so each control navigates to a new one, and switching the view
+// keeps the day. It also binds Google's keys for the same moves, and c for New event, while no dialog or menu is open
+// and the focus is not in the event's column.
 
 import type { CalendarViewMode } from '@workspace/lib/calendar';
 import {
@@ -49,21 +49,6 @@ export function CalendarToolbar({ mode, focus, onCreateEvent }: CalendarToolbarP
         enabled: !dialogOpen && !menuOpen && !focusInDetail,
     });
 
-    const arrows = (
-        <div className="flex items-center">
-            <TooltipButton
-                icon={ChevronLeft}
-                tooltipText={`Previous ${step}`}
-                onClick={() => show(mode, stepFocus(mode, focus, -1))}
-            />
-            <TooltipButton
-                icon={ChevronRight}
-                tooltipText={`Next ${step}`}
-                onClick={() => show(mode, stepFocus(mode, focus, 1))}
-            />
-        </div>
-    );
-
     return (
         <Toolbar>
             <div className="flex items-center gap-2">
@@ -72,39 +57,49 @@ export function CalendarToolbar({ mode, focus, onCreateEvent }: CalendarToolbarP
                         Today
                     </Button>
                 )}
-                {!isMobile && arrows}
                 <ToolbarTitle className="text-lg">{viewTitle(mode, focus)}</ToolbarTitle>
             </div>
 
-            {isMobile ? (
+            <div className="flex items-center gap-2">
                 <div className="flex items-center">
-                    {arrows}
+                    <TooltipButton
+                        icon={ChevronLeft}
+                        tooltipText={`Previous ${step}`}
+                        onClick={() => show(mode, stepFocus(mode, focus, -1))}
+                    />
+                    <TooltipButton
+                        icon={ChevronRight}
+                        tooltipText={`Next ${step}`}
+                        onClick={() => show(mode, stepFocus(mode, focus, 1))}
+                    />
+                </div>
+                {isMobile ? (
                     <DropdownMenu>
                         <KebabTrigger title="View options" />
                         <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={showToday}>Today</DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                </div>
-            ) : (
-                <Select
-                    value={mode}
-                    onValueChange={(value) => {
-                        if (isCalendarViewMode(value)) show(value, focus);
-                    }}
-                >
-                    <SelectTrigger className="w-28 h-8">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {VIEW_OPTIONS.map(({ value, label }) => (
-                            <SelectItem key={value} value={value}>
-                                {label}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            )}
+                ) : (
+                    <Select
+                        value={mode}
+                        onValueChange={(value) => {
+                            if (isCalendarViewMode(value)) show(value, focus);
+                        }}
+                    >
+                        <SelectTrigger className="w-28 h-8">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {VIEW_OPTIONS.map(({ value, label }) => (
+                                <SelectItem key={value} value={value}>
+                                    {label}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
+            </div>
         </Toolbar>
     );
 }

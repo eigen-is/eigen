@@ -1,5 +1,5 @@
-// The toolbar keeps the previous and next arrows before the title on a computer, and on a phone moves them after it,
-// beside the view menu, so they sit away from the column's back arrow.
+// The toolbar puts the previous and next arrows after the title, beside the view choice, on a computer and a phone
+// alike, so on a phone they sit away from the column's back arrow.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -46,10 +46,12 @@ async function renderToolbar(isMobile: boolean): Promise<string[]> {
     );
 }
 
-test('on a computer the arrows sit between Today and the title', async () => {
+test('on a computer the arrows follow Today and the title, before the view choice', async () => {
     const order = await renderToolbar(false);
-    expect(order.slice(0, 3)).toEqual(['Today', 'Previous week', 'Next week']);
-    expect(order[3]).toContain('Nov 2026');
+    expect(order[0]).toBe('Today');
+    expect(order[1]).toContain('Nov 2026');
+    expect(order.slice(2, 4)).toEqual(['Previous week', 'Next week']);
+    expect(order.length).toBe(5);
 });
 
 test('on a phone the arrows follow the title, beside the view menu', async () => {
