@@ -6,7 +6,7 @@
 import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError, insufficientStorage } from '../core/errors';
-import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
+import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, servedFileHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
 import { assertWritable } from './locks';
@@ -44,9 +44,8 @@ export async function handleGet(args: {
         ETag: etag,
         'Last-Modified': path.updatedAt.toUTCString(),
         'Accept-Ranges': 'bytes',
-        // A disguised upload opened in a browser must not run script with the viewer's session.
-        'X-Content-Type-Options': 'nosniff',
-        ...scriptableInlineHeaders(path.mimeType),
+        // A browser that opens the URL shows the file inline.
+        ...servedFileHeaders(path.mimeType, 'inline'),
     };
 
     if (headOnly) return new Response(null, { status: 200, headers });
@@ -127,12 +126,11 @@ export async function handlePut(args: {
                 }),
             ) ?? Buffer.alloc(0);
 
-        const mimeType = Bun.file(name).type || 'application/octet-stream';
         // An overwrite answers the row it committed, not a fresh read, which a later PUT can have changed already.
         const { path, etag } = existing
             ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
             : await drive
-                  .createNamedFile(mountId, parent.id, name, mimeType, data, user)
+                  .createNamedFile(mountId, parent.id, name, Bun.file(name).type, data, user)
                   .then((created) => ({ path: created, etag: computeEtag(created) }));
 
         return new Response(null, {

@@ -1,3 +1,7 @@
+// The HTTP pieces routes share: cache headers and ETags, conditional requests, bounded body reads, byte ranges,
+// Content-Disposition, and the type a stored file is kept under and the headers it is served back with. Routes such as
+// Drive's download and embed, the mail parts and WebDAV call them on every request.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { status } from 'elysia';
@@ -151,13 +155,37 @@ export function contentDisposition(type: 'attachment' | 'inline', fileName: stri
     return `${type}; filename="${ascii.replace(/"/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
-// Inline HTML/SVG/XML from the API's own origin could run script with the viewer's session: the sandbox CSP neutralises it, nosniff stops re-sniffing.
-export function scriptableInlineHeaders(mimeType: string): Record<string, string> {
-    const baseMime = mimeType.split(';')[0].trim().toLowerCase();
-    // An `<?xml-stylesheet?>` PI runs XSLT, so every XML flavor scripts too; `+xml` already covers svg and xhtml.
-    const isXml = baseMime === 'text/xml' || baseMime === 'application/xml' || baseMime.endsWith('+xml');
-    if (baseMime === 'text/html' || isXml) {
-        return { 'Content-Security-Policy': "sandbox; default-src 'none'", 'X-Content-Type-Options': 'nosniff' };
-    }
-    return {};
+// One `type/subtype` of RFC 9110 token characters, then parameters with no comma: a browser reads a comma list as
+// several types and takes the last, so `image/png, text/html` is no image.
+const MEDIA_TYPE = /^([!#$%&'*+.^_`|~0-9a-z-]+\/[!#$%&'*+.^_`|~0-9a-z-]+)\s*(?:;[^,]*)?$/;
+
+function mediaTypeEssence(mimeType: string): string | null {
+    return MEDIA_TYPE.exec(mimeType.trim().toLowerCase())?.[1] ?? null;
+}
+
+// The type a new file is stored under, from what a client or a sender said: its bare `type/subtype`, or the binary
+// default for anything that is not one media type.
+export function cleanMediaType(mimeType: string): string {
+    return mediaTypeEssence(mimeType) ?? 'application/octet-stream';
+}
+
+// The types a browser shows inline without running anything the file says. Any `+xml` type is a document whose
+// `<?xml-stylesheet?>` runs XSLT, an SVG among them.
+function isInertInline(mimeType: string): boolean {
+    const essence = mediaTypeEssence(mimeType);
+    if (essence === null || essence.endsWith('+xml')) return false;
+    return (
+        essence === 'application/pdf' ||
+        essence === 'text/plain' ||
+        essence.startsWith('image/') ||
+        essence.startsWith('audio/') ||
+        essence.startsWith('video/')
+    );
+}
+
+// Stored bytes shown inline come from the apps' own origin, so anything but an inert type gets the sandbox CSP, or
+// its script would run with the viewer's session. nosniff keeps the browser to the type the header names.
+export function servedFileHeaders(mimeType: string, disposition: 'attachment' | 'inline'): Record<string, string> {
+    if (disposition === 'attachment' || isInertInline(mimeType)) return { 'X-Content-Type-Options': 'nosniff' };
+    return { 'Content-Security-Policy': "sandbox; default-src 'none'", 'X-Content-Type-Options': 'nosniff' };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    cleanMediaType,
     contentDisposition,
     matchesIfMatch,
     matchesIfNoneMatch,
@@ -7,31 +8,70 @@ import {
     rangeResponse,
     readBoundedBody,
     readBoundedBodyBytes,
-    scriptableInlineHeaders,
+    servedFileHeaders,
 } from '../../lib/core/http';
 
 const SANDBOX_CSP = "sandbox; default-src 'none'";
 
-describe('scriptableInlineHeaders', () => {
-    test('sandboxes HTML, with the charset parameter along for the ride', () => {
-        expect(scriptableInlineHeaders('text/html')['Content-Security-Policy']).toBe(SANDBOX_CSP);
-        expect(scriptableInlineHeaders('text/html; charset=utf-8')['Content-Security-Policy']).toBe(SANDBOX_CSP);
-        expect(scriptableInlineHeaders('TEXT/HTML')['Content-Security-Policy']).toBe(SANDBOX_CSP);
-    });
-
-    test('sandboxes every XML flavour, whose xml-stylesheet PI runs XSLT', () => {
-        for (const type of ['text/xml', 'application/xml', 'image/svg+xml', 'application/xhtml+xml', 'text/foo+xml']) {
-            expect(scriptableInlineHeaders(type)['Content-Security-Policy']).toBe(SANDBOX_CSP);
+describe('servedFileHeaders', () => {
+    test('sandboxes every inline type outside the inert list, parameters and case aside', () => {
+        for (const type of [
+            'text/html',
+            'text/html; charset=utf-8',
+            'TEXT/HTML',
+            'text/xsl',
+            'text/xml',
+            'application/xml',
+            'image/svg+xml',
+            'application/xhtml+xml',
+            'text/foo+xml',
+            'image/foo+xml',
+            'text/markdown',
+            'application/octet-stream',
+            'image/png, text/html',
+            'text/plain, text/html',
+            'image/png; name="a,text/html"',
+            'image/',
+            'not a type',
+            '',
+        ]) {
+            expect(servedFileHeaders(type, 'inline')).toEqual({
+                'Content-Security-Policy': SANDBOX_CSP,
+                'X-Content-Type-Options': 'nosniff',
+            });
         }
     });
 
-    test('adds nosniff alongside the CSP', () => {
-        expect(scriptableInlineHeaders('image/svg+xml')['X-Content-Type-Options']).toBe('nosniff');
+    test('serves an inert type inline as it is, with nosniff', () => {
+        for (const type of [
+            'image/png',
+            'image/webp',
+            'IMAGE/JPEG',
+            'application/pdf',
+            'video/mp4',
+            'audio/mpeg',
+            'text/plain',
+            'text/plain;charset=utf-8',
+        ]) {
+            expect(servedFileHeaders(type, 'inline')).toEqual({ 'X-Content-Type-Options': 'nosniff' });
+        }
     });
 
-    test('leaves non-scriptable types unheadered so callers can spread unconditionally', () => {
-        for (const type of ['image/png', 'application/pdf', 'video/mp4', 'text/plain', 'application/xml-dtd']) {
-            expect(scriptableInlineHeaders(type)).toEqual({});
+    test('an attachment gets nosniff and no sandbox, whatever its type', () => {
+        expect(servedFileHeaders('text/html', 'attachment')).toEqual({ 'X-Content-Type-Options': 'nosniff' });
+    });
+});
+
+describe('cleanMediaType', () => {
+    test('keeps one lowercase type/subtype and drops its parameters', () => {
+        expect(cleanMediaType('text/xsl')).toBe('text/xsl');
+        expect(cleanMediaType(' Image/PNG ')).toBe('image/png');
+        expect(cleanMediaType('text/plain;charset=utf-8')).toBe('text/plain');
+    });
+
+    test('answers the binary default for anything that is not one media type', () => {
+        for (const type of ['', 'image/png, text/html', 'image/png text/html', 'image/', '/png', 'garbage', 'a/b/c']) {
+            expect(cleanMediaType(type)).toBe('application/octet-stream');
         }
     });
 });
