@@ -2,7 +2,7 @@
 // The view lists what the route's params name, shows the selection from its URL, and a selected row or the
 // way back changes only the search, on the same route with the same params. A row opens on a new entry, another
 // row replaces it, and closing goes back to the entry before.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -27,7 +27,7 @@ type LayoutProps = {
     pid?: string;
     onRowSelect: (path: DrivePath) => void;
     onClose: () => void;
-    onAfterAction: () => void;
+    onAfterAction: (actionType: string, data: Record<string, unknown>) => void;
 };
 let layout: LayoutProps | undefined;
 
@@ -129,7 +129,7 @@ async function open(url: string) {
         createElement(PreviewContext.Provider, { value: preview }, createElement(RouterProvider, { router })),
     ));
     if (!layout) throw new Error('the view drew no layout');
-    return { router, layout, index: () => history.location.state.__TSR_index };
+    return { router, history, layout, index: () => history.location.state.__TSR_index };
 }
 
 // The props of the layout's last render, since each navigation renders the view again.
@@ -190,9 +190,21 @@ test('Shared by me lists the viewer’s shared side its param names, and a selec
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
 });
 
-// A rename or a delete from the detail leaves the list as it was, without the stale selection.
-test('an action on a shared row clears the selection and stays on the shared list', async () => {
-    const { router, layout } = await open('/shared/by-me?pid=row-1&uid=owner-2&mid=team-1');
-    await act(async () => layout.onAfterAction());
+// A delete reports every item it removed, one call each, so only the open one's closes the detail, and only once: a
+// second back would leave the page.
+test('a delete closes the open row once, however many rows go with it, and leaves another row open', async () => {
+    const { router, history, layout, index } = await open('/shared/by-me');
+    await act(async () => layout.onRowSelect(row));
+    await act(async () => current().onAfterAction('delete', otherRow));
+    expect(where(router)).toEqual({ pathname: '/shared/by-me', search: SELECTED });
+
+    const back = spyOn(history, 'back');
+    await act(async () => {
+        current().onAfterAction('delete', row);
+        current().onAfterAction('delete', otherRow);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(back).toHaveBeenCalledTimes(1);
     expect(where(router)).toEqual({ pathname: '/shared/by-me', search: {} });
+    expect(index()).toBe(0);
 });

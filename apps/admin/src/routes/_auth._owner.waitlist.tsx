@@ -67,7 +67,7 @@ function WaitlistRoute() {
         navigate({ to: '/waitlist', search: { tab: value } });
     };
 
-    const detail = useDetailHistory(entryId, (next, { replace, state }) =>
+    const detail = useDetailHistory<string>(entryId !== undefined, (next, { replace, state }) =>
         navigate({ to: '/waitlist', search: (prev) => ({ ...prev, entryId: next }), replace, state }),
     );
 

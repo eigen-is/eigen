@@ -61,7 +61,7 @@ function ContactsRoute() {
     const deleteDialog = useDialogValue<Contact[]>();
     const deleteTargets = deleteDialog.value;
 
-    const detail = useDetailHistory(contactId, (next, { replace, state }) =>
+    const detail = useDetailHistory<string>(contactId !== undefined, (next, { replace, state }) =>
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },

@@ -2,7 +2,7 @@
 // every detail column shares. Opening from closed pushes an entry flagged as the detail's own, so a phone's back closes
 // it; a switch to another item replaces that entry; close goes back on the flagged entry and replaces anywhere else,
 // such as on a deep link, so X and back do the same and back after a close never reopens the item. The host keeps the
-// value in its URL and writes it through its own navigate.
+// item in its URL and writes it through its own navigate, so the hook asks only whether one is open.
 
 import type { HistoryState } from '@tanstack/react-router';
 import { useRouter } from '@tanstack/react-router';
@@ -16,14 +16,13 @@ type UseDetailHistoryReturn<T> = {
 };
 
 export function useDetailHistory<T>(
-    value: T | undefined,
+    isOpen: boolean,
     setValue: (next: T | undefined, options: DetailHistoryOptions) => void,
 ): UseDetailHistoryReturn<T> {
     const router = useRouter();
     return {
         open: (next) => {
-            if (value === undefined)
-                setValue(next, { replace: false, state: (prev) => ({ ...prev, detailPush: true }) });
+            if (!isOpen) setValue(next, { replace: false, state: (prev) => ({ ...prev, detailPush: true }) });
             else setValue(next, { replace: true, state: true });
         },
         close: () => {

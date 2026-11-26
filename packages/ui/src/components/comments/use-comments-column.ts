@@ -53,7 +53,7 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
     const { isMobile, isTablet } = useLayout();
     const navigate = useNavigate();
     const url = panel || chat ? { panel, chat } : undefined;
-    const history = useDetailHistory<CommentsColumnUrl>(url, (next, { replace, state }) =>
+    const history = useDetailHistory<CommentsColumnUrl>(url !== undefined, (next, { replace, state }) =>
         navigate({
             to: '.',
             search: (prev: CommentsColumnUrl) => ({ ...prev, panel: next?.panel, chat: next?.chat }),

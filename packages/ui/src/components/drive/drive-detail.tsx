@@ -18,6 +18,7 @@ import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import type { ReactNode } from 'react';
 import { DetailColumn } from '../layout/app/detail-column';
+import { LoadingState } from '../layout/app/loading-state';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveAccessList } from './drive-access-list';
 import type { DriveActionRunner } from './drive-action-runner';
@@ -43,7 +44,7 @@ export function DriveDetail({ path, siblings, actions, onClose }: DriveDetailPro
     if (!path)
         return (
             <DetailColumn width="large" onClose={onClose}>
-                {null}
+                <LoadingState />
             </DetailColumn>
         );
 
@@ -86,11 +87,7 @@ export function DriveDetail({ path, siblings, actions, onClose }: DriveDetailPro
             <h2 className="text-xl font-medium truncate overflow-hidden mb-3">{stripEigenExtension(path.name)}</h2>
             <div className="flex items-center gap-2 mb-4">
                 {open && (
-                    <Button
-                        size="sm"
-                        onClick={() => actions.run(open.id, [path])}
-                        className="flex-1 h-8 bg-app text-white hover:bg-app hover:opacity-90"
-                    >
+                    <Button size="sm" onClick={() => actions.run(open.id, [path])} className="flex-1">
                         {open.label}
                     </Button>
                 )}
@@ -171,7 +168,7 @@ function DetailsSection({ path, actions }: { path: DrivePath; actions: DriveActi
                 )}
                 <Row label="Size" value={formatFileSize(path.size)} />
                 <Row label="Created" value={formatDateTime(path.createdAt)} />
-                {details?.width && details?.height && (
+                {details?.width && details.height && (
                     <Row label="Dimensions" value={`${details.width} × ${details.height}`} />
                 )}
                 {details?.duration && (

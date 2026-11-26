@@ -13,7 +13,7 @@ import type { EigenDocAppConfig } from './eigendoc-config';
 import { eigenDocSharedTitle } from './eigendoc-config';
 import type { EigenDocListRoute } from './eigendoc-list-view';
 import { EigenDocDriveContext } from './eigendoc-root';
-import { useDriveListRoute } from './use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from './use-drive-list-route';
 
 type EigenDocSharedViewProps = {
     config: EigenDocAppConfig;
@@ -40,17 +40,12 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
     const { data: shared = [], isLoading, error } = useSharedPaths(viewerId, byMe ? 'by-me' : 'with-me');
     const folderContents = shared.filter((path) => path.type === config.type);
 
-    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: openDocument,
         pid,
-        setSelectedItem: (path, { replace, state }) =>
-            navigate({
-                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
-                replace,
-                state,
-            }),
+        setSelectedItem: selectInSearch(navigate),
     });
 
     return (
@@ -66,7 +61,7 @@ export function EigenDocSharedView({ config, route }: EigenDocSharedViewProps) {
             onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
             onClose={onClose}
-            onAfterAction={onClose}
+            onAfterAction={onAfterAction}
             capabilities={capabilities}
             title={eigenDocSharedTitle(byMe ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}

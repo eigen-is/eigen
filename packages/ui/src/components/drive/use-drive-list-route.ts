@@ -1,15 +1,14 @@
-// The row wiring every Drive list route shares, such as the folder view or Shared with me: what a row
-// does when it is selected, activated or quick-looked, and how the detail it opens closes. A route passes its
-// items and capabilities, where a folder opens and how it writes the open item into its URL, and hands the
-// handlers to DriveLayout. The detail opens and closes through useDetailHistory, so an arrow key's next row
-// replaces the entry and back after a close never reopens the item.
+// The row wiring every Drive list route shares, such as the folder view or Shared with me: what a row does when it
+// is selected, activated or quick-looked, and how the detail it opens closes. A route passes its items, capabilities
+// and where a folder opens, and hands the handlers to DriveLayout. The detail opens and closes through
+// useDetailHistory, so an arrow key's next row replaces the entry and back after a close never reopens the item.
 
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
-import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import type { DriveCapabilities, DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { isInlineEditable } from '@workspace/lib/types/file-kinds';
 import type { DetailHistoryOptions } from '../../hooks/use-detail-history';
 import { useDetailHistory } from '../../hooks/use-detail-history';
@@ -27,14 +26,25 @@ type UseDriveListRouteOptions = {
     // The id of the item the URL opens, its `?pid=`.
     pid?: string;
     // Writes the open item, or none, into the route's URL, with the history options its navigate passes on.
-    setSelectedItem: (path: DrivePath | undefined, options: DetailHistoryOptions) => void;
+    setSelectedItem: SetSelectedItem;
 };
+
+type SetSelectedItem = (path: DrivePath | undefined, options: DetailHistoryOptions) => void;
+
+// A route's own navigate, which keeps the route and its params, typed by its shape: this file compiles in every
+// app's router, and only a route that validates Drive's search has these params.
+export type DriveSearchNavigate = (options: {
+    search: (prev: DriveSearchParams) => DriveSearchParams;
+    replace: boolean;
+    state: DetailHistoryOptions['state'];
+}) => Promise<void>;
 
 type DriveListRouteHandlers = {
     onRowSelect: (path: DrivePath) => void;
     onRowActivate: (path: DrivePath) => void;
     onQuickLook: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     onClose: () => void;
+    onAfterAction: (actionType: string, data: Record<string, unknown>) => void;
 };
 
 // A row activates by its kind: a folder opens in the route, a document in its app, an editable text file
@@ -51,18 +61,12 @@ export function useDriveListRoute({
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
     const onQuickLook = useDriveQuickLook(capabilities.canWrite);
-    // The URL holds the id; the route writes the item's owner and mount beside it, so it gets the item.
-    const detail = useDetailHistory(pid, (id, options) =>
-        setSelectedItem(
-            items.find((path) => path.id === id),
-            options,
-        ),
-    );
+    const detail = useDetailHistory<DrivePath>(pid !== undefined, setSelectedItem);
 
     const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities.canWrite);
 
     const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'folder') {
+        if (isFolderType(path.type)) {
             onOpenFolder(path);
         } else if (isDocumentType(path.type)) {
             openDocument(path);
@@ -83,9 +87,25 @@ export function useDriveListRoute({
         if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
             onRowActivate(path);
         } else {
-            detail.open(path.id);
+            detail.open(path);
         }
     };
 
-    return { onRowSelect, onRowActivate, onQuickLook, onClose: detail.close };
+    // A delete calls this once per deleted item, so only the open one's closes the detail.
+    const onAfterAction = (actionType: string, data: Record<string, unknown>) => {
+        if (actionType === 'delete' && data.id === pid) detail.close();
+    };
+
+    return { onRowSelect, onRowActivate, onQuickLook, onClose: detail.close, onAfterAction };
+}
+
+// The setter of a listing of many owners, such as Recent: the open item's id, owner and mount go into the route's
+// `?pid=&uid=&mid=`.
+export function selectInSearch(navigate: DriveSearchNavigate): SetSelectedItem {
+    return (path, { replace, state }) =>
+        navigate({
+            search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
+            replace,
+            state,
+        });
 }

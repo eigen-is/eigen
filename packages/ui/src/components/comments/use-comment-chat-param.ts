@@ -18,7 +18,7 @@ export function useCommentChatParam(chat: string | undefined): CommentChatParam 
     const navigate = useNavigate();
     const setChat = (next: string | undefined, { replace, state }: DetailHistoryOptions) =>
         navigate({ to: '.', search: (prev: { chat?: string }) => ({ ...prev, chat: next }), replace, state });
-    const { open, close } = useDetailHistory(chat, setChat);
+    const { open, close } = useDetailHistory(chat !== undefined, setChat);
     return {
         chat,
         onOpenChat: open,

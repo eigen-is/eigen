@@ -28,7 +28,7 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
     const to = guests ? '/guests' : '/users';
     const selected = users.find((u) => u.id === userId);
 
-    const detail = useDetailHistory(userId, (next, { replace, state }) =>
+    const detail = useDetailHistory<string>(userId !== undefined, (next, { replace, state }) =>
         navigate({ to, search: (prev) => ({ ...prev, userId: next }), replace, state }),
     );
 

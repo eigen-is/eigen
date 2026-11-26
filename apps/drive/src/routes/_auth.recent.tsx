@@ -3,14 +3,13 @@
 // because the shared view preference could open it alphabetically. The rows belong to many owners, so the
 // page is read-only, and a selected row's ?pid=&uid=&mid= opens its detail beside the list.
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { usePathInfo, useRecentPaths, validateDriveSearch } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSort } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
-import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/recent')({
@@ -19,12 +18,12 @@ export const Route = createFileRoute('/_auth/recent')({
 });
 
 function RecentRoute() {
-    const navigate = useNavigate();
+    const navigate = Route.useNavigate();
     const { user } = Route.useRouteContext();
     const { pid, uid, mid } = Route.useSearch();
 
     const { data: recentPaths = [], isLoading, error } = useRecentPaths(true);
-    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
+    const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid);
     const [sort, setSort] = useState<DriveSort>({ key: 'modified', dir: 'desc' });
     const lastActivity = useMemo(
         () => new Map(recentPaths.map((path) => [path.id, path.lastActivityAt])),
@@ -34,19 +33,13 @@ function RecentRoute() {
     const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
         items: recentPaths,
         capabilities: DRIVE_CAPABILITIES.readOnly,
-        onOpenFolder: (path: DrivePath) =>
+        onOpenFolder: (path) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
         pid,
-        setSelectedItem: (path, { replace, state }) =>
-            navigate({
-                to: Route.fullPath,
-                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
-                replace,
-                state,
-            }),
+        setSelectedItem: selectInSearch(navigate),
     });
 
     return (

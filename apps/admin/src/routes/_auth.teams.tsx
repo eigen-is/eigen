@@ -34,7 +34,7 @@ function TeamsPage({ organizationId }: { organizationId: string }) {
     const [searchQuery, setSearchQuery] = useState('');
     const { data: teams = [], isLoading } = useTeams(organizationId);
 
-    const detail = useDetailHistory(teamId, (next, { replace, state }) =>
+    const detail = useDetailHistory<string>(teamId !== undefined, (next, { replace, state }) =>
         navigate({ to: '/teams', search: (prev) => ({ ...prev, teamId: next }), replace, state }),
     );
 

@@ -10,25 +10,21 @@ import type { AuthUser } from '@workspace/lib/types/auth';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useContext } from 'react';
-import type { DetailHistoryOptions } from '../../hooks/use-detail-history';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
-import { useDriveListRoute } from './use-drive-list-route';
+import type { DriveSearchNavigate } from './use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from './use-drive-list-route';
 
 // An app route typed by its shape, as each app has its own route tree; a search without validateDriveSearch fails to
-// compile through `types`. Its navigate keeps the route and its params, so it changes only the search.
+// compile through `types`.
 export type EigenDocListRoute<TParams> = {
     types: { searchValidator: typeof validateDriveSearch };
     useParams: () => TParams;
     useSearch: () => DriveSearchParams;
     useRouteContext: () => { user: AuthUser };
-    useNavigate: () => (options: {
-        search: (prev: DriveSearchParams) => DriveSearchParams;
-        replace: boolean;
-        state: DetailHistoryOptions['state'];
-    }) => Promise<void>;
+    useNavigate: () => DriveSearchNavigate;
 };
 
 type EigenDocListViewProps = {
@@ -62,17 +58,12 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
     const mountScoped = useMountMimeContent(ownerId ?? '', mountId ?? '', config.mimeType);
     const { data: folderContents = [], isLoading, error } = isMountScoped ? mountScoped : aggregate;
 
-    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities,
         onOpenFolder: openDocument,
         pid,
-        setSelectedItem: (path, { replace, state }) =>
-            navigate({
-                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
-                replace,
-                state,
-            }),
+        setSelectedItem: selectInSearch(navigate),
     });
 
     return (
@@ -88,7 +79,7 @@ export function EigenDocListView({ config, route }: EigenDocListViewProps) {
             onRowActivate={onRowActivate}
             onQuickLook={onQuickLook}
             onClose={onClose}
-            onAfterAction={onClose}
+            onAfterAction={onAfterAction}
             capabilities={capabilities}
             title={config.allLabel}
             currentPath={rootPath}

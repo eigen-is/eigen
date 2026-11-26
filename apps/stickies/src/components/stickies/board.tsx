@@ -167,7 +167,7 @@ export function StickiesBoard({
     );
     const navigate = useNavigate();
     const activityOpen = panel === 'activity';
-    const activity = useDetailHistory<'activity'>(activityOpen ? 'activity' : undefined, (next, { replace, state }) =>
+    const activity = useDetailHistory<'activity'>(activityOpen, (next, { replace, state }) =>
         navigate({ to: '.', search: (prev: { panel?: DocumentPanel }) => ({ ...prev, panel: next }), replace, state }),
     );
     const activityColumn = activityOpen ? (

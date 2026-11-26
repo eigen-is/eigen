@@ -107,7 +107,7 @@ export function useMailActions() {
 
     // The composer is an open detail too, so a message opened from it replaces its entry. Opening or closing leaves
     // the compose session's history state behind, so its prefill never rides along into a message or the list.
-    const detail = useDetailHistory(mailId ?? mode, (next, { replace, state }) =>
+    const detail = useDetailHistory<string>((mailId ?? mode) !== undefined, (next, { replace, state }) =>
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },

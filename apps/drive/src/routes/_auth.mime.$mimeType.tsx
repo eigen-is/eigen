@@ -2,14 +2,14 @@
 // wherever it lives, with the selected one's ?pid=&uid=&mid= detail beside the list. A document kind
 // offers New for that kind only.
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useAggregateMimeContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import type { EigenDocType } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
-import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
+import { selectInSearch, useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
@@ -19,7 +19,7 @@ export const Route = createFileRoute('/_auth/mime/$mimeType')({
 
 function MimeRoute() {
     const { mimeType } = Route.useParams();
-    const navigate = useNavigate();
+    const navigate = Route.useNavigate();
     const { pid, uid, mid } = Route.useSearch();
     const { user } = Route.useRouteContext();
     const ownerId = user.id;
@@ -27,23 +27,16 @@ function MimeRoute() {
 
     const { data: folderContents = [], isLoading, error } = useAggregateMimeContent(mimeType);
 
-    const { onRowSelect, onRowActivate, onQuickLook, onClose } = useDriveListRoute({
+    const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
         capabilities: DRIVE_CAPABILITIES.listing,
-        onOpenFolder: (path: DrivePath) =>
+        onOpenFolder: (path) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             }),
         pid,
-        setSelectedItem: (path, { replace, state }) =>
-            navigate({
-                to: Route.fullPath,
-                params: { mimeType },
-                search: (prev) => ({ ...prev, pid: path?.id, uid: path?.ownerId, mid: path?.mountId }),
-                replace,
-                state,
-            }),
+        setSelectedItem: selectInSearch(navigate),
     });
 
     // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it
@@ -63,6 +56,7 @@ function MimeRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onClose={onClose}
+            onAfterAction={onAfterAction}
             capabilities={{ ...DRIVE_CAPABILITIES.listing, createTypes }}
             title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}

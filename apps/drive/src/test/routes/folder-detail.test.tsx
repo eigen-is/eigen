@@ -1,7 +1,7 @@
 // A folder's selected item opens in a detail column beside the list. Its share, watch and ⋮ sit in the column's bar,
 // its Open in the body under the name. A row opens it on a new entry and another row or an arrow key replaces that
 // entry, so X or Esc goes back to the closed list. A link straight to an item closes by replace, so back after X
-// does not reopen it.
+// does not reopen it, and a link to the share dialog closes the same way.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
@@ -39,6 +39,16 @@ const noPath = { data: null, isLoading: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
+const realShare = { ...(await import('@workspace/ui/components/drive/drive-access-dialog')) };
+// The Share dialog as a button that closes it, as its own Close does.
+mock.module('@workspace/ui/components/drive/drive-access-dialog', () => ({
+    DriveAccessDialog: ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) =>
+        open ? (
+            <button type="button" data-testid="share" onClick={() => onOpenChange(false)}>
+                Close share
+            </button>
+        ) : null,
+}));
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
@@ -52,6 +62,7 @@ mock.module('@workspace/lib/drive', () => ({
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
+    mock.module('@workspace/ui/components/drive/drive-access-dialog', () => realShare);
 });
 
 const { act } = await import('react');
@@ -171,4 +182,16 @@ test('share, watch and ⋮ sit in the column’s bar, and Open in the body under
         'Open',
         'Download',
     ]);
+});
+
+test('closing the share dialog a link opened replaces it, so back does not reopen the dialog', async () => {
+    const page = await open(FOLDER, `${FOLDER}?pid=alpha.txt&sharePathId=bravo.txt`);
+    const share = () => document.querySelector<HTMLButtonElement>('[data-testid="share"]');
+    expect(share()).not.toBeNull();
+    await settle(() => share()?.click());
+    expect(page.search()).toEqual({ pid: 'alpha.txt' });
+    expect(page.index()).toBe(1);
+    await page.back();
+    expect(page.index()).toBe(0);
+    expect(share()).toBeNull();
 });

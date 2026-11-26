@@ -22,7 +22,7 @@ afterEach(() => unmount());
 function Page() {
     const { item } = router.useSearch({ strict: false });
     const navigate = router.useNavigate();
-    detail = useDetailHistory(item, (next, { replace, state }) =>
+    detail = useDetailHistory<string>(item !== undefined, (next, { replace, state }) =>
         navigate({ to: '/', search: { item: next }, replace, state }),
     );
     return item ?? 'closed';

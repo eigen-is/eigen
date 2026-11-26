@@ -83,7 +83,7 @@ function CalendarView() {
     const listsLoading = isLoading || calendarsLoading || sharedLoading || sharedEventsLoading;
 
     const openEvent = eventId ? { eventId, occurrence } : undefined;
-    const detailHistory = useDetailHistory<EventKey>(openEvent, (next, { replace, state }) =>
+    const detailHistory = useDetailHistory<EventKey>(openEvent !== undefined, (next, { replace, state }) =>
         navigate({
             search: (prev) => ({ ...prev, eventId: next?.eventId, occurrence: next?.occurrence }),
             replace,
