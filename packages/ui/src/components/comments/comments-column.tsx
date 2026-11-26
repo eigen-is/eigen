@@ -89,7 +89,7 @@ export function CommentsColumn({
         >
             {(thread) => (
                 <DetailColumn
-                    width={threadOpen ? 'large' : 'medium'}
+                    width={column.width}
                     title={showComments ? 'Comments' : 'Activity'}
                     onBack={threadOpen ? column.back : undefined}
                     actions={threadOpen ? thread?.actions : listActions}

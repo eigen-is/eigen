@@ -65,7 +65,7 @@ export function CanvasDocumentShell({
     const rightPx = isMobile
         ? 0
         : column.open
-          ? columnWidthPx(column.threadOpen ? 'large' : 'medium', isTablet)
+          ? columnWidthPx(column.width, isTablet)
           : canEdit
             ? columnWidthPx('small', isTablet)
             : 0;
