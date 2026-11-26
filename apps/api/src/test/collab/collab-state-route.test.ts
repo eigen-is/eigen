@@ -387,6 +387,41 @@ describe('one version is built once and then served from its file', () => {
     });
 });
 
+// A build that ran out of time or memory would again, each time on the only transform slot, and a link reader's tab
+// would retry a 5xx every few seconds. So the version answers the 413 an export or an index answers, once remembered.
+describe('a state whose build keeps failing', () => {
+    test.each(['timeout', 'out-of-memory'] as const)(
+        'one that hit %s runs once for three requests, and a new version tries again',
+        async (code) => {
+            const doc = await newPublicDoc();
+            const { write } = await member(doc.id);
+            await write('huge');
+            const run = spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
+                ok: false as const,
+                error: { code, message: 'Document transform failed' },
+            }));
+            const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                const answers = [await visit(doc.id), await visit(doc.id), await visit(doc.id)];
+                expect(answers.map((res) => res.status)).toEqual([413, 413, 413]);
+                expect(answers.map((res) => res.headers.get('etag'))).toEqual([null, null, null]);
+                expect(stateJobs(run).length).toBe(1);
+                expect((await cachedFiles(doc.id)).some((name) => name.endsWith('.yjs.failed'))).toBe(true);
+
+                await write(' and more');
+                expect((await visit(doc.id)).status).toBe(413);
+                expect(stateJobs(run).length).toBe(2);
+            } finally {
+                errorSpy.mockRestore();
+                run.mockRestore();
+            }
+            expect((await visit(doc.id)).status).toBe(413);
+            await write('!');
+            expect((await docOf(await visit(doc.id))).getText('probe').toString()).toBe('huge and more!');
+        },
+    );
+});
+
 describe('who is served', () => {
     test("a visitor's answer is binary and kept by no cache, and a signed-in caller's revalidates", async () => {
         const doc = await newPublicDoc();
