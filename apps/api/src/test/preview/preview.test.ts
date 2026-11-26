@@ -647,22 +647,27 @@ describe('isExiftoolCandidate', () => {
     });
 });
 
-// Each write leaves one version of a path behind, whatever its kind, and never touches another path's.
+// Each write leaves one version of each kind of a path behind, and never touches another path's. The kind is the
+// extension, so a format bump within a kind prunes the earlier format.
 describe('a written preview', () => {
-    test('prunes the older versions of its path and keeps other paths', async () => {
+    test("prunes the older versions of its kind and keeps its path's other kinds and other paths", async () => {
         const bytes = Buffer.from('current');
         const { mount, path } = await previewMount('prune-old-versions', 'notes.txt', 'text/plain', bytes);
         const other = `00000000-0000-0000-0000-000000000000-100.${TEXT_FORMAT}.json`;
-        writeFileSync(join(mount.previewsDir, `${path.id}-100.screen.webp`), 'x');
-        writeFileSync(join(mount.previewsDir, `${path.id}-100.${VCARD_FORMAT}.json`), '{}');
-        writeFileSync(join(mount.previewsDir, other), '{}');
+        const screen = `${path.id}-100.screen.webp`;
+        const state = `${path.id}-epoch.0.1.state-f1.yjs`;
+        const olderFormat = `${path.id}-100.f1.json`;
+        for (const name of [screen, state, other]) writeFileSync(join(mount.previewsDir, name), 'x');
+        for (const name of [olderFormat, `${olderFormat}.failed`, `${path.id}-100.${VCARD_FORMAT}.json`]) {
+            writeFileSync(join(mount.previewsDir, name), '{}');
+        }
 
         expect((await getTextPreview(mount, path, foreground))?.value.body).toContain('current');
         const kept = await eventually(async () => {
             const ofPath = readdirSync(mount.previewsDir).filter((name) => name.startsWith(`${path.id}-`));
-            return ofPath.length === 1 ? ofPath : undefined;
+            return ofPath.length === 3 ? ofPath.sort() : undefined;
         }, 'the prune of older versions');
-        expect(kept).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
+        expect(kept).toEqual([state, screen, `${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`].sort());
         expect(readdirSync(mount.previewsDir)).toContain(other);
     });
 
