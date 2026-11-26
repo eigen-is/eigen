@@ -157,3 +157,92 @@ test('the reply box takes the focus as the thread shows, unless the host turns t
     expect(document.activeElement?.tagName).toBe('TEXTAREA');
     await act(async () => again.unmount());
 });
+
+// A peer's reply or the window coming back never pulls the focus from where the user is, such as a slide or a search
+// field. The box takes it only as it opens and after the user's own send.
+test('an incoming message and the window coming back leave the focus where it is', async () => {
+    const container = document.createElement('div');
+    const elsewhere = document.createElement('button');
+    document.body.append(container, elsewhere);
+    const root = createRoot(container);
+    const thread = () =>
+        createElement(
+            QueryClientProvider,
+            { client },
+            createElement(
+                UploadProvider,
+                null,
+                createElement(
+                    PreviewProvider,
+                    null,
+                    createElement(CommentThread, { ownerId: 'u1', mountId: 'm1', pathId: 'doc', chatName: 'first' }),
+                ),
+            ),
+        );
+    await act(async () => root.render(thread()));
+    expect(document.activeElement?.tagName).toBe('TEXTAREA');
+
+    elsewhere.focus();
+    room.messages = [
+        {
+            id: 'm1',
+            authorEmail: 'ada@test.eigen.is',
+            type: 'message',
+            content: 'Done',
+            attachments: null,
+            whisperTo: null,
+            replyTo: null,
+            editedAt: null,
+            deletedAt: null,
+            createdAt: new Date('2026-11-25T09:00:00Z'),
+        },
+    ];
+    await act(async () => root.render(thread()));
+    expect(document.activeElement).toBe(elsewhere);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    expect(document.activeElement).toBe(elsewhere);
+
+    room.messages = [];
+    await act(async () => root.unmount());
+    elsewhere.remove();
+});
+
+test('a send keeps the focus in the reply box', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+        root.render(
+            createElement(
+                QueryClientProvider,
+                { client },
+                createElement(
+                    UploadProvider,
+                    null,
+                    createElement(
+                        PreviewProvider,
+                        null,
+                        createElement(CommentThread, {
+                            ownerId: 'u1',
+                            mountId: 'm1',
+                            pathId: 'doc',
+                            chatName: 'first',
+                            autoFocus: false,
+                        }),
+                    ),
+                ),
+            ),
+        ),
+    );
+    const box = container.querySelector('textarea');
+    if (!box) throw new Error('no reply box');
+    box.focus();
+    await type(box, 'On it');
+    await act(async () => {
+        box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(box.value).toBe('');
+    expect(document.activeElement).toBe(box);
+    await act(async () => root.unmount());
+});

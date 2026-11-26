@@ -46,6 +46,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Confirmations in Mail and Contacts** — keep their text while they close, instead of flashing a count of 0
 - **Edit data on charts** — clicking a row number or a column letter selects it without scrolling the grid to its far edge
 - **Dates as names in Calendar, Drive and Mail** — an event, calendar, file or mail subject written as a date, such as 2026-10-09, shows as you typed it
+- **Message box in Chat and comments** — a new message or coming back to the window no longer pulls the focus into the box, so it stays in a search field or on the slide you were editing
 - **Saving a contact twice** — pressing Enter twice on New contact or Edit contact no longer creates the contact twice
 - **Change password in Space** — it can't be sent twice, a refused change leaves no error behind, and the "at least 8 characters" message clears once the password is long enough
 - **Drafts in Mail** — closing or reloading the tab before the last change of a draft is saved asks first

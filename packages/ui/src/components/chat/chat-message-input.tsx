@@ -30,12 +30,14 @@ type ChatMessageInputProps = {
     placeholder: string;
     roomMembers: readonly RoomMember[];
     currentUserEmail: string;
-    messageCount: number;
+    // Each change hands the box the focus back, such as when the user's edit of a message ends.
+    focusTrigger: number;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
     onAttachClick: () => void;
     driveAttachments: readonly ChatAttachment[];
     onRemoveDriveAttachment: (attachment: ChatAttachment) => void;
-    // Off, the box never takes the focus by itself, such as in a comment thread a link opened beside a document.
+    // On, the box takes the focus as it opens. Off, it does so only after the user's own send or edit, such as in a
+    // comment thread a link opened beside a document.
     autoFocus?: boolean;
 };
 
@@ -47,7 +49,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         placeholder,
         roomMembers,
         currentUserEmail,
-        messageCount,
+        focusTrigger,
         onKeyDown: onKeyDownProp,
         onAttachClick,
         driveAttachments,
@@ -70,13 +72,16 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         if (!readOnly) textareaRef.current?.focus();
     }, [readOnly]);
 
+    // Never on a peer's message or as the window comes back, which would pull the focus from where the user is.
     useEffect(() => {
-        if (!autoFocus) return;
+        if (autoFocus) focusTextarea();
+    }, [autoFocus, focusTextarea]);
+    const shownTrigger = useRef(focusTrigger);
+    useEffect(() => {
+        if (focusTrigger === shownTrigger.current) return;
+        shownTrigger.current = focusTrigger;
         focusTextarea();
-        const onFocus = () => focusTextarea();
-        window.addEventListener('focus', onFocus);
-        return () => window.removeEventListener('focus', onFocus);
-    }, [autoFocus, messageCount, focusTextarea]);
+    }, [focusTrigger, focusTextarea]);
 
     useFitHeight(textareaRef, content);
 
