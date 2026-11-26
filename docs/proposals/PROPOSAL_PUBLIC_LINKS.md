@@ -2,7 +2,7 @@
 
 This proposal lets a user share a file, a folder or a collab document with anyone who has its link. The visitor needs no account and no emailed code: opening the link opens the item, view-only. Users ask for this again and again: today the only way to reach someone outside the server is a guest, and a guest needs an email address and a code for every sign-in.
 
-**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row in P1. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md). No password, no reset, no expiry date, no edit links, no view counter and no document export for a visitor in this version.
+**Status:** built. [ROADMAP.md](../ROADMAP.md) keeps the follow-ups. Sharing is described in [ACL.md](../ACL.md), guests in [GUEST-ACCESS.md](../GUEST-ACCESS.md), the collab socket in [COLLAB.md](../COLLAB.md). No password, no reset, no expiry date, no edit links, no view counter and no document export for a visitor in this version.
 
 > **TLDR:** "Anyone with the link" is a third choice of **General access**, beside **Restricted** and **Anyone signed in**. It is one more value of the path's `visibility`, and nothing else is stored. The link is the item's ordinary URL, the one in the address bar, as with Google. Thirteen read routes and the collab socket answer a request that has no login when the path, or a folder above it, has that value. Every other route keeps asking for a signed-in user, so it refuses a visitor without anyone having to remember to. A signed-in person gets what "Anyone signed in, can view" gives today. There is no link account, no key, no cookie and no new route.
 
@@ -15,7 +15,7 @@ The whole design in one table:
 | 3 | What a link opens | `canReadByLink` in `lib/drive/acl.ts` | The path and what is below it, by an allow-list of types, never a write |
 | 4 | What a visitor is handed | `LinkDrive` | A read-only wrapper: a few reads, trimmed |
 | 5 | Which routes listen | The `linkAuth` macro | Thirteen read routes and the socket: `user ? getSharedDrive : LinkDrive` |
-| 6 | The socket | `CollabDocument` and `routes/collab.ts` | A connection without a user gets no awareness and may send almost nothing |
+| 6 | The socket | `CollabDocument` and `routes/collab.ts` | A connection without a user opens only where the rule admits it, gets no sync step 1 and no awareness, and is answered only its own sync step 1 |
 | 7 | The visitor's screen | One `beforeLoad` guard for seven routes | The item's own route renders without a login; "visitor" means "no user" |
 
 ## The problem
@@ -46,14 +46,15 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 | Restricted | `private` | No access | No access |
 | Anyone signed in with the link | `public-read`, `public-write` | Reads or edits | No access |
 | Anyone with the link | `link` | Reads, exactly as under `public-read` | The visitor view |
+| Anyone with the link, public links off | `link` | No access | No access |
 
-**For a signed-in user `'link'` is `public-read`.** `grantsPublicRead` (`acl.ts`) answers true for it, and that is the whole change: `canFromAncestors` then reads it as `public-read` does, and `checkAccessForEmails` (`lib/drive/sharing.ts`) too. Write is untouched.
+**For a signed-in user `'link'` is `public-read` while public links are on.** `grantsPublicRead` (`acl.ts`) answers true for it only while `arePublicLinksEnabled()`, and that is the whole change: `canFromAncestors` then reads it as `public-read` does, and `checkAccessForEmails` (`lib/drive/sharing.ts`) too. Write is untouched. With public links off a link is closed for everyone: a signed-in non-member or a guest loses the read too, and only people with an ACL entry, the owner and the team keep their access.
 
 **It travels on the existing ACL route.** `PUT /drive/:ownerId/:mountId/path/:pathId/acl` already takes `visibility`, the dialog already sends it on Save through `useUpdateACL`, and `SharedDrive.updateACLDelta` already checks write and `sharingRestricted`. So an editor may publish under the same rule as any sharing change, and no new route or hook is needed. The copy-link icon copies `getDriveShareUrl(path)` as it does today.
 
 **One place refuses it.** `Drive.updateACLDelta` refuses a path that becomes `'link'`: 403 while public links are off, and 400 on a chat, on a path inside a document, and on anything that is not a file, a folder or a collab document. A path that already is `'link'` saves as before, so it can be shared further or closed while public links are off. The mount root is refused already. It reads the path with `getActivePath`, which checks only the path's own `trashedAt`; the rule below checks the whole chain, so a value saved under a trashed folder opens nothing.
 
-**The switch.** `sharing.publicLinks` is a boolean in `ServerSettings` (`packages/lib/src/types/settings.ts`), on by default. "On" for the code is `getServerSettings().sharing.publicLinks && !isDemo()` (`lib/config/env.ts`), since anyone can upload to a demo server. Off, no link can be saved and every existing one is closed. The values stay stored, so turning it on opens them again.
+**The switch.** `sharing.publicLinks` is a boolean in `ServerSettings` (`packages/lib/src/types/settings.ts`), on by default. "On" for the code is `getServerSettings().sharing.publicLinks && !isDemo()` (`lib/config/env.ts`), since anyone can upload to a demo server. Off, no link can be saved and every existing one is closed, for a visitor and a signed-in non-member alike. The values stay stored, so turning it on opens them again, and the share dialog can still save another General access over one.
 
 ## What a link opens
 
@@ -65,7 +66,7 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 There is no write variant: a visitor can't write because no code asks.
 
-`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with only the reads its routes call: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile` and `canRead`, and `getCollabDocument` with unit 3. Each runs the rule first, so `getPath` refuses a chat row too. `canRead(mountId, pathId)` takes no user and answers a boolean, and there is no `canWrite`: a visitor never writes, so the three routes that report rights answer `canWrite: false` themselves. The read methods share their signatures with the other two drives, so a route needs no `instanceof`. `resolveFile` hands the route the owner's own row, because it feeds the preview cache, which every caller shares, and never an answer. What a visitor is handed is trimmed in one place:
+`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) wraps the owner's `Drive` by composition, as `SharedDrive` does, with only the reads its routes call: `getPath`, `getFolderContents`, `breadCrumb`, `resolveFile`, `canRead` and `getCollabDocument`, and the socket's `holdHome`. Each read runs the rule first, so `getPath` refuses a chat row too. `canRead(mountId, pathId)` takes no user and answers a boolean, and there is no `canWrite`: a visitor never writes. `readPermissions` (`lib/drive/get-drive.ts`) is the one place that answers a member's or a visitor's rights, `canWrite: false` for a visitor, and the permissions route and the collab info route both ask it. The read methods share their signatures with the other two drives, so a route needs no `instanceof`. `resolveFile` hands the route the owner's own row, because it feeds the preview cache, which every caller shares, and never an answer. What a visitor is handed is trimmed in one place:
 
 - Every `DrivePath` has `acl: null`.
 - A breadcrumb starts at the public path. That path keeps its `parentId`, as it does for a signed-in sharee: the id names the folder above, never its name or contents.
@@ -86,7 +87,7 @@ A visitor is not a `User`: a stand-in like `makeSyntheticUser` would flow into `
 | `auth: true`, unchanged | `user: User`, `session` | 401 |
 | `linkAuth: true`, new | `user: User \| null`, `session` or null | Goes on |
 
-A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it calls `getReadDrive(ownerId, user)` (`lib/drive/get-drive.ts`), which hands a user a `SharedDrive` and a visitor a `LinkDrive`, and can call only the methods all three drives have. The routes that report rights (4, 13 and the socket) branch on the user instead, because a member's `canRead` takes a `User`. There is no per-path choice between the two: a login decides.
+A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it calls `getReadDrive(ownerId, user)` (`lib/drive/get-drive.ts`), which hands a user a `SharedDrive` and a visitor a `LinkDrive`, and can call only the methods all three drives have. The routes that report rights (4 and 13) ask `readPermissions` instead, because a member's `canRead` takes a `User`, and the socket branches on the user itself. There is no per-path choice between the two: a login decides.
 
 For a request without a user the macro also sets two headers after the handler, on `set.headers` and on a returned `Response`: `X-Robots-Tag: noindex` and `Cache-Control: no-store`. Today previews and thumbnails answer `private, max-age=86400`, `serveFile` answers `private, no-cache`, and the JSON routes set nothing.
 
@@ -115,10 +116,12 @@ A document refers to its pictures by name in its own `media/` folder ([MEDIA-REF
 
 ## The socket
 
-A socket that opens with a user is untouched, a signed-in reader of a public document included. A socket without a user differs in four ways:
+A socket that opens with a user is untouched, a signed-in reader of a public document included. A socket without a user differs in five ways:
 
-- **No awareness, either way.** `CollabDocument.subscribe` takes `User | null`. Inbound awareness is dropped by the check that is there (`if (!user) return`). Two sends learn the same rule: `sendSyncStep1` skips the awareness states, and the awareness `update` handler sends only to connections with a user.
-- **It may send almost nothing.** `maxPayloadLength` in `app.ts` is 128 MB and frames are not rate limited. So the route's `message` handler closes a socket without a user, with 1008, on a binary frame over 64 KiB. A sync step 2 and an update are dropped without being read, as for any reader. A sync step 1 is answered every time, as for any reader: the client sends one every 5 s (`resyncInterval` in `use-collab-doc.ts`), and on a quiet document that answer is the only frame that keeps y-websocket from closing the socket after 30 s.
+- **The upgrade is refused unless the rule admits the path.** The route's `beforeHandle` asks `LinkDrive.canRead` for a connection without a user and answers 403, so an unauthenticated upgrade to a path no link opens never reaches `open`. The open asks again, since the access can change while the document loads.
+- **The server greets it with nothing.** `CollabDocument.greetMember` sends a connection without a user neither the server's sync step 1 nor the awareness states. A visitor's answer to that step 1 would be its whole state, which a reader's socket drops unread. So the visitor syncs from its own step 1.
+- **No awareness, either way.** `CollabDocument.subscribe` takes `User | null`. Inbound awareness is dropped by the check that is there (`if (!user) return`), and `broadcastMessage` sends awareness only to connections with a user. Edits reach a visitor as they reach anyone.
+- **What it sends is dropped, except its sync step 1.** A sync step 2, an update and an awareness frame are dropped unread, as a reader's step 2 and updates are. A sync step 1 is answered every time, as for any reader: the client sends one every 5 s (`resyncInterval` in `use-collab-doc.ts`), and on a quiet document that answer is the only frame that keeps y-websocket from closing the socket after 30 s. There is no frame-size cap of its own: `maxPayloadLength` in `app.ts` is 128 MB for every socket.
 - **`recordOpened` is skipped.**
 - **The keepalive asks the rule.** `checkAccess` in `routes/collab.ts` is built on `ws.data.session.id` and `getSessionUser`, which a visitor does not have. For a socket without a user it asks only `LinkDrive.canRead` for its path, every 15 s:
 
@@ -129,7 +132,7 @@ A socket that opens with a user is untouched, a signed-in reader of a public doc
 | The path or a folder above it is trashed | `isTrashedChain`: close 4403. The trash itself closes the document first ([SOFT-DELETE.md](../SOFT-DELETE.md)) |
 | The path is moved out of a public folder | Its chain no longer holds the folder: close 4403 |
 
-A socket keeps the kind it opened with. Someone who signs in, or is given access, while a visitor tab is open stays a visitor there until a reload. That is accepted.
+A socket keeps the kind it opened with. Someone who signs in, or is given access, while a visitor tab is open stays a visitor there until a reload. A visitor whose link was closed while their tab was offline sees a connection that keeps retrying, since every new upgrade is refused, until they reload. Both are accepted.
 
 ## The frontend
 
@@ -144,7 +147,7 @@ What the apps do today, read from the code:
 The change, with no new route and no second URL:
 
 - **Eight route files leave `_auth`**: the five editor routes and Drive's `fs`, `shared.$to` and `edit`. The URLs stay the same. Drive's `edit` route is the text editor, which a text file's link names; without a user it only forwards to the file's page under `shared`, where the guard checks it. Each app's root route and the file itself name the new route id, and Drive's two take their user from `useAuth()`.
-- **One `beforeLoad` guards the other seven**, `guardLinkRoute` beside `createAuthRouteOptions` in `auth-route.tsx`. With a user it does nothing. With no user it asks the permissions route for the item the URL names, through `fetchPathPermissions` in lib, and redirects to `/login`, with the way back, on no read. A URL that names no item redirects at once: `/fs/<owner>/<mount>/root`, `/shared/by-me`, and `/shared/with-me` without `pid`. So a private item behaves as today, and `RequestAccessView` is untouched: only a signed-in user reaches it. Drive's folder route skips the guard while the visitor stays on that route, so opening a subfolder asks nothing twice; the API refuses what the link does not cover.
+- **One `beforeLoad` guards the other seven**, `guardLinkRoute` beside `createAuthRouteOptions` in `auth-route.tsx`. With a user it does nothing. With no user it asks the permissions route for the item the URL names, through `fetchPathPermissions` in lib, and redirects to `/login`, with the way back, on no read. A URL that names no item redirects at once: `/fs/<owner>/<mount>/root`, `/shared/by-me`, and `/shared/with-me` without `pid`. So a private item behaves as today. `RequestAccessView` sends a person with no login to the login page, the way the guard does, so they never see the Request access form, which needs an account; that covers a visitor whose link closes while the page is open. The top bar's **Log in** button keeps the page as the way back (`loginLocation`). Drive's folder route skips the guard while the visitor stays on that route, so opening a subfolder asks nothing twice; the API refuses what the link does not cover.
 - **"Visitor" is "no user"**, read from `useAuth()` in the seams that have a guest case today or serve every app. `useCommentLifecycle` shows the cards and runs no thread, index or member query, and `useIsCardDeleted` does not read a visitor's missing chat folder as every thread gone. `useCollabDoc` clears the local awareness state, so nothing about the visitor is sent. `useDriveActionsFor` keeps Open, and `useFileActions` keeps Quick preview and a plain file's Download. The history and watch queries are off, and Watch, the sharing section and, on a lone file's page, the close button are not drawn. `FileMenu` keeps only the editor's own rows, which is Page setup and Print in Docs and Page setup in Slides, and no menu elsewhere; Download goes as a whole, Vector's SVG included. Docs' Print is the browser's own for a visitor, since the PDF comes from the export route. `EigenDocEditorRoute` mounts no share dialog, `useDocumentPanels` offers no Activity, and the top bar shows the document's name. The editors' guard runs on every navigation, since another document in the same app is the same route.
 - **A lone file.** With no user the shared route leaves `useSharedPaths` off (it takes `skipToken` for an empty owner id) and gives `DriveLayout` the one file from `usePathInfo` as its list, read-only, with the file's name as the title. The visitor sees one row with the file open beside it, and the quick look works.
 
@@ -165,13 +168,13 @@ Visitors see the item as it is stored. In a document that includes its comment c
 
 ## The share dialog
 
-**General access** in `DriveAccessListEdit` becomes one control with three choices, Google's way: **Restricted**, **Anyone signed in with the link** (with its **Can view** or **Can edit**), and **Anyone with the link**, which is view only. There is no separate section and no switch. The choice waits for **Save** like every other change in the dialog. It shows only on a file, a folder or a collab document, and not while public links are off, which `/p/config` tells the dialog. Under the third choice:
+**General access** in `DriveAccessListEdit` is one dropdown with three choices, Google's way: **Restricted**, **Anyone signed in with the link** (with its **Can view** or **Can edit** beside it), and **Anyone with the link**, which is view only. There is no separate section and no switch. The choice waits for **Save** like every other change in the dialog. The third choice is offered only on a file, a folder or a collab document while public links are on, which `/p/config` tells the dialog, and on a path that already has the value.
 
-"Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access."
+Each choice has its icon and one short line under it, from `GENERAL_ACCESS` in `drive-access-list.tsx`: "Only people with access", "They sign in to open it" and "No sign-in needed". In the dialog the third choice's line is "Anyone on the internet with the link can view", and while public links are off "Public links are turned off on this server, so this link opens nothing."
 
-The read-only `DriveAccessList` and `DriveShareSummary` name the third state.
+The read-only `DriveAccessList` and `DriveShareSummary` read the same `GENERAL_ACCESS`, so every place names the three states alike; the summary shows the choice's icon with its name as the tooltip.
 
-**The Admin setting** is one checkbox, **Allow public links**, on the **Guest access** page (`apps/admin/src/components/admin/guest-settings.tsx`), under the guest sign-up toggle, saved through `useServerSettings`. Both settings answer "who from outside gets in", and one checkbox does not earn a page.
+**The Admin setting** is one switch, **Allow public links**, in a section of its own, **Public links**, on the **Guest access** page (`apps/admin/src/components/admin/guest-settings.tsx`), between **Open signup** and **Inactivity cleanup**. It saves with the page through `useUpdateServerSettings`. Both settings answer "who from outside gets in", and one switch does not earn a page.
 
 ## Lifecycle
 
@@ -195,7 +198,7 @@ No sweep and no cleanup: a link is one value in one row.
 ## Where the design bends
 
 1. **Not an option on `auth`, a second macro, and a third under it.** One macro has one resolve type, and `auth: true` must keep handing out `user: User`. `linkAuth` needs `optionalAuth` below it to read the user in its header hook.
-2. **A visitor's sync step 2 is dropped, not a reason to close, and its sync step 1 is not counted.** The review asked to close on any update, and the plan then allowed one step 1 per connection. y-websocket answers the server's sync step 1 with a step 2 of its own, and Eigen's client sends a step 1 every 5 s, so either rule would close every visitor. The frame cap alone bounds what a visitor sends.
+2. **A visitor's frames are dropped, not a reason to close, its sync step 1 is not counted, and the server sends it no step 1.** The review asked to close on any update, and the plan then allowed one step 1 per connection. y-websocket answers the server's sync step 1 with a step 2 of its own, and Eigen's client sends a step 1 every 5 s, so either rule would close every visitor. The server's step 1 would only ask for that step 2, the visitor's whole state, which is dropped unread, so a visitor never gets one. There is no frame cap for a visitor: one that reconnects holding a large document stays open (`collab-link-visitor.test.ts`). Nothing bounds what a visitor sends beyond what bounds every socket ([ROADMAP.md](../ROADMAP.md)).
 3. **Print for a visitor is the editor's own print**, which only Docs has today ([ROADMAP.md](../ROADMAP.md), P2).
 
 ## Risks, and what is accepted
@@ -210,6 +213,10 @@ No sweep and no cleanup: a link is one value in one row.
 - **A visitor's socket can ask for the whole document again and again.** Each sync step 1 with an empty state is answered with the full document, encoded on the server's event loop, and frames are not counted. Any signed-in reader or guest can do the same today, so the bound belongs on every socket ([ROADMAP.md](../ROADMAP.md)).
 - **A public file can be hotlinked** from another site. The inline routes already sandbox scriptable types (`scriptableInlineHeaders`).
 - **Up to 15 s.** After a link is closed an open document still receives edits until the next keepalive, as after any revoke.
+- **Every socket's text frames are parsed before the route.** Elysia JSON-parses a text frame on any socket, a visitor's included, before the `message` handler runs ([ROADMAP.md](../ROADMAP.md)).
+- **Old copy events keep their source.** A `copied` history row written before this change still holds the original's owner, mount and path id; new rows hold none.
+- **Shared by me leaves out an item that is only public.** It lists items with an ACL entry, and a link is none.
+- **A child of a public folder says Restricted in its own dialog.** General access shows the path's own value, and the link sits on the folder above.
 
 **What breaks.** No existing data changes. `'link'` is a new stored value. On a rollback to an older build a public path is closed, since that build's check does not know the value, and its share dialog shows the path as signed-in view and can't save it until another General access is chosen.
 
@@ -221,10 +228,10 @@ Files and folders first, then documents. **The setting is the gate.** Unit 1 add
 |---|---|---|---|---|---|
 | 1 | The value, the switch, the rule | `types/drive-access.ts`, `types/settings.ts`, `server-settings.ts`, `acl.ts`, `Drive.updateACLDelta`, the ACL route's schema | S | Yes: an ACL check, a stored value | `test/acl/link-rule.test.ts`: the path, a descendant, a private subfolder, a sibling, the parent, the trash, the switch, the demo, each allowed and refused type, inside a document only `media/`; a signed-in non-member reads and can't write; the refusals of `updateACLDelta`, the default included |
 | 2 | Files and folders without a login | `link-drive.ts`, `get-drive.ts`, `routes/auth.ts`, `drive.ts`, `drive-content.ts`, `drive-sharing.ts`, `scripts/check-standards.ts` | M | Yes: an ACL check, routes that serve bytes without a login | `test/acl/link-routes.test.ts`: each of routes 1–12 serves a public path and answers 403 for a sibling and an unknown id; every other route in the route table answers 401; `acl` is null, the head keeps its `parentId`, the breadcrumb is cut, a listing is filtered; `no-store` and `noindex` without a user; a member is served as before |
-| 3 | Documents without a login | `collab-document.ts`, `routes/collab.ts` | M | Yes: `CollabDocument.subscribe` and its broadcast | `test/collab/collab-link-visitor.test.ts`: no awareness at sync or after; awareness, step 2 and updates dropped; a repeated step 1 is answered and a 64 KiB frame closes 1008; each row of the keepalive table closes within one tick; no Recent row; a user socket is unchanged |
+| 3 | Documents without a login | `collab-document.ts`, `routes/collab.ts` | M | Yes: `CollabDocument.subscribe` and its broadcast | `test/collab/collab-link-visitor.test.ts`: no server step 1 and no awareness at sync or after; awareness, step 2 and updates dropped and the socket stays, a reconnect holding a large document included; every step 1 is answered; a private document, an unknown id, a chat, an unknown owner and public links off refuse the upgrade; each row of the keepalive table closes within one tick; no Recent row; a user socket is unchanged; the info route without a login |
 | 4 | The guard and Drive's visitor view | `auth-route.tsx`, Drive's `fs` and `shared.$to` routes, `useDriveActionsFor`, `useFileActions` | M | Yes: routes that leave the guard, seams every app shares | Signed out on a private item, on `root` and on `/shared/*` without `pid` lands on login; the lone-file page; a browser check signed in and out |
 | 5 | The editors' visitor view | Five editor routes and root routes, `EigenDocEditorRoute`, `useCommentLifecycle`, `FileMenu`, `topbar.tsx` | M | Yes: the same | The same, per app ([verify-in-browser](../../.claude/skills/verify-in-browser/SKILL.md)) |
-| 6 | Open it | The default on, the settings save, `/p/config`, the Admin checkbox, `drive-access-list-edit.tsx`, `drive-access-list.tsx`, `drive-share-summary.tsx`, Caddy's `noindex` | M | Yes: the unit that opens it | Dialog tests for the three choices and the setting; an editor saves `'link'`, and `sharingRestricted` refuses it; end to end from Save to file bytes without a login |
+| 6 | Open it | The default on, the settings save, `/p/config`, the Admin checkbox, `drive-access-list-edit.tsx`, `drive-access-list.tsx`, `drive-share-summary.tsx`, Caddy's `noindex` | M | Yes: the unit that opens it | `drive-access-dialog.test.tsx`: the three choices, the line under the third, the choice hidden while public links are off and on a chat, a stored link while they are off; `guest-settings.test.tsx`: the switch saves and resets; an editor saves `'link'` and `sharingRestricted` refuses it (`link-rule.test.ts`); end to end from Save to file bytes without a login and back (`link-routes.test.ts`) |
 | 7 | Docs | ACL.md, COLLAB.md, GUEST-ACCESS.md, SERVER-SETTINGS.md, ARCHITECTURE.md (the "Route → SharedDrive → Drive → Mount" pitfall names the third wrapper), a help-center article, CHANGELOG | S | No | |
 
 Three notes on the units:
@@ -249,4 +256,4 @@ No new route, no migration, no package. Each of these changes what an existing r
 
 ## Open questions
 
-1. **The words of the three choices and of the sentence under the third.** Recommended: as written above. Decide on screenshots.
+None. The words of the three choices and the lines under them are settled, as in § The share dialog.
