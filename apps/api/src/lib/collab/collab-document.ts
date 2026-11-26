@@ -1,8 +1,8 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
-// its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open, where
-// a visitor without a login gets the edits and no cursors. Server-side writers, such as an import or a version restore,
-// edit the same Y.Doc. Drive opens each document once and closes it a while after the last socket leaves or after an
-// open that no socket joins, holding its Home meanwhile. Before that close, a workbook folds the head of its op log.
+// its data.db, saves every edit back to it, and relays edits and cursors between its sockets, where a visitor without
+// a login gets only the edits. Server-side writers, such as an import or a version restore, edit the same Y.Doc, so
+// every editor sees them. Drive opens each document once and closes it a while after the last socket leaves or after
+// an open no socket joins, holding its Home meanwhile. Before that close, a workbook saves a version and folds its log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -57,7 +57,6 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 export class CollabDocument {
     private readonly awareness: awarenessProtocol.Awareness;
-    // A visitor without a login has no user. It gets the document and no awareness.
     private readonly connections = new Map<ServerWebSocket<unknown>, User | null>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
@@ -194,16 +193,7 @@ export class CollabDocument {
         clearTimeout(this.closeTimer);
         this.releaseLingerHold();
         this.connections.set(conn, user);
-        try {
-            sendFrame(
-                conn,
-                encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeSyncStep1(encoder, this.doc)),
-            );
-            const awarenessStates = this.awareness.getStates();
-            if (user && awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
-        } catch (err) {
-            console.error('Error sending sync step 1:', err);
-        }
+        this.sendSyncStep1(user, conn);
     }
 
     public unsubscribe(conn: ServerWebSocket<unknown>): void {
@@ -376,6 +366,19 @@ export class CollabDocument {
             }
         }
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
+    }
+
+    private sendSyncStep1(user: User | null, conn: ServerWebSocket<unknown>): void {
+        try {
+            sendFrame(
+                conn,
+                encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeSyncStep1(encoder, this.doc)),
+            );
+            const awarenessStates = this.awareness.getStates();
+            if (user && awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
+        } catch (err) {
+            console.error('Error sending sync step 1:', err);
+        }
     }
 
     private broadcastMessage(

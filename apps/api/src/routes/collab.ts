@@ -264,10 +264,6 @@ export const collabRouter = new Elysia({
 
             // Bun delivers a binary frame as a Buffer, which is a Uint8Array. Anything else is not an update.
             if (!(message instanceof Uint8Array)) return;
-            if (!ws.data.user && message.byteLength > VISITOR_MAX_FRAME_BYTES) {
-                ws.close(1008, 'Frame too large');
-                return;
-            }
 
             const session = sessions.get(ws.raw);
             if (!session) return;
@@ -275,6 +271,10 @@ export const collabRouter = new Elysia({
 
             const { access, collabDocument } = session;
             if (!access || !collabDocument) return;
+            if (!access.user && message.byteLength > VISITOR_MAX_FRAME_BYTES) {
+                ws.close(1008, 'Frame too large');
+                return;
+            }
 
             try {
                 const { mountId, pathId } = ws.data.params;

@@ -350,14 +350,20 @@ describe('a visitor has no awareness, either way', () => {
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
     });
 
-    test('a visitor leaving sends the members nothing', async () => {
+    // The reader gets the removal from the same send as the visitor would, so once it has it the visitor's is due.
+    test("a member's disconnect sends the visitor nothing", async () => {
         const doc = await newPublicDoc();
         const member = await open(alice, doc.id);
-        const visitor = await open(null, doc.id);
-        visitor.ws.close();
-        await visitor.closed;
+        member.ws.send(awarenessFrame(401, 1, presence(alice)));
         await roundTrip(member);
-        expect(member.awareness).toEqual([]);
+        const visitor = await open(null, doc.id);
+        const reader = await open(bob, doc.id);
+        await waitFor(() => reader.awareness.length === 1, 5_000);
+
+        member.ws.close();
+        await waitFor(() => reader.awareness.some((entry) => entry.state === null), 5_000);
+        await roundTrip(visitor);
+        expect(visitor.awareness).toEqual([]);
     });
 });
 
