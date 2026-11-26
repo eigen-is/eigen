@@ -1,4 +1,4 @@
-// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their cards, and
+// A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their card ids, and
 // the hook opens the doc, runs the shared ref repair on sync, and adds a column. For someone who may write the board it
 // also seeds a new board and gives each card stored without a thread its own. The board component calls it; the cards
 // themselves go through the shared comment-card code.
@@ -32,7 +32,8 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     );
 }
 
-// Lists only the columns and cards it could read: the board looks up every listed id.
+// Lists only the columns it could read and the card ids that name a map, as the server's in-use rule does. The board
+// joins those ids with the cards it reads, so a card that read skips drops out there.
 export function readBoard(doc: Y.Doc): BoardData {
     const tasksMap = getItemMapRoot(doc, 'tasks');
     const columns: Record<string, ColumnItem> = {};
@@ -43,8 +44,8 @@ export function readBoard(doc: Y.Doc): BoardData {
         columns[id] = {
             id,
             title: typeof title === 'string' ? title : '',
-            taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter((taskId) =>
-                isCommentCard(tasksMap.get(taskId)),
+            taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter(
+                (taskId) => tasksMap.get(taskId) instanceof Y.Map,
             ),
         };
     }
@@ -198,14 +199,15 @@ export const useBoard = (
                 });
             };
 
+            // tasks shallow: a card's own edits don't change which ids the board lists.
             columnsMap.observeDeep(updateReactState);
-            tasksMap.observeDeep(updateReactState);
+            tasksMap.observe(updateReactState);
             columnOrderArray.observe(updateReactState);
             updateReactState();
 
             return () => {
                 columnsMap.unobserveDeep(updateReactState);
-                tasksMap.unobserveDeep(updateReactState);
+                tasksMap.unobserve(updateReactState);
                 columnOrderArray.unobserve(updateReactState);
             };
         },

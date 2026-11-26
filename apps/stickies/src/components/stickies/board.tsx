@@ -225,13 +225,16 @@ export function StickiesBoard({
         [openCardContextMenuAt, entryOf],
     );
 
-    // Each column keeps its card array while its cards and the filter stay the same, so a memoized column renders
-    // again only for its own changes.
+    // A column shows the ids it lists that the card read holds. It keeps its array while those cards and the filter
+    // stay the same, so a memoized column renders again only for its own changes.
     const prevColumnCardsRef = useRef<Record<string, CommentCard[]>>({});
     const columnCards = useMemo(() => {
         const next: Record<string, CommentCard[]> = {};
         for (const columnId of board.columnOrder) {
-            const fresh = board.columns[columnId].taskIds.map((taskId) => cards[taskId]).filter(isCardVisible);
+            const fresh = board.columns[columnId].taskIds
+                .filter((taskId) => Object.hasOwn(cards, taskId))
+                .map((taskId) => cards[taskId])
+                .filter(isCardVisible);
             const prev = prevColumnCardsRef.current[columnId];
             next[columnId] =
                 prev && prev.length === fresh.length && fresh.every((card, i) => card === prev[i]) ? prev : fresh;
@@ -261,7 +264,7 @@ export function StickiesBoard({
             return (
                 <Column
                     column={column}
-                    cards={column.taskIds.map((taskId) => cards[taskId])}
+                    cards={columnCards[column.id]}
                     entryByChatName={entryByChatName}
                     unreadChatNames={unreadChatNames}
                     canWrite={canWrite}

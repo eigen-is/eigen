@@ -35,8 +35,9 @@ describe('readBoard', () => {
         });
     });
 
-    // The board looks up every listed column and card, so an id it could not read must not be listed.
-    it('lists only the columns and cards it could read', () => {
+    // The board looks up every listed column, so a column it could not read must not be listed. A card id stays while
+    // it names a map, as the server's in-use rule counts it, and the board's join with the read cards drops the rest.
+    it('lists only the columns it could read and the card ids that name a map', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
@@ -54,7 +55,7 @@ describe('readBoard', () => {
 
         const board = readBoard(doc);
         expect(board.columnOrder).toEqual(['c1']);
-        expect(board.columns.c1.taskIds).toEqual(['t1']);
+        expect(board.columns.c1.taskIds).toEqual(['t1', 't3']);
     });
 
     // The board and the server both count the cards boardCardIds finds as in use. A card the board shows that it missed
