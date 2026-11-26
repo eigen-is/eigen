@@ -37,8 +37,7 @@ export const MORE_BUTTON =
 
 const BAR = cn('truncate px-1.5 py-0.5 font-medium', STRIPE_INSET);
 
-// Last in its cn, so it wins over a block's own thin ring. Tailwind draws a ring as a shadow of its own, which adds to
-// the block's.
+// Tailwind draws a ring as a shadow of its own, which adds to the block's, so the open event keeps its shadow.
 export function openRing(key: string, openKey: string | undefined): string | false {
     return key === openKey && 'ring-2 ring-(--surface-indicator)';
 }
