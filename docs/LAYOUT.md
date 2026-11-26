@@ -337,7 +337,7 @@ Each looks like a bug in our own code:
 - [FORMS.md](FORMS.md): how a form in a dialog, a card or a page behaves
 - [MOBILE.md](MOBILE.md): the breakpoints and how the shell behaves on phones and touch
 - [COMMAND-PALETTE.md](COMMAND-PALETTE.md): the ⌘K palette the shell mounts
-- [COMMENTS.md](COMMENTS.md): the comments column and the comments and activity pane
+- [COMMENTS.md](COMMENTS.md): the comments column and its comments, activity and thread levels
 - [PREVIEWS.md](PREVIEWS.md): the quick-look overlay, file subjects and file actions
 - [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md): every shared component, hook and type, generated
 - [TYPOGRAPHY.md](TYPOGRAPHY.md): type scale and fonts
