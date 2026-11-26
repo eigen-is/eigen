@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, page-setup, paper, margins, orientation, layout]
 related: [docs/page-less, docs/print, docs/headers-and-footers, docs/import-word]
 order: 110
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 A new document is A4, portrait, with 2 cm margins on every side. You can change the paper, the way it's turned, and the margins for the whole document.
@@ -22,15 +22,15 @@ The window has two tabs. **Pages** holds the paper and margins described here. *
 1. On the **Pages** tab, under **Orientation**, pick **Portrait** or **Landscape**.
 2. In **Paper size**, pick a paper: **Letter**, **Tabloid**, **Legal**, **Statement**, **Executive**, **Folio**, **A3**, **A4**, **A5**, **B4**, or **B5**. Each shows its size in centimeters. Turning the page keeps the paper, so A4 stays A4 in landscape.
 3. Under **Margins (centimeters)**, type the **Top**, **Bottom**, **Left**, and **Right** margin.
-4. Click **OK**, or **Cancel** to leave the page as it was.
+4. Click **Apply**, or **Cancel** to leave the page as it was.
 
-A margin can be 0 cm or more, but it has to leave room for your text. If it doesn't, the window says so and **OK** stays off until you fix it.
+A margin can be 0 cm or more, but it has to leave room for your text. If it doesn't, the window says so under the margins, and **Apply** changes nothing until you fix it.
 
 When wider margins, a turn of the page, or a smaller paper leaves less room for the text, a table keeps its column widths and scrolls sideways inside the page instead of shrinking. A table inside a list or inside another table still shrinks to fit the text.
 
 A document has one page setup, so it applies to every page. If the paper isn't one in the list, for example after you import a Word file, **Paper size** shows **Custom** until you pick another.
 
-If you can only view the document, the window shows the page setup but you can't change it, and it has a **Close** button instead of **OK**. In a page-less document you can still pick your own text width, which **OK** saves.
+If you can only view the document, the window shows the page setup but you can't change it, and it has a **Close** button instead of **Apply**. In a page-less document you can still pick your own text width, which **Apply** saves.
 
 ## Related articles
 

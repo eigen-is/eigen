@@ -32,12 +32,18 @@ function EditContactRoute() {
         }
     }, [contactsLoading, contact, navigate, filterType, filterId]);
 
-    const backToContact = () =>
-        navigate({ to: '/$filterType/$filterId', params: { filterType, filterId }, search: { contactId } });
+    // A Save and Cancel leave without asking; the back arrow asks first when something changed.
+    const backToContact = (ignoreBlocker: boolean) =>
+        navigate({
+            to: '/$filterType/$filterId',
+            params: { filterType, filterId },
+            search: { contactId },
+            ignoreBlocker,
+        });
 
     const handleSave = async (data: CreateContactInput, etag: string) => {
         await updateContactMutation.mutateAsync({ id: contactId, ...data, etag });
-        backToContact();
+        await backToContact(true);
     };
 
     if (contactsLoading) {
@@ -50,8 +56,19 @@ function EditContactRoute() {
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column id="editor" width="flex" onBack={backToContact} toolbar={<ContactEditToolbar isNew={false} />}>
-                <ContactEdit key={contactId} contact={contact} onSave={handleSave} onCancel={backToContact} />
+            <Column
+                id="editor"
+                width="flex"
+                onBack={() => backToContact(false)}
+                toolbar={<ContactEditToolbar isNew={false} />}
+            >
+                <ContactEdit
+                    key={contactId}
+                    contact={contact}
+                    isNew={false}
+                    onSave={handleSave}
+                    onCancel={() => backToContact(true)}
+                />
             </Column>
         </ColumnLayout>
     );

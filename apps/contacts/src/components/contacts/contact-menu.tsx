@@ -140,10 +140,7 @@ export function useContactMenu(): {
                             labels={labels}
                             assignedLabelIds={assignedToAll}
                             partialLabelIds={assignedToSome}
-                            onToggleLabel={(labelId) => {
-                                onToggleLabel(contacts, labelId);
-                                close();
-                            }}
+                            onToggleLabel={(labelId) => onToggleLabel(contacts, labelId)}
                         />
                     )
                 }

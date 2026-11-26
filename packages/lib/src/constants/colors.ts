@@ -1,7 +1,8 @@
-// Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, and the
-// one reader of a written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
-// check a hex with isHexColor, read a stored #rrggbb with readHexColor, read its channels with hexChannels and read an
-// rgb() with parseRgb, so they agree on what a color is.
+// Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, the color
+// math every color surface and mark shares, such as a pale tone or an indicator tone, and the one reader of a written
+// color. Readers such as a sheet cell's fill, a doc's text color and the Office exports check a hex with isHexColor,
+// read a stored #rrggbb with readHexColor, read its channels with hexChannels and read an rgb() with parseRgb, so they
+// agree on what a color is.
 
 import { upperFirst } from 'es-toolkit';
 
@@ -257,7 +258,9 @@ const EIGEN_COLORS_MAP = [
 ] as const;
 
 export const EIGEN_ACCENT_COLOR_ROW = 5;
-const EIGEN_STICKIES_COLOR_ROW = 1;
+// The 100 step: a stickies card's color, and the tone every colored surface fills with in light mode.
+const EIGEN_PALE_COLOR_ROW = 1;
+const EIGEN_INDICATOR_COLOR_ROW = 4;
 
 export const EIGEN_COLORS: EigenColor[][] = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({
@@ -271,10 +274,8 @@ export function eigenColor(name: (typeof EIGEN_COLOR_NAMES)[number], step: (type
     return EIGEN_COLORS_MAP[EIGEN_COLOR_NAMES.indexOf(name)][EIGEN_COLOR_STEPS.indexOf(step)];
 }
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]);
-// The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
-// each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
-// protanopia and tritanopia. Yellow and lime (under 2:1 on white) sit past the eighth, and rose and fuchsia, which sit
-// close to pink, come late.
+// The order calendars, labels, chart series and presence hand the accents out in: pink, Eigen's accent, first, then
+// each the furthest (CIEDE2000) from those before it for normal and color-blind vision.
 const EIGEN_ACCENT_ORDER = [
     'pink',
     'green',
@@ -303,17 +304,29 @@ export function userColor(userId: string): string {
     const hash = Math.abs([...userId].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0));
     return EIGEN_ACCENT_COLORS_SHUFFLED[hash % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 }
-export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map((ri) =>
-    [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
+export const EIGEN_STICKIES_COLORS = [[1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][EIGEN_PALE_COLOR_ROW])];
+
+// Each palette color's family, its column of steps.
+const EIGEN_COLOR_FAMILY: Map<string, readonly string[]> = new Map(
+    EIGEN_COLORS_MAP.flatMap((family) => family.map((hex) => [hex, family])),
 );
 
-const EIGEN_STICKIES_INDICATOR_ROW = 4;
-export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
-    [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => [
-        EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_COLOR_ROW],
-        EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_INDICATOR_ROW],
-    ]),
-);
+// How far toward white a color outside the palette moves to its pale tone: about as far as each family's 100 step sits
+// from its 500 step.
+const PALE_TONE_LIGHTEN = 0.84;
+
+// The pale tone a color fills a surface with: a palette color of any step is its family's 100 step, and any other
+// color, such as one a user typed, is lightened by about as much.
+export function paleTone(color: string): string {
+    return EIGEN_COLOR_FAMILY.get(color)?.[EIGEN_PALE_COLOR_ROW] ?? lightenColor(color, PALE_TONE_LIGHTEN);
+}
+
+// The stronger tone a color shows as a mark or stripe: a pale tone, such as a stickies card's, reads as its family's
+// 400 step, and any other color, such as a calendar's or one a user typed, is its own indicator.
+export function indicatorColor(color: string): string {
+    const family = EIGEN_COLOR_FAMILY.get(color);
+    return family?.[EIGEN_PALE_COLOR_ROW] === color ? family[EIGEN_INDICATOR_COLOR_ROW] : color;
+}
 
 // Whether black text reads better than white on a #rrggbb color. Anything else counts as dark.
 export function isLightColor(hex: string): boolean {
@@ -374,9 +387,8 @@ const RGB_COLOR = new RegExp(
     'i',
 );
 
-// An rgb() or rgba() color, as a browser computes it or a stylesheet writes it: commas or spaces, channels
-// rounded to whole numbers, and an alpha as a number or a percent. It reads as #rrggbb and an alpha from 0 to 1.
-// A channel past 255 is no color.
+// An rgb() or rgba() color, as a browser computes it or a stylesheet writes it, read as #rrggbb and an alpha from 0 to
+// 1; channels round to whole numbers, and one past 255 is no color.
 export function parseRgb(color: string): { hex: string; alpha: number } | undefined {
     const [, red, green, blue, alpha, percent] = RGB_COLOR.exec(color) ?? [];
     const channels = [red, green, blue].map((channel) => Math.round(Number(channel)));

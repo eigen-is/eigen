@@ -29,16 +29,16 @@ const MAX_SHARE_MESSAGE_LENGTH = 12000;
 
 // One object per event type, so the identity guard below can hold it against ClientFileEventInput.
 const CARD_TEXT = { maxLength: CARD_TITLE_MAX_LENGTH };
-const stickyCardDetails = t.Object({
+const cardDetails = t.Object({
     card: t.String(CARD_TEXT),
     toColumn: t.String(CARD_TEXT),
     cardId: t.String(CARD_TEXT),
 });
 const clientFileEventBody = t.Union([
-    t.Object({ eventType: t.Literal('sticky-added'), details: stickyCardDetails }),
-    t.Object({ eventType: t.Literal('sticky-moved'), details: stickyCardDetails }),
+    t.Object({ eventType: t.Literal('card-added'), details: cardDetails }),
+    t.Object({ eventType: t.Literal('card-moved'), details: cardDetails }),
     t.Object({
-        eventType: t.Literal('sticky-removed'),
+        eventType: t.Literal('card-removed'),
         details: t.Object({ card: t.String(CARD_TEXT), cardId: t.String(CARD_TEXT) }),
     }),
 ]);

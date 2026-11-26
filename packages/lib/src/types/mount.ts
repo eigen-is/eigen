@@ -18,8 +18,15 @@ export type S3Config = {
 
 export const EMPTY_S3: S3Config = { endpoint: '', bucket: '', prefix: '', accessKeyId: '', secretAccessKey: '' };
 
+const S3_REQUIRED = ['endpoint', 'bucket', 'accessKeyId', 'secretAccessKey'] as const;
+
+// The fields a config can't do without that are empty. A blank secret is fine where the server keeps one.
+export function missingS3Fields(config: S3Config, secretSaved = false): (keyof S3Config)[] {
+    return S3_REQUIRED.filter((key) => !config[key] && !(key === 'secretAccessKey' && secretSaved));
+}
+
 export function isS3ConfigValid(config: S3Config, secretSaved = false): boolean {
-    return !!(config.endpoint && config.bucket && config.accessKeyId && (config.secretAccessKey || secretSaved));
+    return missingS3Fields(config, secretSaved).length === 0;
 }
 
 // The backup bucket's secret reaches no browser, so its form sends it blank. That keeps the saved one only for the

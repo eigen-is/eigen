@@ -1,19 +1,20 @@
 // One event as it reads when nobody is editing it, such as a stored occurrence in the calendar's detail dialog or an
-// event an .ics file holds in its quick look. It is data alone: the surface around it owns answering, editing and
-// deleting.
+// event an .ics file holds in its quick look: its title and time as plain rows, with no block, a meta line the surface
+// may give, such as its calendar, then its place, guests and description, each under its caption. It is data alone:
+// the surface around it owns answering, editing and deleting, and may add sections of its own, such as the reply to
+// an invitation.
 
 import { formatEventWhen, rruleToText, viewerTimeZone } from '@workspace/lib/calendar';
 import { remainingLine } from '@workspace/lib/transfer';
 import type { Attendee, CalendarEvent, Organizer } from '@workspace/lib/types/calendar';
-import { AlignLeft, Clock, MapPin, Repeat, UsersRound } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import type { ReactNode } from 'react';
 import { Badge } from '../badge';
+import { DetailMeta, DetailSection } from '../layout/app/detail-item';
 import { AttendeeList } from './attendee-list';
 
-// `title` is left out where the surface heads itself with it. `remainingAttendees` counts the guests a payload capped
-// away.
+// `remainingAttendees` counts the guests a payload capped away.
 export type EventDetailCardProps = {
-    title?: string;
+    title: string;
     status?: CalendarEvent['status'] | null;
     start: Date;
     end: Date;
@@ -25,6 +26,8 @@ export type EventDetailCardProps = {
     organizer?: Organizer | null;
     attendees?: Attendee[];
     remainingAttendees?: number;
+    meta?: ReactNode;
+    children?: ReactNode;
     className?: string;
 };
 
@@ -41,70 +44,54 @@ export function EventDetailCard({
     organizer,
     attendees = [],
     remainingAttendees = 0,
+    meta,
+    children,
     className,
 }: EventDetailCardProps) {
     const recurrenceText = rruleToText(rrule, timezone);
-    const cancelled = status === 'cancelled';
 
     return (
-        <div className={cn('space-y-3', className)}>
-            {(title || cancelled) && (
-                <div className="flex items-center gap-2">
-                    {title && (
-                        <h3 className={cn('text-lg font-medium min-w-0 break-words', cancelled && 'line-through')}>
-                            {title}
-                        </h3>
-                    )}
-                    {cancelled && <Badge variant="destructive">Canceled</Badge>}
-                </div>
-            )}
-
-            <div className="flex items-start gap-3 text-sm">
-                <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                <div className="min-w-0 break-words">
-                    {formatEventWhen(start, end, allDay, timezone, viewerTimeZone())}
-                    {timezone && (
-                        <div className="text-xs text-muted-foreground">
-                            {timezone.split('/').pop()?.replace(/_/g, ' ')} time zone
-                        </div>
-                    )}
-                </div>
+        <div className={className}>
+            <h2 className="text-xl leading-snug font-medium break-words">{title || '(No title)'}</h2>
+            <div className="mt-1 text-sm">
+                {status === 'cancelled' && (
+                    <Badge variant="destructive" className="mb-1">
+                        Canceled
+                    </Badge>
+                )}
+                <p className="break-words">{formatEventWhen(start, end, allDay, timezone, viewerTimeZone())}</p>
+                {timezone && (
+                    <p className="text-xs opacity-70">{timezone.split('/').pop()?.replace(/_/g, ' ')} time zone</p>
+                )}
+                {recurrenceText && <p className="text-xs opacity-70 break-words">{recurrenceText}</p>}
             </div>
 
-            {recurrenceText && (
-                <div className="flex items-start gap-3 text-sm">
-                    <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span className="min-w-0 break-words">{recurrenceText}</span>
-                </div>
-            )}
+            {meta && <DetailMeta>{meta}</DetailMeta>}
 
             {location && (
-                <div className="flex items-start gap-3 text-sm">
-                    <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span className="min-w-0 break-words">{location}</span>
-                </div>
-            )}
-
-            {description && (
-                <div className="flex items-start gap-3 text-sm">
-                    <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <span className="min-w-0 whitespace-pre-wrap break-words">{description}</span>
-                </div>
+                <DetailSection label="Location">
+                    <p className="break-words">{location}</p>
+                </DetailSection>
             )}
 
             {attendees.length > 0 && (
-                <div className="flex items-start gap-3 text-sm">
-                    <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                        <AttendeeList attendees={attendees} organizer={organizer} remaining={remainingAttendees} />
-                        {remainingAttendees > 0 && (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                {remainingLine(remainingAttendees, 'guest')}
-                            </p>
-                        )}
-                    </div>
-                </div>
+                <DetailSection label="Guests">
+                    <AttendeeList attendees={attendees} organizer={organizer} remaining={remainingAttendees} />
+                    {remainingAttendees > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            {remainingLine(remainingAttendees, 'guest')}
+                        </p>
+                    )}
+                </DetailSection>
             )}
+
+            {description && (
+                <DetailSection label="Description">
+                    <p className="whitespace-pre-wrap break-words">{description}</p>
+                </DetailSection>
+            )}
+
+            {children}
         </div>
     );
 }

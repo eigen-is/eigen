@@ -5,6 +5,7 @@
 
 import type { Browser } from 'playwright-core';
 import { chromium } from 'playwright-core';
+import type { Session } from './auth';
 import { personaContext, signIn } from './auth';
 import { cursor } from './lib/cursor';
 import type { Scene, SceneContext, Stack } from './lib/scene';
@@ -28,7 +29,7 @@ const scenes = names.length ? SCENES.filter((scene) => names.includes(scene.name
 
 const stack = await startStack({ apps: [...new Set(scenes.flatMap((scene) => scene.apps))] });
 try {
-    const sessions: Record<string, string> = {};
+    const sessions: Record<string, Session> = {};
     for (const key of new Set(scenes.flatMap((scene) => scene.personas))) sessions[key] = await signIn(stack, key);
     // The API trusts no capture port as an origin, so the pages reach it with CORS off.
     const browser = await chromium.launch({ channel: 'chrome', args: ['--disable-web-security'] });
@@ -47,10 +48,12 @@ try {
 async function film(
     browser: Browser,
     stack: Stack,
-    sessions: Readonly<Record<string, string>>,
+    sessions: Readonly<Record<string, Session>>,
     scene: Scene,
 ): Promise<void> {
-    const contexts = await Promise.all(scene.personas.map((key) => personaContext(browser, sessions[key], scene)));
+    const contexts = await Promise.all(
+        scene.personas.map((key) => personaContext(browser, stack, sessions[key], scene)),
+    );
     const pages = await Promise.all(contexts.map((context) => context.newPage()));
     const ctx: SceneContext = { pages, cursors: pages.map(cursor), stack };
     await scene.setup?.(ctx);

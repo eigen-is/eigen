@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, cards, kanban, assignee, resolve]
 related: [stickies/add-and-edit-cards, stickies/filter-a-board, stickies/card-comments]
 order: 35
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 An assignee says who is looking after a card. Resolving a card says the work on it is done. Both need write access to the board.
@@ -20,7 +20,7 @@ The quickest route is the card itself.
 
 You can only assign a card to someone the board is shared with, so share the board first. See [Share a board and manage access](/support/stickies/share-board).
 
-You can also set the assignee while you fill a card in. The **Add sticky** dialog and the edit form both have an **Assignee** control next to the **Color** swatches, reading **Unassigned** until you pick someone. Click it and choose **Assign to me**, **Unassigned**, or a person from the list. It is saved with the rest of the card.
+You can also set the assignee while you fill a card in. The **Add card** dialog and the edit form both have an **Assignee** control next to the **Color** swatches, reading **Unassigned** until you pick someone. Click it and choose **Assign to me**, **Unassigned**, or a person from the list. It is saved with the rest of the card.
 
 An open card has the same control in the row under the description, on the right. Picking someone there takes effect straight away.
 
@@ -38,13 +38,13 @@ On the board, the assignee shows as a small avatar in the bottom corner of the c
 ## Resolve a card
 
 1. Click the card to open it.
-2. Click the tick icon (**Resolve**) in the strip below the description, next to the pencil and link icons.
+2. Click the tick icon (**Resolve**) in the bar at the top of the dialog, next to the pencil and link icons.
 
 The card stays where it is, with a small tick in its bottom corner to show it is resolved.
 
-To bring it back, open the card and click the arrow icon (**Reopen**) in the same strip.
+To bring it back, open the card and click the arrow icon (**Reopen**) in the same bar.
 
-The right-click menu does both without opening the card: **Resolve sticky** on an open card, and **Reopen sticky** on one that is already resolved.
+The right-click menu does both without opening the card: **Resolve card** on an open card, and **Reopen card** on one that is already resolved.
 
 ## Show only what is still open
 

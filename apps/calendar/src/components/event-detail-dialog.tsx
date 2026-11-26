@@ -1,11 +1,13 @@
 // The panel that opens when you click an event in a calendar view, such as the month view. It shows the event's time,
 // place, guests and calendar. A guest of an invitation can reply to it here. Its buttons edit, delete or export the
-// event, and a delete or a reply on a repeating event first asks which occurrences it applies to.
+// event, and a delete or a reply on a repeating event first asks which occurrences it applies to. A reply keeps the
+// panel open, its button busy, until the write ends.
 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isSeriesOccurrence,
     isTransferableCalendarHome,
+    occurrenceScopes,
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
@@ -15,7 +17,14 @@ import {
     useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    RecurrenceScope,
+    RsvpStatus,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
+import { RECURRENCE_SCOPES } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
@@ -28,12 +37,13 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { ProgressDialog } from '@workspace/ui/components/drive';
+import { DetailSection } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { UserName } from '@workspace/ui/components/user';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
-import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
 
 // The replies to an invitation, in the order the panel shows them.
@@ -49,27 +59,37 @@ type EventDetailDialogProps = {
     event: CalendarEventOccurrence | null;
     calendar?: CalendarItem | null;
     sharedCalendar?: SharedCalendar | null;
+    // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
+    ownerId: string;
 };
 
-export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {
+export function EventDetailDialog({
+    open,
+    onOpenChange,
+    event,
+    calendar,
+    sharedCalendar,
+    ownerId,
+}: EventDetailDialogProps) {
     const { user } = useAuth();
-    const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
-    const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
+    const [rsvpAwaitingScope, setRsvpAwaitingScope] = useState<RsvpStatus | null>(null);
+    const [sentRsvpStatus, setSentRsvpStatus] = useState<RsvpStatus>();
+    const { pending: replying, run: runReply, handleOpenChange } = useDialogPending({ open, onOpenChange });
     const [editOpen, setEditOpen] = useState(false);
     // Each opening mounts Edit event anew, so nothing typed in the last one comes back.
     const [editMount, setEditMount] = useState(0);
-    const deleteEvent = useDeleteEvent(eventOwnerId);
-    const createEvent = useCreateEvent(eventOwnerId);
-    const updateEvent = useUpdateEvent(eventOwnerId);
+    const deleteEvent = useDeleteEvent(ownerId);
+    const createEvent = useCreateEvent(ownerId);
+    const updateEvent = useUpdateEvent(ownerId);
     const rsvp = useRsvp(user?.id || '');
     const { exportCalendar, isExporting } = useExportCalendar();
     const isGuest = useIsGuest();
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
-    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
+    const isFromOthers = useIsInvitationFromOthers(ownerId);
 
     if (!event) return null;
 
@@ -77,27 +97,27 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const canEdit = !sharedCalendar || sharedCalendar.permission === 'write';
-    const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
+    const canExport = !isGuest && isTransferableCalendarHome(ownerId, user?.id ?? '');
     const isLinkedEvent = isFromOthers(event);
     const attendees = event.data?.attendees ?? [];
     const myAttendeeStatus = attendees.find((a) => a.email.toLowerCase() === user?.email?.toLowerCase())?.status;
 
-    const handleRecurringDelete = async (action: RecurringAction) => {
+    const handleRecurringDelete = async (scope: RecurrenceScope) => {
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
-            if (action === 'all') {
+            if (scope === 'all') {
                 await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId, etag: event.etag });
             } else {
                 await rsvp.mutateAsync({
                     calendarId: event.calendarId,
                     eventId,
                     status: 'declined',
-                    scope: action,
+                    scope,
                     recurrenceDate: event.occurrenceDate,
                     remove: true,
                 });
             }
-        } else if (action === 'this') {
+        } else if (scope === 'this') {
             if (isException) {
                 await updateEvent.mutateAsync({
                     id: event.id,
@@ -118,7 +138,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     etag: event.etag,
                 });
             }
-        } else if (action === 'this-and-following') {
+        } else if (scope === 'this-and-following') {
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, event.occurrenceDate, event);
                 await updateEvent.mutateAsync({
@@ -146,98 +166,99 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const handleDeleteClick = () => (isPartOfSeries ? setShowRecurringDeleteDialog(true) : setShowDeleteDialog(true));
 
-    const handleRsvpScopeConfirm = (action: RecurringAction) => {
-        if (!pendingRsvpStatus) return;
+    const handleRsvpScopeConfirm = async (scope: RecurrenceScope) => {
+        if (!rsvpAwaitingScope) return;
         const eventId = event.parentEventId || event.id;
-        if (action === 'this') {
-            rsvp.mutate({
+        if (scope === 'this') {
+            await rsvp.mutateAsync({
                 calendarId: event.calendarId,
                 eventId,
-                status: pendingRsvpStatus,
+                status: rsvpAwaitingScope,
                 scope: 'this',
                 recurrenceDate: event.occurrenceDate,
             });
         } else {
-            rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });
+            await rsvp.mutateAsync({ calendarId: event.calendarId, eventId, status: rsvpAwaitingScope });
         }
-        setPendingRsvpStatus(null);
+        setRsvpAwaitingScope(null);
         onOpenChange(false);
+    };
+
+    const handleRsvp = (status: RsvpStatus) => {
+        if (isPartOfSeries) {
+            setRsvpAwaitingScope(status);
+            setShowRsvpScopeDialog(true);
+            return;
+        }
+        setSentRsvpStatus(status);
+        void runReply(async () => {
+            await rsvp.mutateAsync({ calendarId: event.calendarId, eventId: event.id, status });
+        });
     };
 
     return (
         <>
             <Dialog
                 open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
             >
                 <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
-                        <DialogTitle className="text-xl">{event.title}</DialogTitle>
+                        <DialogTitle className="sr-only">{event.title || '(No title)'}</DialogTitle>
                         <DialogDescription className="sr-only">
                             Event time, location, guests and details.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-3">
-                        {/* The title is the dialog's own header, so the card draws everything but it. */}
-                        <EventDetailCard
-                            status={event.status}
-                            start={event.startTime}
-                            end={event.endTime}
-                            allDay={event.allDay}
-                            timezone={event.timezone}
-                            rrule={event.rrule}
-                            location={event.location}
-                            description={event.description}
-                            organizer={event.data?.organizer}
-                            attendees={attendees}
-                        />
-
+                    <EventDetailCard
+                        title={event.title}
+                        status={event.status}
+                        start={event.startTime}
+                        end={event.endTime}
+                        allDay={event.allDay}
+                        timezone={event.timezone}
+                        rrule={event.rrule}
+                        location={event.location}
+                        description={event.description}
+                        organizer={event.data?.organizer}
+                        attendees={attendees}
+                        meta={
+                            calendarName && (
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                    <Calendar className="h-3 w-3 shrink-0" />
+                                    <span className="min-w-0 truncate">
+                                        {calendarName}
+                                        {sharedCalendar && !isLinkedEvent && (
+                                            <>
+                                                {' '}
+                                                · Created by <UserName userId={event.createByUserId || undefined} />
+                                            </>
+                                        )}
+                                    </span>
+                                </span>
+                            )
+                        }
+                    >
                         {isLinkedEvent && myAttendeeStatus && (
-                            <div className="pt-3 mt-3 border-t">
-                                <div className="text-sm font-medium mb-2">RSVP</div>
+                            <DetailSection label="RSVP">
                                 <div className="flex gap-2">
                                     {RSVP_CHOICES.map(({ status, icon: Icon, label }) => (
                                         <Button
                                             key={status}
                                             size="sm"
                                             variant={myAttendeeStatus === status ? 'default' : 'outline'}
-                                            onClick={() => {
-                                                if (isPartOfSeries) {
-                                                    setPendingRsvpStatus(status);
-                                                    setShowRsvpScopeDialog(true);
-                                                } else {
-                                                    rsvp.mutate({
-                                                        calendarId: event.calendarId,
-                                                        eventId: event.id,
-                                                        status,
-                                                    });
-                                                    onOpenChange(false);
-                                                }
-                                            }}
+                                            pending={replying && sentRsvpStatus === status}
+                                            disabled={replying && sentRsvpStatus !== status}
+                                            onClick={() => handleRsvp(status)}
                                             className="gap-1"
                                         >
                                             <Icon className="h-3 w-3" /> {label}
                                         </Button>
                                     ))}
                                 </div>
-                            </div>
+                            </DetailSection>
                         )}
-
-                        {calendarName && (
-                            <div className="pt-3 mt-3 border-t flex items-start gap-3">
-                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <div className="text-sm text-muted-foreground min-w-0 break-words">
-                                    {calendarName}
-                                    {sharedCalendar && !isLinkedEvent && (
-                                        <div className="text-xs">
-                                            Created by: <UserName userId={event.createByUserId || undefined} />
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </EventDetailCard>
 
                     <DialogFooter
                         start={
@@ -267,7 +288,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                             disabled={isExporting}
                                             // An occurrence is drawn from its series, so the series is what leaves.
                                             onClick={() =>
-                                                void exportCalendar(eventOwnerId, event.calendarId, [
+                                                void exportCalendar(ownerId, event.calendarId, [
                                                     event.parentEventId || event.id,
                                                 ])
                                             }
@@ -277,7 +298,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                             )
                         }
                     >
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={replying}>
                             Close
                         </Button>
                     </DialogFooter>
@@ -303,8 +324,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
                 onConfirm={handleRecurringDelete}
-                // A changed occurrence of our own has no rule to cut. An invitation's goes to the series on the server.
-                options={isException && !isLinkedEvent ? ['this', 'all'] : undefined}
+                // An invitation's this and following goes to the series on the server, so even a changed date offers it.
+                options={isLinkedEvent ? RECURRENCE_SCOPES : occurrenceScopes(event)}
             />
 
             <RecurringActionDialog
@@ -323,7 +344,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     if (!editing) onOpenChange(false);
                 }}
                 event={event}
-                ownerUserId={sharedCalendar?.ownerUserId}
+                ownerId={ownerId}
             />
 
             <ProgressDialog open={isExporting} title="Exporting event" />

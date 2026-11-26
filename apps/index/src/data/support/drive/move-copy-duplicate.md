@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-14
+updated: 2026-11-25
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -26,7 +26,7 @@ If some of the items fail, a message says how many and why, and the **Move to** 
 
 <div class="eigen-callout">
 
-**Move to…** works inside one drive. If you choose a different drive, Eigen tells you to use **Copy to…** instead.
+**Move to…** works inside one drive. If you choose a different drive, the dialog says so under **Location** and stays open, so you can pick a folder in the item's own drive or use **Copy to…** instead.
 
 </div>
 

@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, folders, documents, sheets, slides, stickies, chat]
 related: [drive/get-started, drive/upload-files]
 order: 40
-updated: 2026-09-18
+updated: 2026-11-25
 ---
 
 The **New** menu in Drive lets you create a folder to organize your files, or start a fresh document, spreadsheet, presentation, drawing, board, or chat without leaving the browser.
@@ -19,7 +19,7 @@ The **New** menu in Drive lets you create a folder to organize your files, or st
 4. The **Location** row shows where the folder will be created. To pick a different place, click the location to expand the folder browser and navigate to it.
 5. Click **Create**.
 
-The new folder appears in your file list straight away.
+The new folder appears in your file list straight away. If something in that place already has the name, the dialog says so under **Folder name** and stays open.
 
 You can also right-click anywhere in the file list to get the same menu.
 

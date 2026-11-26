@@ -7,7 +7,7 @@ tags: [slides, getting-started, presentation, canvas]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 Slides is where you build presentations in Eigen. You fill slides with text, shapes, and images, and present the deck in full screen from the browser.
@@ -58,7 +58,7 @@ Right-click any object for a context menu with **Cut**, **Copy**, **Paste**, **D
 
 ## Change the slide background
 
-With no object selected, the properties panel shows background options for the active slide. You can set a solid color, a gradient, or an image from your computer or from Drive. The **Apply to** dropdown lets you apply the background to just this slide, to this slide and all following ones, or to all slides at once.
+With no object selected, the properties panel shows background options for the active slide. You can set a solid color, a gradient, or an image from your computer or from Drive. A change lands on the current slide at once, and **Apply to following slides** or **Apply to all slides** copies it to the rest.
 
 ## Manage slides
 

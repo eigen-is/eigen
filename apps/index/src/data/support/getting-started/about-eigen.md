@@ -6,10 +6,10 @@ category: Basics
 tags: [getting-started, overview, apps]
 related: [getting-started/your-first-steps, getting-started/taking-your-data-with-you, drive/get-started]
 order: 1
-updated: 2026-11-09
+updated: 2026-11-24
 ---
 
-Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV, and WebDAV, and it opens and saves Word, Excel, and PowerPoint files. This page is a quick tour of what Eigen is and the apps it includes.
+Eigen is a self-hosted alternative to Google Workspace: your mail, files, calendar, and more on one server. This page explains what each app is for and how to move between them. For a tour with pictures and short films, see the [About pages](/about).
 
 ## One workspace, your own data
 
@@ -19,7 +19,7 @@ The name says it: *eigen* is Dutch and German for "own". Because you, or whoever
 
 ## The apps
 
-Each app does one job. You can use as many or as few as you like.
+Eigen has ten apps. Each one does one job, and you can use as many or as few as you like.
 
 - **Mail** is your inbox: read, write, and organize your email.
 - **Drive** is where your files live. Upload them, sort them into folders, and share them with other people.
@@ -30,10 +30,9 @@ Each app does one job. You can use as many or as few as you like.
 - **Calendar** keeps track of your schedule, with events and invitations.
 - **Contacts** is your address book of the people you know.
 - **Chat** is for quick messages with your team.
-- **Stickies** is for notes and boards, to keep ideas and tasks in view.
-- **Space** is your account home, where you manage your profile, settings, and sign-in.
+- **Stickies** is for boards of cards, to see who does what.
 
-If you help run your Eigen, you'll also see **Admin**, for managing organizations, teams, and the server.
+You manage your profile, settings, and sign-in in **Space**, which you open from your picture in the top-right corner. If you help run your Eigen, you'll also see **Admin**, for managing your organization, its teams, and the server.
 
 Not every Eigen hosts email. If yours doesn't, Mail isn't in the app switcher and you keep using your usual mail app. Everything else works the same, with two differences. Email Eigen sends for you, like a share notification, usually comes from the server's own address with your name on it, and replies still reach you. And when someone outside answers a calendar invitation, the answer lands in your usual mailbox, so Eigen doesn't show it on the event.
 
@@ -47,5 +46,5 @@ To find something fast, open the command palette with the **Search and jump anyw
 
 - New here? Start with [Your first steps](/support/getting-started/your-first-steps).
 - Learn how your files work in [Get started with Drive](/support/drive/get-started).
-- See [how sharing works](/support/drive/share-a-file) when you're ready to work with other people.
+- See [how sharing works](/support/getting-started/how-sharing-works) when you're ready to work with other people.
 - Want to know how to leave with your data? See [Taking your data with you](/support/getting-started/taking-your-data-with-you).

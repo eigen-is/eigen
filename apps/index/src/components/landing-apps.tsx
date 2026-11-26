@@ -6,14 +6,14 @@ import { Link } from '@tanstack/react-router';
 import { Fragment } from 'react';
 import { getAboutArticles } from '../content/manifest';
 
-// The line's words in its order, each with the About slug of the app it names: Vector is "drawings" here.
+// The line's words in its order, each with the About slug of the app it names.
 const WORDS: readonly { word: string; slug: string }[] = [
     { word: 'Mail', slug: 'mail' },
     { word: 'drive', slug: 'drive' },
     { word: 'docs', slug: 'docs' },
     { word: 'sheets', slug: 'sheets' },
     { word: 'slides', slug: 'slides' },
-    { word: 'drawings', slug: 'vector' },
+    { word: 'vector', slug: 'vector' },
     { word: 'stickies', slug: 'stickies' },
     { word: 'calendar', slug: 'calendar' },
     { word: 'contacts', slug: 'contacts' },

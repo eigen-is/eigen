@@ -5,6 +5,7 @@
 // one is. A peer's write, text and delete come from a second tab on a Y.Doc synced by hand.
 import { afterEach, expect, test } from 'bun:test';
 import { readEquation } from '@workspace/lib/docs/eigendoc';
+import { type as typeInto } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -108,13 +109,10 @@ const preview = () => document.querySelector('[data-slot="scroll-area-viewport"]
 // React tracks a field's value on the instance; the prototype setter leaves its tracker stale, as a keystroke does.
 const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
 
-const type = (value: string) =>
-    act(async () => {
-        const input = field();
-        input.focus();
-        nativeValueSetter?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+const type = async (value: string) => {
+    await act(async () => field().focus());
+    await typeInto(field(), value);
+};
 // A keystroke that leaves the caret at `caret`.
 const typeAt = (value: string, caret: number) =>
     act(async () => {

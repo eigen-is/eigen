@@ -10,7 +10,7 @@ import { PropertiesPanel } from '../properties-panel';
 
 type ActivityPanelProps = {
     path: DrivePath;
-    // Opens the card a row names by its id, such as a sticky added to a column.
+    // Opens the card a row names by its id, such as a card added to a column.
     onOpenCard: (cardId: string) => void;
     // Opens the comment a row names by its chat name. The host decides whether it opens live or as deleted.
     onOpenChat: (chatName: string) => void;

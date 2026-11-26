@@ -6,6 +6,7 @@ export * from './colors';
 export * from './comment-indicator';
 export * from './contact';
 export * from './container';
+export * from './drag';
 export * from './fonts';
 export * from './hotkeys';
 export * from './mail';

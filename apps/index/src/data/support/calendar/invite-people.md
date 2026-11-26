@@ -5,18 +5,18 @@ type: how-to
 tags: [calendar, attendees, invite, guests, rsvp]
 related: [calendar/create-event, calendar/respond-to-invitation, calendar/external-invitations]
 order: 40
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 You can invite other people to any event you create in Calendar. Guests receive the invitation immediately, and you can see who has accepted, declined, or not replied yet.
 
 ## Add guests when creating an event
 
-1. Open Calendar and click any day to open the **New event** dialog.
+1. Open Calendar and click **Create event** at the top of the sidebar to open the **New event** dialog.
 2. In the **Add guests** field, type a name or email address. Calendar suggests people from your contacts as you type.
 3. Select a suggestion, or finish typing a full email address and click the **+** button.
 4. Repeat to add more guests.
-5. Fill in the rest of the event details and click **Save**.
+5. Fill in the rest of the event details and click **Create**. A guest you typed but didn't add with **+** is added too.
 
 Each guest appears below the field with a **Pending** badge. Once they respond, the badge updates to **Accepted**, **Maybe**, or **Declined**.
 
@@ -38,7 +38,7 @@ In the **Edit event** dialog, hover over the person you want to remove. An **×*
 
 ## See the full guest list
 
-Open the event. If the event has guests, the detail dialog shows the list with each person's current response status. Above three people the list starts collapsed, with a count and a summary of the replies so far, such as "2 accepted, 3 pending". Click the header to open it. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard at once.
+Open the event. If the event has guests, the detail dialog shows them under **Guests**, each with their current response status. The list opens with a summary of the replies so far, such as "2 accepted, 3 pending". Above three people it starts collapsed. Click the header to open it. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard at once.
 
 ::: grid columns="1"
 ![An event opened on its guests, each with their answer](/data/about/media/calendar-still-build.webp)

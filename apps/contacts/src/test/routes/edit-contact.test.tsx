@@ -1,9 +1,11 @@
 // Two clients on one contact, through the real route and hooks against a server stub that judges etags as the API does.
 // Edit contact keeps what was typed and follows the rest. A sync moves only the fields nobody touched and can't let
 // typed edits overwrite a change unseen. A refused Save keeps the form, and the next one sends the new etag.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { Contact, UpdateContactInput } from '@workspace/lib/types/contact';
+import { field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
@@ -114,28 +116,17 @@ async function open(url = '/edit/book/all?contactId=c1') {
     );
     unmount = rendered.unmount;
     await settle();
-    return { text: () => rendered.container.textContent ?? '', pathname: () => router.state.location.pathname };
+    return {
+        router,
+        text: () => rendered.container.textContent ?? '',
+        pathname: () => router.state.location.pathname,
+    };
 }
 
-function field(label: string): HTMLInputElement | HTMLTextAreaElement {
-    const element = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = element && document.getElementById(element.htmlFor);
-    if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
-        throw new Error(`no field labelled ${label}`);
-    }
-    return input;
-}
 const rows = (placeholder: string) => [
     ...document.querySelectorAll<HTMLInputElement>(`input[placeholder="${placeholder}"]`),
 ];
 
-const type = (input: HTMLInputElement | HTMLTextAreaElement, value: string) =>
-    act(async () => {
-        const prototype =
-            input instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const sync = async () => {
     await act(async () => document.querySelector<HTMLElement>('[data-testid="sync"]')?.click());
     await settle();
@@ -159,14 +150,14 @@ test('the page edits a contact that exists: without one it leaves for the list',
 
 test('a refused Save keeps what was typed and follows the rest, and the next Save sends the new etag', async () => {
     const page = await open();
-    await type(field('Notes'), 'Met at the conference');
+    await type('Notes', 'Met at the conference');
     changeElsewhere({ company: 'Analytical Engines' });
 
     await save();
     expect(toasts).toEqual([STALE_TOAST]);
     expect(page.pathname()).toBe('/edit/book/all');
-    expect(field('Notes').value).toBe('Met at the conference');
-    expect(field('Company').value).toBe('Analytical Engines');
+    expect(field('Notes')).toHaveProperty('value', 'Met at the conference');
+    expect(field('Company')).toHaveProperty('value', 'Analytical Engines');
 
     await save();
     expect(server.writes).toEqual(['v1', 'v2']);
@@ -174,26 +165,59 @@ test('a refused Save keeps what was typed and follows the rest, and the next Sav
     expect(page.pathname()).toBe('/book/all');
 });
 
+test('a second Enter while the saved contact opens sends no second write', async () => {
+    const page = await open();
+    const leaving = Promise.withResolvers<void>();
+    const navigate = page.router.navigate;
+    const held = spyOn(page.router, 'navigate').mockImplementation(async (options) => {
+        await leaving.promise;
+        return navigate(options);
+    });
+    await type('Company', 'Analytical Engines');
+
+    await act(async () => pressEnter(field('Company')));
+    await settle();
+    await act(async () => pressEnter(field('Company')));
+    await settle();
+    expect(server.writes).toEqual(['v1']);
+    expect(toasts).toEqual([]);
+
+    await act(async () => leaving.resolve());
+    expect(page.pathname()).toBe('/book/all');
+    held.mockRestore();
+});
+
+test('Cancel goes back to the contact at once, without asking about what was typed', async () => {
+    const page = await open();
+    await type('Company', 'Analytical Engines');
+    const cancel = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel');
+    await act(async () => cancel?.click());
+    await settle();
+    expect(page.text()).not.toContain('Discard changes?');
+    expect(page.pathname()).toBe('/book/all');
+    expect(server.writes).toEqual([]);
+});
+
 test('a sync moves only the fields nobody touched, offers no way to lose the edits, and a Save over it is refused', async () => {
     const page = await open();
-    await type(field('Notes'), 'Met at the conference');
+    await type('Notes', 'Met at the conference');
     changeElsewhere({ company: 'Analytical Engines' });
     await sync();
-    expect(field('Notes').value).toBe('Met at the conference');
-    expect(field('Company').value).toBe('Analytical Engines');
+    expect(field('Notes')).toHaveProperty('value', 'Met at the conference');
+    expect(field('Company')).toHaveProperty('value', 'Analytical Engines');
     expect(page.text()).not.toContain('Reload');
 
     await save();
     expect(server.writes).toEqual(['v1']);
     expect(toasts).toEqual([STALE_TOAST]);
-    expect(field('Notes').value).toBe('Met at the conference');
+    expect(field('Notes')).toHaveProperty('value', 'Met at the conference');
 });
 
 test('a clean form follows the card, and its Save answers to what it shows', async () => {
     const page = await open();
     changeElsewhere({ company: 'Analytical Engines' });
     await sync();
-    expect(field('Company').value).toBe('Analytical Engines');
+    expect(field('Company')).toHaveProperty('value', 'Analytical Engines');
 
     await save();
     expect(server.writes).toEqual(['v2']);
@@ -205,14 +229,14 @@ test('typing after a sync answers to that sync, and typing after a refusal to wh
     await open();
     changeElsewhere({ company: 'Analytical Engines' });
     await sync();
-    await type(field('Notes'), 'Met at the conference');
+    await type('Notes', 'Met at the conference');
     changeElsewhere({ jobTitle: 'Countess' });
     await sync();
     await save();
     expect(server.writes).toEqual(['v2']);
-    expect(field('Job title').value).toBe('Countess');
+    expect(field('Job title')).toHaveProperty('value', 'Countess');
 
-    await type(field('Notes'), 'Met at the conference in Turin');
+    await type('Notes', 'Met at the conference in Turin');
     changeElsewhere({ jobTitle: 'Mathematician' });
     await sync();
     await save();
@@ -255,14 +279,14 @@ test('a photo that arrives with a sync is saved with the rest of a clean form', 
 test('a field typed back to what it held follows the card, so its Save overwrites nothing', async () => {
     server.contact = { ...ada, notes: 'a' };
     await open();
-    await type(field('Notes'), 'ax');
+    await type('Notes', 'ax');
     changeElsewhere({ notes: 'b' });
     await sync();
-    expect(field('Notes').value).toBe('ax');
+    expect(field('Notes')).toHaveProperty('value', 'ax');
 
-    await type(field('Notes'), 'a');
+    await type('Notes', 'a');
     await settle();
-    expect(field('Notes').value).toBe('b');
+    expect(field('Notes')).toHaveProperty('value', 'b');
 
     await save();
     expect(server.writes).toEqual(['v2']);
@@ -272,15 +296,15 @@ test('a field typed back to what it held follows the card, so its Save overwrite
 test('a field typed back follows the card while another stays typed', async () => {
     server.contact = { ...ada, notes: 'a' };
     await open();
-    await type(field('Company'), 'Analytical Engines');
-    await type(field('Notes'), 'ax');
+    await type('Company', 'Analytical Engines');
+    await type('Notes', 'ax');
     changeElsewhere({ notes: 'b' });
     await sync();
 
-    await type(field('Notes'), 'a');
+    await type('Notes', 'a');
     await settle();
-    expect(field('Notes').value).toBe('b');
-    expect(field('Company').value).toBe('Analytical Engines');
+    expect(field('Notes')).toHaveProperty('value', 'b');
+    expect(field('Company')).toHaveProperty('value', 'Analytical Engines');
 
     await save();
     expect(server.writes).toEqual(['v1']);

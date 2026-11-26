@@ -5,15 +5,15 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { useDialogOpen } = await import('../../hooks/use-dialog-open');
+const { useDialogOpen, useMenuOpen } = await import('../../hooks/use-dialog-open');
 
 // happy-dom delivers mutation records on a later task, like the browser.
 const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
-function mount() {
+function mount(useOpen = useDialogOpen) {
     let latest: boolean | null = null;
     function Harness() {
-        latest = useDialogOpen();
+        latest = useOpen();
         return null;
     }
     const root = createRoot(document.createElement('div'));
@@ -59,6 +59,24 @@ describe('useDialogOpen', () => {
         wrapper.remove();
         await settle();
         expect(h.open).toBe(false);
+        h.unmount();
+    });
+});
+
+describe('useMenuOpen', () => {
+    test("an open select's listbox counts as a menu, and a closing one does not", async () => {
+        const h = mount(useMenuOpen);
+        const listbox = document.createElement('div');
+        listbox.setAttribute('role', 'listbox');
+        listbox.setAttribute('data-state', 'open');
+        document.body.appendChild(listbox);
+        await settle();
+        expect(h.open).toBe(true);
+
+        listbox.setAttribute('data-state', 'closed');
+        await settle();
+        expect(h.open).toBe(false);
+        listbox.remove();
         h.unmount();
     });
 });

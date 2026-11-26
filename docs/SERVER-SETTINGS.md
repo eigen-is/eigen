@@ -26,7 +26,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 
 ## Renaming the organization renames its default team
 
-`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the default team, found by its pinned `defaultTeamId` ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team)), while it still carries the old name. A default team renamed by hand keeps its name, and so does every other team, even one named like the org. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists and the admin users list, which carry the default team's.
+`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the default team, found by its pinned `defaultTeamId` ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team)), while it still carries the old name. A default team renamed by hand keeps its name, and so does every other team, even one named like the org. The web address and the mail domain stay. The page's save (`useSaveServerSettingsPage`) then invalidates the public config, which carries the name to every app, and the team lists and the admin users list, which carry the default team's.
 
 ## JsonStore merges onto defaults and fails closed
 
@@ -97,7 +97,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## The settings page asks before it drops changes
 
-The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) edits a draft and saves every section with one `SettingsFooter`, whose `LeaveGuard` asks before the page is left with unsaved changes. What each section does for the owner is in the help center: [Server settings](../apps/index/src/data/support/admin/server-settings.md) and [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md). The hooks are in `packages/lib/src/core/settings/hooks/`.
+The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) edits a draft on one `PageForm`, which saves every section together and whose `LeaveGuard` asks before the page is left with unsaved changes. What each section does for the owner is in the help center: [Server settings](../apps/index/src/data/support/admin/server-settings.md) and [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md). The hooks are in `packages/lib/src/core/settings/hooks/`.
 
 ## Hosted mail and the relay are environment, not settings
 

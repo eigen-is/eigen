@@ -1,5 +1,6 @@
 // The Location bar of a folder picker, such as Save to Drive's, opens and closes the folder browser from a button the
 // keyboard reaches: Enter, Space and a click. Open, its crumbs pick a folder and New folder works, without closing it.
+// A folder its host refuses shows the reason under the bar, tied to the toggle.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { DriveLocationValue } from '@workspace/lib/types/drive-view';
@@ -45,13 +46,14 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 const onChange = mock((_value: DriveLocationValue) => {});
-function Host() {
+function Host({ error }: { error?: string }) {
     const [expanded, setExpanded] = useState(false);
     return createElement(DriveLocationField, {
         value: { ownerId: 'owner-1', mountId: 'default', folderId: 'docs' },
         onChange,
         expanded,
         onExpandedChange: setExpanded,
+        error,
     });
 }
 
@@ -96,4 +98,12 @@ test('open, a crumb picks its folder and New folder opens, and the browser stays
     expect(expanded()).toBe('true');
     // Neither control sits inside the toggle, which would make it a button in a button.
     expect(toggle().contains(crumb) || toggle().contains(find('button[aria-label="New folder"]'))).toBe(false);
+});
+
+test('a refused folder shows its reason under the bar, and the toggle is marked by it', async () => {
+    ({ unmount } = await renderInDocument(createElement(Host, { error: 'Pick a folder in this drive' })));
+    const message = find('[data-slot="field-error"]');
+    expect(message.textContent).toBe('Pick a folder in this drive');
+    expect(toggle().getAttribute('aria-invalid')).toBe('true');
+    expect(toggle().getAttribute('aria-describedby')).toBe(message.id);
 });

@@ -6,7 +6,7 @@ category: Basics
 tags: [getting-started, sign-in, profile, space]
 related: [getting-started/about-eigen, drive/get-started]
 order: 2
-updated: 2026-11-19
+updated: 2026-11-24
 ---
 
 Eigen brings your mail, files, calendar, and more together in one place, each as its own app. This page shows you how to sign in, set up your profile, and move between the apps.
@@ -19,7 +19,7 @@ Open Eigen in your browser and you land on the sign-in screen.
 2. Type your **Password**.
 3. Click **Sign in**.
 
-That's it. You arrive at your apps, ready to work.
+You arrive at your apps, ready to work.
 
 ## Set up your profile
 
@@ -44,7 +44,7 @@ Eigen is a set of apps that share the same account and the same look. At the top
 - **Calendar** for your schedule.
 - **Docs**, **Sheets**, and **Slides** for documents, spreadsheets, and presentations.
 - **Vector** for drawings and diagrams.
-- **Stickies** for notes and boards, and **Chat** for messages.
+- **Stickies** for boards of cards, and **Chat** for messages.
 - **Contacts** for the people you know.
 
 The app you're in is highlighted in the list, so you always know where you are.

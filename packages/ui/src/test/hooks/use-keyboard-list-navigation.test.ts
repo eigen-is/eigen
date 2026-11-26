@@ -181,6 +181,15 @@ describe('useKeyboardListNavigation Space and Enter', () => {
         await unmount();
     });
 
+    // A picker's form submits on Cmd+Enter, so a row that opened on it too would confirm twice.
+    test('Cmd or Ctrl+Enter opens nothing and is left to the form around the list', async () => {
+        const { calls, list, keydown, unmount } = await mountList(1);
+        expect((await keydown(list, 'Enter', { metaKey: true })).defaultPrevented).toBe(false);
+        expect((await keydown(list, 'Enter', { ctrlKey: true })).defaultPrevented).toBe(false);
+        expect(calls).toEqual([]);
+        await unmount();
+    });
+
     test('on a button inside a row, Enter and Space press the button and leave the row alone', async () => {
         const { calls, menuButton, keydown, unmount } = await mountList(1);
         for (const key of ['Enter', ' ']) {
@@ -205,6 +214,27 @@ describe('useKeyboardListNavigation Space and Enter', () => {
     });
 });
 
+// The list takes the focus a moment after it mounts, so its keys work without a click, but never from a field the user
+// types in, such as a picker's name while the picker's folder list opens.
+describe('useKeyboardListNavigation focus on mount', () => {
+    const afterTheTimer = () => act(async () => new Promise((resolve) => setTimeout(resolve, 150)));
+
+    test('the list takes the focus when nothing holds it', async () => {
+        const { list, unmount } = await mountList(-1);
+        await afterTheTimer();
+        expect(document.activeElement).toBe(list);
+        await unmount();
+    });
+
+    test('a field the user types in keeps the focus', async () => {
+        const { field, unmount } = await mountList(-1);
+        if (field instanceof HTMLElement) field.focus();
+        await afterTheTimer();
+        expect(document.activeElement).toBe(field);
+        await unmount();
+    });
+});
+
 describe('useKeyboardListNavigation and a dialog opened from the list', () => {
     test('a key pressed in a portaled field is the field’s, and the list neither acts nor claims it', async () => {
         const { calls, field, keydown, unmount } = await mountList(1, selectionOf(['b']));
@@ -213,6 +243,31 @@ describe('useKeyboardListNavigation and a dialog opened from the list', () => {
             expect(event.defaultPrevented).toBe(false);
         }
         expect(calls).toEqual([]);
+        await unmount();
+    });
+
+    // As a question over a dialog closes, its Keep editing button goes and the focus falls to <body> for a moment,
+    // before the dialog puts it back in its field. The list takes it back from <body> only while no dialog is open.
+    test('the focus that falls to <body> stays for the open dialog, and comes back to the list once it closed', async () => {
+        const { list, unmount } = await mountList(-1);
+        const dialog = document.createElement('div');
+        dialog.setAttribute('role', 'dialog');
+        dialog.dataset.state = 'open';
+        const keepEditing = document.createElement('button');
+        dialog.append(keepEditing);
+        document.body.append(dialog);
+        const dropFocus = () =>
+            act(async () => {
+                keepEditing.focus();
+                keepEditing.blur();
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            });
+        await dropFocus();
+        expect(document.activeElement).toBe(document.body);
+        dialog.dataset.state = 'closed';
+        await dropFocus();
+        expect(document.activeElement).toBe(list);
+        dialog.remove();
         await unmount();
     });
 });

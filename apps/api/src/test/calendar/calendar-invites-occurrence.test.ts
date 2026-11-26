@@ -4,6 +4,7 @@
 // series' guest changes and each guest's answer for the whole series, and a recolour tells no guest. Driven through
 // the routes the calendar app calls (docs/CALENDAR.md § An occurrence message names the series).
 import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
+import { truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, EventData } from '@workspace/lib/types/calendar';
 import { processInboundImip } from '../../lib/calendar/imip';
 import { getHome } from '../../lib/home';
@@ -963,7 +964,9 @@ describe('Occurrence edits of an invited series', () => {
         expect(res.status).toBe(200);
 
         const date = findOrFail((await bobStored(series.uid)).overrides, (e) => e.recurrenceDate === target);
-        expect(date).toMatchObject({ title: series.title, ...slotOf(target), data: { reminders } });
+        expect(date).toMatchObject({ title: series.title, data: { reminders } });
+        // toMatchObject would pass any Date against any other, so the slot is compared on its own.
+        expect({ startTime: date.startTime, endTime: date.endTime }).toEqual(slotOf(target));
         expect(date.data?.attendees?.map((a) => a.email)).toEqual([ctx.bob.user.email]);
     });
 
@@ -1331,6 +1334,52 @@ describe('Occurrence edits of an invited series', () => {
 
         const moved = findOrFail(await bobOccurrences(series.uid), (e) => e.occurrenceDate === target);
         expect(bobStatus(moved)).toBe('accepted');
+    });
+
+    // The web app's "This and following" from `cut`: the series ends before it, and a new one starts there.
+    test("a split drops the old series' moved and cancelled dates from the cut on, for the organizer and the guest", async () => {
+        const { series, target: cut } = await seeded('Weekly Split');
+        const [, , moved, cancelled] = (await aliceOccurrences(series.uid)).map((e) => e.occurrenceDate);
+        await moveOccurrence(series, moved, 'Split Moved');
+        await editOccurrence(series.id, cancelled, { title: 'Weekly Split', status: 'cancelled' });
+        await untilBob(series.uid, (occ) => occ.length === 3);
+
+        const rrule = truncateRRule('FREQ=WEEKLY;COUNT=4', cut, { timezone: TZ, allDay: false });
+        expect((await putEvent(series.id, { rrule })).status).toBe(200);
+        const following = await assertJson<CalendarEvent>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Split',
+                        startTime: `${cut}T09:00:00Z`,
+                        endTime: `${cut}T10:00:00Z`,
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;COUNT=3',
+                        timezone: TZ,
+                        data: { attendees: guests() },
+                    }),
+                },
+            ),
+        );
+
+        const dates = async (read: (uid: string) => Promise<CalendarEventOccurrence[]>) =>
+            [...(await read(series.uid)), ...(await read(following.uid))].map((e) => e.occurrenceDate).sort();
+        const all = ['2027-02-02', cut, moved, cancelled];
+        expect(await dates(aliceOccurrences)).toEqual(all);
+        expect((await aliceVEvents(series.uid)).join('')).not.toContain('EXDATE');
+        expect(await aliceVEvents(series.uid)).toHaveLength(1);
+
+        await untilBob(following.uid, (occ) => occ.length === 3);
+        await eventually(async () =>
+            (await bobStored(series.uid)).master.rrule?.includes('UNTIL') ? true : undefined,
+        );
+        expect(await dates(bobOccurrences)).toEqual(all);
+        expect((await bobStored(series.uid)).overrides).toEqual([]);
+        expect(await bobIcs(series.uid)).not.toContain('EXDATE');
     });
 
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {

@@ -24,7 +24,7 @@ describe('LandingApps', () => {
             'href="/about/chat"',
         ]);
         expect(html.replace(/<[^>]+>/g, '')).toBe(
-            'Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.',
+            'Mail, drive, docs, sheets, slides, vector, stickies, calendar, contacts and chat.',
         );
     });
 });

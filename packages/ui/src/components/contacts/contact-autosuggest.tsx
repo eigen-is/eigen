@@ -5,29 +5,41 @@
 import { useContactSuggestions } from '@workspace/lib/contacts';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { Input } from '@workspace/ui/components/input';
-import { cn } from '@workspace/ui/lib/utils';
-import type { KeyboardEvent } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useCallback, useRef, useState } from 'react';
 import { ContactSuggestList } from './contact-suggest-list';
-import type { ContactAutosuggestProps } from './types';
+
+type ContactAutosuggestProps = {
+    initialValue?: string;
+    value?: string;
+    onChange?: (value: string) => void;
+    appendMode?: boolean;
+    excludeEmails?: string[];
+    inputClassName?: string;
+    placeholder?: string;
+    disabled?: boolean;
+    autoComplete?: string;
+    id?: string;
+    'aria-invalid'?: boolean;
+    'aria-describedby'?: string;
+    onSubmit?: (value: string) => void;
+    // An Enter in the empty field runs the caller's main action, such as moving on to the next step.
+    onEmptyEnter?: () => void;
+};
 
 export function ContactAutosuggest({
     initialValue = '',
     value: controlledValue,
     onChange,
     appendMode = false,
-    onlyInternalMails = false,
     excludeEmails,
-    className = '',
-    suggestionsClassName = '',
     inputClassName = '',
     placeholder = '',
     disabled = false,
     autoComplete = 'one-time-code',
     id,
-    name,
-    required,
-    inputRef: externalInputRef,
+    'aria-invalid': ariaInvalid,
+    'aria-describedby': ariaDescribedBy,
     onSubmit,
     onEmptyEnter,
 }: ContactAutosuggestProps) {
@@ -38,7 +50,7 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue ?? internalValue;
 
-    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails);
+    const { suggestions, isLoading } = useContactSuggestions(inputValue, false, excludeEmails);
     const listOpen = isOpen && suggestions.length > 0;
 
     const handleSelect = useCallback(
@@ -61,7 +73,7 @@ export function ContactAutosuggest({
     );
 
     const handleInputChange = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
+        (e: ChangeEvent<HTMLInputElement>) => {
             const newValue = e.target.value;
             setInternalValue(newValue);
             setIsOpen(true);
@@ -102,7 +114,7 @@ export function ContactAutosuggest({
         [listOpen, suggestions, selectedIndex, handleSelect],
     );
 
-    const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDownSubmit = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== 'Enter' || event.defaultPrevented) return;
         if (!inputValue.trim() && onEmptyEnter) {
             event.preventDefault();
@@ -128,18 +140,10 @@ export function ContactAutosuggest({
     }, []);
 
     return (
-        <div className={cn('relative', className)}>
+        <div className="relative">
             <Input
                 id={id}
-                name={name}
-                ref={(elm) => {
-                    if (typeof externalInputRef === 'function') {
-                        externalInputRef(elm);
-                    } else if (externalInputRef) {
-                        externalInputRef.current = elm;
-                    }
-                    inputRef.current = elm;
-                }}
+                ref={inputRef}
                 value={inputValue}
                 onChange={handleInputChange}
                 onFocus={handleFocus}
@@ -154,7 +158,8 @@ export function ContactAutosuggest({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoComplete={autoComplete}
-                required={required}
+                aria-invalid={ariaInvalid}
+                aria-describedby={ariaDescribedBy}
             />
 
             {isOpen && (
@@ -162,7 +167,7 @@ export function ContactAutosuggest({
                     items={suggestions}
                     selectedIndex={selectedIndex}
                     onSelect={handleSelect}
-                    className={cn('w-full mt-1', suggestionsClassName)}
+                    className="w-full mt-1"
                 />
             )}
 

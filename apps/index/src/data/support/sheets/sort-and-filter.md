@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, sort, filter, data]
 related: [sheets/get-started, sheets/rows-and-columns]
 order: 130
-updated: 2026-11-09
+updated: 2026-11-25
 ---
 
 Sorting rearranges your rows by the values in a chosen column. Filtering hides rows that don't match the values you pick, so you can focus on the data you care about. Both work on the same sheet at the same time.
@@ -64,7 +64,7 @@ You can also right-click a cell and choose **Create a filter**.
    - **Inverse**: reverses your current selection.
 4. To narrow the list, type in the search box below those buttons.
 5. Untick individual values you want to hide.
-6. Click **Confirm** to apply the filter.
+6. Click **Apply**.
 
 Rows hidden by the filter are still in your sheet. They come back the moment you change or remove the filter. Rows you hid yourself stay hidden, except those the filter hid as well.
 
@@ -75,7 +75,7 @@ If your cells have different background or font colors, you can filter by color 
 1. Click the dropdown arrow on the column.
 2. Hover over **Filter by color**.
 3. A sub-panel shows the colors used in that column. Untick any color to hide rows with that color.
-4. Click **Confirm**.
+4. Click **Apply**.
 
 ### Sort from the filter dropdown
 
@@ -85,4 +85,4 @@ The filter dropdown also lets you sort the rows the filter shows by that column 
 
 To remove all filters at once, open the **Data** menu and click **Clear filter**. The dropdown arrows disappear and the rows the filter hid return.
 
-To remove just one column's filter, click that column's dropdown arrow, click **Check all** so all values are ticked, and click **Confirm**. The rows return, but the filter stays active on the other columns.
+To remove just one column's filter, click that column's dropdown arrow, click **Check all** so all values are ticked, and click **Apply**. The rows return, but the filter stays active on the other columns.

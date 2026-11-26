@@ -5,7 +5,7 @@
 // to, for a picker.
 
 import type { QueryClient } from '@tanstack/react-query';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { skipToken, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -17,6 +17,8 @@ import type {
     CalendarOption,
     CreateEventInput,
     EventData,
+    RecurrenceScope,
+    RsvpStatus,
     SharedCalendar,
     UpdateCalendarInput,
     UpdateEventInput,
@@ -26,7 +28,13 @@ import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { AppError, onEtagWriteError, onMutationError } from '../../api-error';
 import { usePublicUser, usePublicUsers } from '../../public';
-import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
+import {
+    formatFreeBusyTitle,
+    isInvitationOnCalendar,
+    occurrenceDateToString,
+    ownerAddressToLookUp,
+    writableShares,
+} from '../calendar-utils';
 import {
     calendarKeys,
     invalidateCalendarDeleted,
@@ -115,8 +123,8 @@ export function useEvents(ownerId: string, from: number, to: number) {
 }
 
 // A range read answers occurrences; only the stored row says where the series itself starts.
-export function useEvent(ownerId: string, calendarId: string, id: string, enabled = true) {
-    return useQuery({
+export function eventQueryConfig(ownerId: string, calendarId: string, id: string) {
+    return {
         queryKey: calendarKeys.event(ownerId, calendarId, id),
         queryFn: async (): Promise<CalendarEvent> => {
             const response = await calendarApi({ ownerId }).calendars({ calId: calendarId }).events({ id }).get();
@@ -124,8 +132,13 @@ export function useEvent(ownerId: string, calendarId: string, id: string, enable
             return response.data;
         },
         staleTime: STALE_TIME.TWO_MINUTES,
-        enabled: enabled && !!ownerId && !!calendarId && !!id,
-    });
+    };
+}
+
+// `id` is null while nothing needs the stored row.
+export function useEvent(ownerId: string, calendarId: string, id: string | null) {
+    const config = eventQueryConfig(ownerId, calendarId, id ?? '');
+    return useQuery({ ...config, queryFn: id ? config.queryFn : skipToken });
 }
 
 export function useCreateEvent(ownerId: string) {
@@ -210,17 +223,13 @@ export function useRefuseStaleEvent(ownerId: string): () => void {
     };
 }
 
-// The owner's address tells their own organized events from invitations; a team owner has none to ask for. Until a
-// user owner's address arrives every event counts as an invitation, so none is briefly editable.
+// The owner's address tells their own organized events from invitations, by isInvitationOnCalendar's rule.
 export function useIsInvitationFromOthers(eventOwnerId: string): (event: { data?: EventData | null }) => boolean {
     const { user } = useAuth();
-    const ownerIsViewer = eventOwnerId === user?.id;
-    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
-    const owner = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
-    const ownerEmail = ownerIsViewer ? user?.email : owner.data?.email;
+    const ownerEmail = usePublicUser(ownerAddressToLookUp(eventOwnerId, user?.id)).data?.email;
     return useCallback(
-        (event: { data?: EventData | null }) => owner.isLoading || isInvitationFromOthers(event, ownerEmail),
-        [owner.isLoading, ownerEmail],
+        (event: { data?: EventData | null }) => isInvitationOnCalendar(event, eventOwnerId, user, ownerEmail),
+        [eventOwnerId, user, ownerEmail],
     );
 }
 
@@ -338,18 +347,16 @@ export function useCalendarOptions(
     const label = useSharedCalendarLabel(sharedCalendars);
 
     return useMemo(() => {
-        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
-        for (const sc of sharedCalendars) {
-            if (sc.permission === 'write') {
-                options.push({
-                    id: sc.calendarId,
-                    name: label(sc),
-                    color: sc.color || sc.calendarColor,
-                    ownerId: sc.ownerUserId,
-                });
-            }
-        }
-        return options;
+        const own = calendars.map((c): CalendarOption => ({ id: c.id, name: c.name, color: c.color, ownerId }));
+        const shared = writableShares(sharedCalendars).map(
+            (sc): CalendarOption => ({
+                id: sc.calendarId,
+                name: label(sc),
+                color: sc.color || sc.calendarColor,
+                ownerId: sc.ownerUserId,
+            }),
+        );
+        return [...own, ...shared];
     }, [calendars, sharedCalendars, ownerId, label]);
 }
 
@@ -394,8 +401,8 @@ export function useRsvp(ownerId: string) {
         }: {
             calendarId: string;
             eventId: string;
-            status: 'accepted' | 'declined' | 'tentative';
-            scope?: 'this' | 'this-and-following' | 'all';
+            status: RsvpStatus;
+            scope?: RecurrenceScope;
             recurrenceDate?: string;
             remove?: boolean;
         }) => {

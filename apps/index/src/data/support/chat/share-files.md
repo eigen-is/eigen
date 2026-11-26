@@ -6,7 +6,7 @@ category: Files
 tags: [chat, files, attachments, drive, sharing]
 related: [chat/get-started, chat/send-messages, drive/get-started]
 order: 50
-updated: 2026-11-17
+updated: 2026-11-25
 ---
 
 You can attach files to any chat message, either by picking something from Drive or uploading directly from your computer. Recipients can preview, download, or save the file to their own Drive.
@@ -19,7 +19,7 @@ You can attach files to any chat message, either by picking something from Drive
 4. Click **Select** to confirm. The files appear as chips above the message box.
 5. Type an optional message, then press Enter to send.
 
-To upload a file from your computer instead, click **Upload from device** in the bottom-left corner of the dialog. Your browser's file chooser opens, and the file is added to the chat when you send.
+To upload a file from your computer instead, click **Upload from device** in the bottom-left corner of the dialog. Your browser's file chooser opens, and the file is added to the chat when you send. On a phone, the button shows only its icon.
 
 You can also paste an image directly into the message box. The image is added as an attachment without opening the dialog.
 
@@ -53,4 +53,4 @@ Right-click a chip for an uploaded file, or press and hold it on a phone, to see
 2. Click the **Save attachments** icon (a down arrow) that appears in the top-right corner of the message.
 3. A dialog opens. Browse to the folder in Drive where you want to save the files, then click **Save here**.
 
-If you'd rather download the files to your computer, click **Download instead** in the same dialog.
+If you'd rather download the files to your computer, click **Download instead** in the same dialog. On a phone the button shows only its download icon.

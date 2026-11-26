@@ -1,6 +1,6 @@
-// The comment thread under a card, such as a sticky's: the card itself on top, the Activity of its chat room below it
-// in one scroll, the composer pinned under both, and the dialog that deletes a message. It fills the height its host
-// gives it, such as a dialog's. It finds the chat room by name in the document's chat folder.
+// The comment thread under a card, such as one on a board: the card itself on top, the Activity of its chat room
+// below it in one scroll, the composer pinned under both, and the dialog that deletes a message. It fills the height
+// its host gives it, such as a dialog's. It finds the chat room by name in the document's chat folder.
 
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
@@ -12,6 +12,7 @@ import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
 import { ConfirmDialog } from '../confirm-dialog';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
+import { DetailSection } from '../layout/app/detail-item';
 import { LoadingState } from '../layout/app/loading-state';
 
 type CommentThreadProps = {
@@ -75,7 +76,9 @@ function CommentThreadInner({
                     <>
                         {lead}
                         {chat.messages.some((message) => !message.deletedAt) && (
-                            <h3 className="eigen-section-label app-gutter-x mt-2 mb-2">Activity</h3>
+                            <div className="app-gutter-x">
+                                <DetailSection label="Activity" />
+                            </div>
                         )}
                     </>
                 }

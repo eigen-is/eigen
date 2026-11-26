@@ -9,6 +9,7 @@ import { adminStillGuests } from './admin-still-guests';
 import { adminStillSettings } from './admin-still-settings';
 import { calendarHero } from './calendar-hero';
 import { calendarStillBuild, calendarStillWeek } from './calendar-stills';
+import { CARDS } from './cards';
 import { chatHero } from './chat-hero';
 import { chatPair } from './chat-pair';
 import { chatStillVolunteers } from './chat-still';
@@ -83,4 +84,5 @@ export const SCENES: Scene[] = [
     adminStillBackups,
     adminStillGuests,
     ...ROWS,
+    ...CARDS,
 ];

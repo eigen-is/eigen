@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-11-09
+updated: 2026-11-25
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -17,7 +17,7 @@ You can bring an Excel workbook into Sheets in two ways: import it into a spread
 3. Click **Import…**.
 4. A dialog opens. You can either:
    - Browse your Drive to pick an `.xlsx` file you have already uploaded, then click **Select**.
-   - Click **Upload from device** to open a file chooser and pick an `.xlsx` file from your computer.
+   - Click **Upload from device** to open a file chooser and pick an `.xlsx` file from your computer. On a phone, the button shows only its icon.
 5. Choose how the workbook comes in, then click **Import**:
    - **Insert as new sheets** adds the workbook's sheets after the ones the spreadsheet has. This is the default.
    - **Replace spreadsheet** replaces the whole spreadsheet with the workbook.

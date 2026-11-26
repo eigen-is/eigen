@@ -1,8 +1,10 @@
 // A new contact needs a first or a last name. Save sends the card with its blank email and phone rows
-// dropped, then opens the new card in the book.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+// dropped, then opens the new card in the book, and the form takes no second Save until it has left.
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
+import { field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom().happyDOM.setViewport({ width: 1440, height: 900 });
@@ -59,23 +61,11 @@ async function open() {
     );
     unmount = rendered.unmount;
     return {
+        router,
         text: () => rendered.container.textContent ?? '',
         location: () => [router.state.location.pathname, router.state.location.search],
     };
 }
-
-function field(label: string): HTMLInputElement {
-    const element = [...document.querySelectorAll('label')].find((l) => l.textContent === label);
-    const input = element && document.getElementById(element.htmlFor);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no field labelled ${label}`);
-    return input;
-}
-
-const type = (input: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 
 const save = () =>
     act(async () => {
@@ -84,7 +74,7 @@ const save = () =>
 
 test('a contact with neither a first nor a last name is refused', async () => {
     const page = await open();
-    await type(field('First name'), '   ');
+    await type('First name', '   ');
     await save();
     expect(page.text()).toContain('Either first name or last name is required');
     expect(addContact.mutateAsync).not.toHaveBeenCalled();
@@ -92,7 +82,7 @@ test('a contact with neither a first nor a last name is refused', async () => {
 
 test('an email that is not one is refused', async () => {
     const page = await open();
-    await type(field('First name'), 'Ada');
+    await type('First name', 'Ada');
     const email = document.querySelector<HTMLInputElement>('input[placeholder="Email address"]');
     if (!email) throw new Error('the form has no email row');
     await type(email, 'ada at example');
@@ -103,10 +93,38 @@ test('an email that is not one is refused', async () => {
 
 test('Save creates the card without its blank rows and opens it in the book', async () => {
     const page = await open();
-    await type(field('Last name'), 'Lovelace');
+    await type('Last name', 'Lovelace');
     await save();
 
     const [input] = addContact.mutateAsync.mock.calls[0] ?? [];
     expect(input).toMatchObject({ firstName: '', lastName: 'Lovelace', email: [], phone: [], labels: [] });
     expect(page.location()).toEqual(['/book/all', { contactId: 'c-new' }]);
+});
+
+test('a second Enter while the saved contact opens creates no second contact', async () => {
+    const page = await open();
+    const leaving = Promise.withResolvers<void>();
+    const navigate = page.router.navigate;
+    const held = spyOn(page.router, 'navigate').mockImplementation(async (options) => {
+        await leaving.promise;
+        return navigate(options);
+    });
+    await type('First name', 'Fenna');
+
+    await act(async () => pressEnter(field('First name')));
+    await act(async () => pressEnter(field('First name')));
+    expect(addContact.mutateAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => leaving.resolve());
+    expect(page.location()).toEqual(['/book/all', { contactId: 'c-new' }]);
+    held.mockRestore();
+});
+
+test('Cancel leaves for the book at once, without asking about what was typed', async () => {
+    const page = await open();
+    await type('First name', 'Fenna');
+    const cancel = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Cancel');
+    await act(async () => cancel?.click());
+    expect(page.text()).not.toContain('Discard changes?');
+    expect(page.location()).toEqual(['/book/all', {}]);
 });

@@ -1,7 +1,7 @@
 // A text file saves only what changed, against the version it was opened at: a save sends that version's
 // etag, and the next save the one the server answered. A file someone else changed meanwhile opens the conflict
 // dialog instead of being overwritten, unless the user forces it. A failed save stays unsaved, and an
-// unsaved file asks before it closes or the tab unloads.
+// unsaved file asks before its Cancel closes it.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { EditorSaveResult } from '@workspace/lib/types/file-kinds';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -13,9 +13,11 @@ type SaveParams = { content: string; frontmatter?: string; expectedEtag: string;
 const openedEtag = '"opened"';
 const savedEtag = '"saved"';
 const answers: (EditorSaveResult | Error)[] = [];
+let held: Promise<void> | undefined;
 // One object, so the hook's save callback keeps its identity across renders.
 const fileSave = {
     mutateAsync: mock(async (_params: SaveParams): Promise<EditorSaveResult> => {
+        await held;
         const answer = answers.shift() ?? { conflict: false, etag: savedEtag };
         if (answer instanceof Error) throw answer;
         return answer;
@@ -32,12 +34,15 @@ const { act, createElement } = await import('react');
 const { useEditorSave } = await import('../../../components/editor/use-editor-save');
 
 let content = 'first draft';
+const close = mock(() => {});
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     content = 'first draft';
     answers.length = 0;
+    held = undefined;
     fileSave.mutateAsync.mockClear();
+    close.mockClear();
 });
 
 async function renderSave() {
@@ -50,8 +55,9 @@ async function renderSave() {
             etag: openedEtag,
             getContent: () => content,
             getFrontmatter: () => 'title: Notes',
+            onCancel: close,
         });
-        return null;
+        return current.save.discardDialog;
     }
     ({ unmount } = await renderInDocument(createElement(Probe)));
     const save = () => {
@@ -60,6 +66,10 @@ async function renderSave() {
     };
     return save;
 }
+
+const asking = () => document.body.textContent?.includes('Discard changes?') ?? false;
+const click = (name: string) =>
+    act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent === name)?.click());
 
 test('a file with no change saves nothing', async () => {
     const save = await renderSave();
@@ -129,38 +139,63 @@ test('a save that fails stays unsaved, so the next try sends it again', async ()
     expect(save().saveState).toBe('saved');
 });
 
-test('closing a clean file closes at once, and an unsaved one asks first', async () => {
+test('Cancel on a clean file closes at once, and on an unsaved one asks first', async () => {
     const save = await renderSave();
-    const close = mock(() => {});
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).toHaveBeenCalledTimes(1);
 
     await act(async () => save().markDirty());
-    await act(async () => save().confirmClose(close));
+    await act(async () => save().cancel());
     expect(close).toHaveBeenCalledTimes(1);
-    expect(save().showDiscardConfirm).toBe(true);
+    expect(asking()).toBe(true);
 
-    await act(async () => save().handleDiscardCancel());
-    expect(save().showDiscardConfirm).toBe(false);
+    await click('Keep editing');
+    expect(asking()).toBe(false);
     expect(close).toHaveBeenCalledTimes(1);
 
-    await act(async () => save().confirmClose(close));
-    await act(async () => save().handleDiscardConfirm());
+    await act(async () => save().cancel());
+    await click('Discard');
     expect(close).toHaveBeenCalledTimes(2);
 });
 
-test('the tab asks before it unloads while the file is unsaved, and not after a save', async () => {
-    const save = await renderSave();
-    const unload = () => {
-        const event = new Event('beforeunload', { cancelable: true });
-        window.dispatchEvent(event);
-        return event.defaultPrevented;
-    };
-    expect(unload()).toBe(false);
-    await act(async () => save().markDirty());
-    expect(unload()).toBe(true);
-    await act(async () => {
-        await save().doSave();
+test('an edit typed while a save is in flight stays unsaved after it lands', async () => {
+    let release = () => {};
+    held = new Promise((resolve) => {
+        release = resolve;
     });
-    expect(unload()).toBe(false);
+    const save = await renderSave();
+    await act(async () => save().markDirty());
+    let saving: Promise<boolean> = Promise.resolve(true);
+    await act(async () => {
+        saving = save().doSave();
+    });
+    expect(save().saveState).toBe('saving');
+
+    content = 'second draft';
+    await act(async () => save().markDirty());
+    let saved = true;
+    await act(async () => {
+        release();
+        saved = await saving;
+    });
+    expect(saved).toBe(false);
+    expect(save().saveState).toBe('unsaved');
+
+    await act(async () => save().cancel());
+    expect(close).not.toHaveBeenCalled();
+    expect(asking()).toBe(true);
+});
+
+test('Cancel while a save is in flight asks first, since that save may still fail', async () => {
+    held = new Promise(() => {});
+    const save = await renderSave();
+    await act(async () => save().markDirty());
+    await act(async () => {
+        save().doSave();
+    });
+    expect(save().saveState).toBe('saving');
+
+    await act(async () => save().cancel());
+    expect(close).not.toHaveBeenCalled();
+    expect(asking()).toBe(true);
 });

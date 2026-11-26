@@ -1,9 +1,11 @@
-// The data-validation dialog over a column header's selection names it B:B and puts the rule on the whole column, to
-// the grid's last row. OK checks the draft first: a refused range or value keeps the dialog open with the reason under
-// it and the draft as typed. Remove validation takes a range out of a rule and keeps the rest. A grid button swaps
-// the dialog for the range picker, and the picker's OK or Cancel brings it back with the draft as the user left it.
+// The data-validation dialog keeps the dialog contract. Over a column header's selection it names it B:B and puts the
+// rule on the whole column, to the grid's last row. Apply checks the draft first: a refused range or value keeps the
+// dialog open with the reason under it and the draft as typed. Remove validation takes a range out of a rule and keeps
+// the rest. A grid button swaps the dialog for the range picker, and the picker's Select or Cancel brings it back with
+// the draft as the user left it, still asking before Esc drops it.
 
 import { expect, test } from 'bun:test';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 
@@ -11,7 +13,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { REFERENCE_ROW_COUNT } = await import('@workspace/lib/sheets');
-const { renderSheetDialog } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { DataValidation } = await import('../../../components/DataValidation');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
 type Selection = import('../../../state').Selection;
@@ -23,31 +25,29 @@ const NUMBER = { type: 'number', type2: 'between', value1: '1', value2: '10' };
 const B3 = { row: [2, 2], column: [1, 1], row_focus: 2, column_focus: 1 };
 const NO_RANGE = 'Enter a cell range, such as A1:B10';
 
-// The dialog over a 1,000-row sheet.
-const openDialog = (selection: Selection, dataValidations = {}, grid?: () => ReactNode) =>
-    renderSheetDialog(
-        (d) => d.showDialog(createElement(DataValidation)),
+// A 1,000-row sheet with these rules and this selection.
+const sheetWith = (selection: Selection, dataValidations = {}) => ({
+    sheets: [
         {
-            sheets: [
-                {
-                    id: 'id_1',
-                    name: 'Sheet1',
-                    order: 0,
-                    config: {},
-                    data: Array.from({ length: 1000 }, () => [null, null, null]),
-                    dataValidations,
-                },
-            ],
-            selections: [selection],
+            id: 'id_1',
+            name: 'Sheet1',
+            order: 0,
+            config: {},
+            data: Array.from({ length: 1000 }, () => [null, null, null]),
+            dataValidations,
         },
-        grid,
-    );
+    ],
+    selections: [selection],
+});
+
+const openDialog = (selection: Selection, dataValidations = {}, grid?: () => ReactNode) =>
+    renderSheetDialog((d) => d.showDialog(createElement(DataValidation)), sheetWith(selection, dataValidations), grid);
 
 type Dialog = Awaited<ReturnType<typeof openDialog>>;
 
 const rules = (dialog: Dialog) => dialog.context().sheets[0].dataValidations;
 
-// The message that says why OK or Remove validation refused what a field holds.
+// The message that says why Apply or Remove validation refused what a field holds.
 const problemOf = (field: HTMLElement) => {
     const id = field.getAttribute('aria-describedby');
     return id ? document.getElementById(id)?.textContent : undefined;
@@ -58,7 +58,22 @@ const pickWith = (label: string) =>
         document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${label}"]`)?.click();
     });
 
-test('a column header selection is named B:B, and OK puts the rule on the whole column and closes', async () => {
+test('Data validation keeps the dialog contract', async () => {
+    const form = sheetDialogForm((d) => d.showDialog(createElement(DataValidation)), sheetWith(B3));
+    await expectFormContract({
+        kind: 'dialog',
+        render: form.render,
+        submitLabel: 'Apply',
+        firstField: 'Cell range',
+        onSubmit: form.write,
+        makeChanged: () => type('Options', 'Yes,No'),
+        makeInvalid: () => type('Cell range', ''),
+        invalidField: 'Cell range',
+        savesAtOnce: true,
+    });
+});
+
+test('a column header selection is named B:B, and Apply puts the rule on the whole column and closes', async () => {
     const dialog = await openDialog({
         row: [0, 999],
         column: [1, 1],
@@ -68,13 +83,13 @@ test('a column header selection is named B:B, and OK puts the rule on the whole 
     });
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
-    expect(dialog.footer()).toEqual(['Remove validation', 'Cancel', 'OK']);
+    expect(dialog.footer()).toEqual(['Remove validation', 'Cancel', 'Apply']);
     expect(dialog.button('Remove validation')?.dataset.variant).toBe('ghost');
-    expect(dialog.button('OK')?.dataset.size).toBe('default');
+    expect(dialog.button('Apply')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     expect(dialog.field('Cell range').value).toBe('B:B');
     await dialog.type('Options', 'Yes,No');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(Object.values(rules(dialog) ?? {})).toMatchObject([
         { ranges: [{ row: [0, LAST], column: [1, 1] }], order: 'a0', rule: { type: 'dropdown', value1: 'Yes,No' } },
     ]);
@@ -109,7 +124,7 @@ test('the reason a value is refused is an alert the field points at', async () =
         v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
     });
     await dialog.type('Value 2', '0');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     const id = dialog.field('Value 2').getAttribute('aria-describedby');
     expect(id && document.getElementById(id)?.getAttribute('role')).toBe('alert');
 });
@@ -127,7 +142,7 @@ test('a refused value keeps the dialog open, says why, and keeps what was typed 
         v: { ranges: [{ row: [0, 9], column: [1, 1] }], order: 'a0', rule: NUMBER },
     });
     await dialog.type('Value 2', '0');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(problemOf(dialog.field('Value 2'))).toBe('The value 2 cannot be less than the value 1');
     expect(dialog.field('Value 2').value).toBe('0');
@@ -141,7 +156,7 @@ test('a range that names no cells keeps the dialog open and says why under the r
     const dialog = await openDialog(B3);
     await dialog.type('Options', 'Yes,No');
     await dialog.type('Cell range', '');
-    await dialog.click('OK');
+    await dialog.click('Apply');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(problemOf(dialog.field('Cell range'))).toBe(NO_RANGE);
     expect(dialog.field('Options').value).toBe('Yes,No');
@@ -188,11 +203,24 @@ test('back from the range picker, the draft keeps every value the user typed', a
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     expect(dialog.title()).toBe('Select cell range');
-    await dialog.click('OK');
+    await dialog.click('Select');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Value 2').value).toBe('50');
+});
+
+test('back from the range picker, a changed draft still asks before Esc drops it', async () => {
+    const dialog = await openDialog(B3);
+    await dialog.type('Options', 'Red,Green');
+    await pickWith('Select cell range');
+    await dialog.click('Select');
+    await act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+    expect([...document.querySelectorAll('h2')].map((h) => h.textContent)).toContain('Discard changes?');
 });
 
 test('Cancel in the range picker brings the dialog back with its draft too', async () => {
@@ -236,7 +264,7 @@ test("the list's grid button picks the options' source and keeps the range", asy
     await dialog.type('Cell range', 'B2:B3');
     await dialog.type('Options', 'A1:A2');
     await pickWith('Select options from a range');
-    await dialog.click('OK');
+    await dialog.click('Select');
     expect(dialog.field('Cell range').value).toBe('B2:B3');
     expect(dialog.field('Options').value).toBe('A1:A2');
 });

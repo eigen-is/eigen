@@ -1,4 +1,4 @@
-// shadcn's Card: a bordered panel with an optional header, content and footer, such as a step of Admin's setup
+// shadcn's Card: a bordered panel with an optional header and its content, such as a step of Admin's setup
 // wizard or the two-factor forms in Space.
 
 import { cn } from '@workspace/ui/lib/utils';
@@ -42,10 +42,4 @@ function CardContent({ className, ...props }: React.ComponentProps<'div'>) {
     return <div data-slot="card-content" className={cn('px-6', className)} {...props} />;
 }
 
-function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
-    return (
-        <div data-slot="card-footer" className={cn('flex items-center px-6 [.border-t]:pt-6', className)} {...props} />
-    );
-}
-
-export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle };
+export { Card, CardContent, CardDescription, CardHeader, CardTitle };

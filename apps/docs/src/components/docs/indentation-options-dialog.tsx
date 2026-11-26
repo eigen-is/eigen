@@ -16,7 +16,7 @@ import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 type IndentationOptionsDialogProps = {
     editor: Editor;
@@ -83,7 +83,11 @@ function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: No
     const left = length('left');
     const right = length('right');
     const by = special === 'none' ? 0 : length('by');
-    const valid = [left, right, by].every((value) => value >= 0);
+    const invalid = { left: !(left >= 0), right: !(right >= 0), by: !(by >= 0) };
+    const valid = !invalid.left && !invalid.right && !invalid.by;
+    const errorId = useId();
+    const changed =
+        special !== initial.special || (['left', 'right', 'by'] as const).some((key) => length(key) !== initial[key]);
     const candidate = readParagraphFormat({
         indentLeft: left,
         indentRight: right,
@@ -92,9 +96,10 @@ function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: No
 
     return (
         <FormDialogForm
-            canSubmit={valid}
             submitLabel="Apply"
+            changed={changed}
             onSubmit={() => {
+                if (!valid) return false;
                 // Only what changed, no indent as none.
                 const format: Partial<Record<keyof typeof initial.format, number | null>> = {};
                 for (const key of ['indentLeft', 'indentRight', 'indentFirstLine'] as const) {
@@ -115,7 +120,8 @@ function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: No
                             step="any"
                             min={0}
                             className="w-24"
-                            autoFocus={key === 'left'}
+                            aria-invalid={invalid[key] || undefined}
+                            aria-describedby={invalid[key] ? errorId : undefined}
                             value={text[key]}
                             onChange={(e) => setText({ ...text, [key]: e.target.value })}
                         />
@@ -154,13 +160,15 @@ function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: No
                         step="any"
                         min={0}
                         className="w-24"
+                        aria-invalid={invalid.by || undefined}
+                        aria-describedby={invalid.by ? errorId : undefined}
                         disabled={special === 'none'}
                         value={special === 'none' ? '' : text.by}
                         onChange={(e) => setText({ ...text, by: e.target.value })}
                     />
                 </Field>
             </FieldSet>
-            {!valid && <FieldError>Indents must be 0 cm or more.</FieldError>}
+            {!valid && <FieldError id={errorId}>Indents must be 0 cm or more.</FieldError>}
         </FormDialogForm>
     );
 }

@@ -4,9 +4,11 @@ import {
     EIGEN_ACCENT_COLORS_SHUFFLED,
     eigenColor,
     hexChannels,
+    indicatorColor,
     isHexColor,
     isLightColor,
     lightenColor,
+    paleTone,
     parseRgb,
     readableTextColor,
     readHexColor,
@@ -273,5 +275,37 @@ describe('eigenColor', () => {
         expect(eigenColor('red', 50)).toBe('#fef2f2');
         expect(eigenColor('emerald', 600)).toBe('#009966');
         expect(eigenColor('rose', 950)).toBe('#4d0218');
+    });
+});
+
+describe('paleTone', () => {
+    test("a palette color of any step is its family's 100 step", () => {
+        expect(paleTone(eigenColor('pink', 500))).toBe(eigenColor('pink', 100));
+        expect(paleTone(eigenColor('blue', 800))).toBe(eigenColor('blue', 100));
+        expect(paleTone(eigenColor('yellow', 100))).toBe(eigenColor('yellow', 100));
+    });
+
+    test('a typed hex is lightened about as far as a 500 step is from its 100', () => {
+        for (const name of ['red', 'yellow', 'sky', 'fuchsia'] as const) {
+            const typed = eigenColor(name, 500).toUpperCase();
+            const lightened = hexChannels(paleTone(typed), [6]);
+            const pale = hexChannels(eigenColor(name, 100), [6]);
+            for (const channel of ['red', 'green', 'blue'] as const) {
+                expect(Math.abs((lightened?.[channel] ?? 0) - (pale?.[channel] ?? 0))).toBeLessThanOrEqual(20);
+            }
+        }
+        expect(paleTone('#123456')).toBe(lightenColor('#123456', 0.84));
+    });
+});
+
+describe('indicatorColor', () => {
+    test('a stickies palette color reads as its stronger tone', () => {
+        expect(indicatorColor(eigenColor('orange', 100))).toBe(eigenColor('orange', 400));
+        expect(indicatorColor(eigenColor('sky', 100))).toBe(eigenColor('sky', 400));
+    });
+
+    test("a user's own hex, such as a calendar's accent, is its own indicator", () => {
+        expect(indicatorColor('#123456')).toBe('#123456');
+        expect(indicatorColor(eigenColor('pink', 500))).toBe(eigenColor('pink', 500));
     });
 });

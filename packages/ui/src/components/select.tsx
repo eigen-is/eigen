@@ -1,5 +1,5 @@
 // shadcn's Select on Radix: a dropdown that picks one value from a list, such as a calendar's view or an event's
-// repeat rule.
+// repeat rule. Cmd or Ctrl+Enter on its trigger opens no list, so the form around it submits.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
@@ -22,6 +22,7 @@ function SelectTrigger({
     className,
     size = 'default',
     children,
+    onKeyDown,
     ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
     size?: 'xs' | 'sm' | 'default';
@@ -30,6 +31,11 @@ function SelectTrigger({
         <SelectPrimitive.Trigger
             data-slot="select-trigger"
             data-size={size}
+            // Radix skips its own Enter, which opens the list, once the key is prevented.
+            onKeyDown={(event) => {
+                onKeyDown?.(event);
+                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) event.preventDefault();
+            }}
             className={cn(
                 "flex w-fit items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 data-[placeholder]:text-muted-foreground data-[size=default]:h-9 data-[size=sm]:h-8 data-[size=xs]:h-7 data-[size=xs]:py-0 data-[size=xs]:text-xs *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
                 className,

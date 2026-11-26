@@ -1,40 +1,32 @@
-// Segment-pin handles for a selected ELBOW arrow (Excalidraw's fixedSegments UX). The dots sit on every
-// long-enough segment of the arrow's route — the DERIVED route while unpinned, the stored polyline once
-// pinned. Dragging a dot pins that segment: past a 2px threshold the first drag materializes the polyline
-// (materializeFirstPin), later drags slide the segment in place (moveSegment) — axis-locked; an interior
-// drag adds zero corners, an end-segment drag inserts an L-jog so the pinned segment turns interior (the
-// routing context supplies the endpoint headings + bound flags). Double-click (or Delete while selected)
-// unpins. Pin identity is the polyline INDEX (segment i ⇒ index i+1) — never a geometric match — so a dot
-// always knows whether its segment is pinned. Self-contained: owns its drag lifecycle under an
-// AbortController; reports the live geometry patch via onPreview and commits it on release.
+// The segment-pin dots of a selected elbow arrow, one on every long-enough segment of its route. Dragging a dot pins
+// that segment and slides it along its axis; the first pin freezes the derived route into stored points, and an end
+// segment gains a jog so the pinned one turns interior. Double-click or Delete unpins. A pin is keyed by its polyline
+// index, never by geometry, so a dot always knows whether its segment is pinned. The host previews and commits.
 
 import type { Box, FixedSegment, PinPatch, PinRoutingContext, Point, VectorArrowElement } from '@workspace/lib/vector';
 import { materializeFirstPin, moveSegment, parseFixedSegments, unpinSegment } from '@workspace/lib/vector';
+import { cn } from '@workspace/ui/lib/utils';
 import type { MutableRefObject } from 'react';
-import { useHandleDrag } from './use-handle-drag';
+import { usePointerDrag } from '../../../hooks/use-pointer-drag';
 
-// A pin drag stays inert until the pointer travels this many CLIENT px (a click never pins).
+// Client px a pin press travels before it pins, so a click never does.
 const PIN_DRAG_THRESHOLD_PX = 2;
-// A segment shorter than this on SCREEN shows no dot (matches the line midpoint gate).
+// A segment shorter than this on screen shows no dot, the same gate as a line's midpoint dots.
 const PIN_MIN_SEGMENT_SCREEN_PX = 40;
 
 type ElbowPinHandlesProps = {
     arrow: VectorArrowElement;
-    // The arrow's route in its local frame (arrowRoute): the derived route while unpinned, else the stored
-    // polyline. Dot on segment i sits between route[i] and route[i+1] and keys polyline index i+1.
+    // In the arrow's local frame; the dot on segment i keys polyline index i+1.
     route: Point[];
-    // The endpoint headings + bound flags an end-segment jog needs (elbowRoutingContext), resolved at the
-    // scene seam so this overlay and elbow-pins stay pure.
+    // Resolved by the host, so this overlay and the pin math stay pure.
     context: PinRoutingContext;
     zoom: number;
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
     frozenRef: MutableRefObject<boolean>;
-    // Live geometry patch during a drag (null clears the preview back to the committed arrow).
+    // Null clears the preview.
     onPreview: (patch: PinPatch | null) => void;
-    // One sealed write of the geometry patch (a new/moved pin on drag, a removed pin on unpin).
     onCommit: (patch: PinPatch) => void;
-    // The pin (polyline index) the user has clicked to select — Delete on it unpins.
     selectedPinIndex: number | null;
     onSelectPin: (index: number | null) => void;
 };
@@ -52,16 +44,14 @@ export function ElbowPinHandles({
     selectedPinIndex,
     onSelectPin,
 }: ElbowPinHandlesProps) {
-    const startHandleDrag = useHandleDrag(frozenRef);
+    const startPointerDrag = usePointerDrag(frozenRef);
 
     const pins: FixedSegment[] = parseFixedSegments(arrow.fixedSegments).segments;
     const isPinned = (index: number): boolean => pins.some((p) => p.index === index);
 
-    // Begin pinning/moving the segment at polyline `index`. The first drag on an unpinned arrow freezes the
-    // current route into points (materializeFirstPin); later drags slide the stored segment (moveSegment).
     const startDrag = (e: React.PointerEvent, index: number) => {
         let latest: PinPatch | null = null;
-        startHandleDrag(e, {
+        startPointerDrag(e, {
             threshold: PIN_DRAG_THRESHOLD_PX,
             move: (me) => {
                 const cursor = clientToScene(me.clientX, me.clientY);
@@ -79,7 +69,6 @@ export function ElbowPinHandles({
         });
     };
 
-    // Remove the pin at `index` (double-click or Delete on a selected pinned dot).
     const unpin = (index: number) => {
         if (!isPinned(index)) return;
         onSelectPin(null);
@@ -95,10 +84,6 @@ export function ElbowPinHandles({
     return (
         <>
             {route.slice(0, -1).map((a, i) => {
-                // Dots render on EVERY segment, ends included: dragging a first/last segment inserts an L-jog
-                // so the pinned segment turns interior (elbow-pins' handleSegmentMove) — the stored invariant
-                // "first/last can't be fixed" holds as an output. A segment shorter than 40px on screen gets no
-                // dot. That is the gate a line's midpoint handles use, so the two kinds of handle behave alike.
                 const b = route[i + 1];
                 if (Math.hypot(b.x - a.x, b.y - a.y) * zoom < PIN_MIN_SEGMENT_SCREEN_PX) return null;
                 const index = i + 1;
@@ -107,9 +92,11 @@ export function ElbowPinHandles({
                 return (
                     <div
                         key={`p${index}`}
-                        className={`eigen-midpoint-handle pointer-events-auto touch-none cursor-pointer${
-                            pinned ? ' eigen-point-handle-doubled' : ''
-                        }${selectedPinIndex === index ? ' eigen-vertex-handle-selected' : ''}`}
+                        className={cn(
+                            'eigen-midpoint-handle pointer-events-auto touch-none cursor-pointer',
+                            pinned && 'eigen-point-handle-doubled',
+                            selectedPinIndex === index && 'eigen-vertex-handle-selected',
+                        )}
                         style={dotStyle(mid)}
                         onPointerDown={(e) => {
                             onSelectPin(pinned ? index : null);

@@ -1,6 +1,7 @@
 // A dialog's action that returns or resolves false keeps it open, and any other result closes it. An action that throws
 // an error no toast has shown, such as a bug in a synchronous submit, reaches whoever called run, and the dialog stays
-// open. An error the mutation hook toasted ends there.
+// open. An error the mutation hook toasted ends there. A form with nothing to close, such as a page form, runs its
+// submit the same way, one at a time.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { installHappyDom } from '../happy-dom';
@@ -9,17 +10,17 @@ import { renderInDocument } from '../render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { AppError, onMutationError } = await import('@workspace/lib/api-error');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { useDialogPending } = await import('../../hooks/use-dialog-pending');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function mount(closeOnRefusal: boolean) {
+async function mount() {
     const onOpenChange = mock((_open: boolean) => {});
     let latest: ReturnType<typeof useDialogPending> | null = null;
     function Harness() {
-        latest = useDialogPending(onOpenChange, { closeOnRefusal });
+        latest = useDialogPending({ onOpenChange });
         return null;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));
@@ -33,10 +34,8 @@ async function mount(closeOnRefusal: boolean) {
     return { onOpenChange, run };
 }
 
-const refusal = () => new AppError({ error: { status: 403, value: 'No' }, status: 403 });
-
 test('an action that returns or resolves false keeps the dialog open, and one that resolves closes it', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     await run(() => false);
     await run(() => Promise.resolve<false>(false));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -45,7 +44,7 @@ test('an action that returns or resolves false keeps the dialog open, and one th
 });
 
 test('a synchronous throw reaches the caller, and the dialog stays open', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     const bug = new TypeError('editor is gone');
     expect(
         await run(() => {
@@ -56,24 +55,32 @@ test('a synchronous throw reaches the caller, and the dialog stays open', async 
 });
 
 test('a toasted failure ends in run, and the dialog stays open', async () => {
-    const { onOpenChange, run } = await mount(false);
+    const { onOpenChange, run } = await mount();
     const failure = new Error('offline');
     onMutationError(failure);
     expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
     expect(onOpenChange).not.toHaveBeenCalled();
 });
 
-test('with closeOnRefusal a toasted refusal closes the dialog and ends in run', async () => {
-    const { onOpenChange, run } = await mount(true);
-    const failure = refusal();
-    onMutationError(failure);
-    expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
-});
-
-test('with closeOnRefusal a refusal no toast showed closes the dialog and still reaches the caller', async () => {
-    const { onOpenChange, run } = await mount(true);
-    const failure = refusal();
-    expect(await run(() => Promise.reject<never>(failure))).toBe(failure);
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
+test('with nothing to close, run still runs one action at a time and says when it is pending', async () => {
+    const hook: { current?: ReturnType<typeof useDialogPending> } = {};
+    function Harness() {
+        hook.current = useDialogPending();
+        return null;
+    }
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const action = mock(() => promise);
+    let first: Promise<unknown> | undefined;
+    await act(async () => {
+        first = hook.current?.run(action);
+    });
+    expect(hook.current?.pending).toBe(true);
+    await act(async () => hook.current?.run(action));
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => {
+        resolve();
+        await first;
+    });
+    expect(hook.current?.pending).toBe(false);
 });

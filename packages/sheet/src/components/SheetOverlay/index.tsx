@@ -15,6 +15,7 @@ import { debounce } from 'es-toolkit/compat';
 import { toast } from 'sonner';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
+import { MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { cellDisplay } from '../../engine/format';
 import type { Context, GlobalCache } from '../../state';
 import {
@@ -242,15 +243,19 @@ export const SheetOverlay: React.FC = () => {
 
     const handleBottomAddRow = useCallback(() => {
         const ctx = getContext();
-        const valueStr = bottomAddRowInputRef.current?.value || DEFAULT_ADD_ROWS.toString();
-        const value = parseInt(valueStr, 10);
-        if (Number.isNaN(value) || value < 1) return;
+        const count = Number(bottomAddRowInputRef.current?.value || DEFAULT_ADD_ROWS);
+        if (!Number.isInteger(count) || count < 1 || count > MAX_SHEET_ROW_COUNT) {
+            setContext((draftCtx) => {
+                draftCtx.warning = `Enter a number of rows from 1 to ${MAX_SHEET_ROW_COUNT}`;
+            });
+            return;
+        }
         const data = getFlowdata(ctx);
         if (!data) return;
         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
             type: 'row',
             index: data.length - 1,
-            count: value,
+            count,
             direction: 'rightbottom',
             id: ctx.currentSheetId,
         };
@@ -498,8 +503,12 @@ export const SheetOverlay: React.FC = () => {
                                     <Input
                                         ref={bottomAddRowInputRef}
                                         type="text"
+                                        aria-label="Rows to add"
                                         className="h-8 w-16"
                                         placeholder={DEFAULT_ADD_ROWS.toString()}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleBottomAddRow();
+                                        }}
                                     />
                                     <span className="text-sm text-muted-foreground">(more rows at bottom)</span>
                                     <Button

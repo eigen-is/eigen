@@ -1,20 +1,32 @@
 // The owner's home is the owner's alone: an admin who opens the owner's account sees no Backup section, as they see
-// no Reset password and no Delete, while every other account shows it. The owner sees it on their own account.
+// no Reset password and no Delete, while every other account shows it. The owner sees it on their own account. A
+// delete keeps its question busy until the page has left for the users list. A role change waits for Save, whose
+// button spins while it saves and sends once however often it is pressed.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import type { NavigateOptions } from '@tanstack/react-router';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-// The signed-in account is the test's to pick. The delete's navigate needs no router here, and the sections load
+// The signed-in account is the test's to pick. The delete's navigate is a spy, and the sections load
 // data of their own, so they render as their names. Copies, because mock.module rewrites a loaded module's exports
 // in place, and afterAll puts the originals back.
 let me = { id: 'admin-1' };
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: me }) }));
+const navigate = mock(async (_options: NavigateOptions) => {});
 const realRouter = { ...(await import('@tanstack/react-router')) };
-mock.module('@tanstack/react-router', () => ({ ...realRouter, useNavigate: () => () => {} }));
+mock.module('@tanstack/react-router', () => ({ ...realRouter, useNavigate: () => navigate }));
+const deleteUser = mock(async (_userId: string) => {});
+const updateRole = mock(async (_member: { memberId: string; userId: string; role: string }) => {});
+const realAdmin = { ...(await import('@workspace/lib/admin')) };
+mock.module('@workspace/lib/admin', () => ({
+    ...realAdmin,
+    useDeleteUser: () => ({ mutateAsync: deleteUser, isPending: false }),
+    useUpdateMemberRole: () => ({ mutate: updateRole, mutateAsync: updateRole, isPending: false }),
+}));
 const sections = {
     '../../../components/admin/backup-section': 'BackupSection',
     '../../../components/admin/user-teams-section': 'UserTeamsSection',
@@ -27,10 +39,11 @@ for (const [path, name] of Object.entries(sections)) {
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@tanstack/react-router', () => realRouter);
+    mock.module('@workspace/lib/admin', () => realAdmin);
     for (const [path, real] of realSections) mock.module(path, () => real);
 });
 
-const { createElement } = await import('react');
+const { act, createElement } = await import('react');
 const { UserDetail } = await import('../../../components/admin/user-detail');
 
 let unmount = async () => {};
@@ -73,4 +86,45 @@ test('the owner sees the Backup section on their own account', async () => {
     me = { id: 'owner-1' };
     const detail = await renderDetail(account('owner-1', 'owner'));
     expect(detail.textContent).toContain('BackupSection');
+});
+
+test('Delete user keeps its question busy until the page has left for the users list', async () => {
+    me = { id: 'admin-1' };
+    const { promise: left, resolve: leave } = Promise.withResolvers<void>();
+    navigate.mockImplementation(() => left);
+    const detail = await renderDetail(account('user-1', 'member'));
+    const button = (scope: ParentNode, label: string) =>
+        [...scope.querySelectorAll('button')].find((b) => b.textContent?.includes(label));
+    await act(async () => button(detail, 'Delete user')?.click());
+    const confirm = () => button(document.querySelector('[role="dialog"]') ?? document, 'Delete');
+    await act(async () => confirm()?.click());
+    expect(deleteUser.mock.calls).toEqual([['user-1']]);
+    expect(navigate.mock.calls).toEqual([[{ to: '/users', search: {} }]]);
+    expect(confirm()?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => leave());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+
+test('Save sends a role change once and spins while it saves', async () => {
+    me = { id: 'admin-1' };
+    const { promise: saved, resolve: save } = Promise.withResolvers<void>();
+    updateRole.mockImplementation(() => saved);
+    const detail = await renderDetail(account('user-1', 'member'));
+    const click = (element: Element | null | undefined) =>
+        act(async () => {
+            if (!element) throw new Error('nothing to click');
+            element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+            element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+            element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+    await click(detail.querySelector('[role="combobox"]'));
+    await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === 'Admin'));
+    expect(updateRole).not.toHaveBeenCalled();
+    const saveButton = () => [...detail.querySelectorAll('button')].find((b) => b.textContent?.endsWith('Save'));
+    await click(saveButton());
+    await click(saveButton());
+    expect(updateRole.mock.calls).toEqual([[{ memberId: 'm-user-1', userId: 'user-1', role: 'admin' }]]);
+    expect(saveButton()?.getAttribute('aria-busy')).toBe('true');
+    await act(async () => save());
+    expect(saveButton()?.getAttribute('aria-busy')).toBeNull();
 });

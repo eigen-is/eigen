@@ -363,7 +363,7 @@ describe('Assignment email', () => {
             .map(([message]) => message)
             .filter(
                 (message) =>
-                    message.subject.includes('assigned you a task') &&
+                    message.subject.includes('assigned you a ') &&
                     message.to.some((recipient) => recipient.address === address),
             );
     }
@@ -386,10 +386,10 @@ describe('Assignment email', () => {
     }
 
     // The limiter has no reset, so every test gets a document of its own.
-    async function freshDoc(name: string, members: string[], cardCount = 1) {
+    async function freshDoc(name: string, members: string[], cardCount = 1, type: 'doc' | 'stickies' = 'doc') {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
-        const doc = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${rootId}/create/doc`, {
+        const doc = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${rootId}/create/${type}`, {
             fileName: name,
         });
         const children = await driveGet<DrivePath[]>(token, ownerId, mountId, `folder/${doc.id}`);
@@ -492,6 +492,22 @@ describe('Assignment email', () => {
 
         const tag = bellTag(docId, chatName);
         expect((await notificationsFor(guest.id)).some((n) => n.tag === tag)).toBe(true);
+    });
+
+    test('on a Stickies board the mail and the bell call it a card, not a task', async () => {
+        const { docId, chatName } = await freshDoc('mail-board', [guest.email], 1, 'stickies');
+
+        expect((await assign(docId, chatName, guest.email, 'Print wristbands')).status).toBe(200);
+
+        const mails = assignMailsTo(guest.email);
+        expect(mails).toHaveLength(1);
+        const message = mails[0];
+        const title = `${ctx.alice.user.name} assigned you a card on "mail-board"`;
+        expect(message.subject).toBe(title);
+        expect(message.text).toStartWith(`${title}.`);
+        expect(message.html).toContain('assigned you a card. Open it from the link below.');
+        const tag = bellTag(docId, chatName);
+        expect(findOrFail(await notificationsFor(guest.id), (n: Notification) => n.tag === tag).title).toBe(title);
     });
 
     test('a card with no title still gets its mail and link', async () => {

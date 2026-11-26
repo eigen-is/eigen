@@ -33,7 +33,7 @@ A card also [carries files](/support/stickies/attach-files-to-a-card): an image 
 
 ## Who does what
 
-Right-click a card and pick someone under [Assign to](/support/stickies/assign-and-resolve-cards). They get a notification, and at most one email an hour per board. Resolve a card when it is done; it stays where it is with a tick.
+Right-click a card and pick someone under [Assign to](/support/stickies/assign-and-resolve-cards). They get a notification. A guest also gets an email, at most one an hour per board. Resolve a card when it is done; it stays where it is with a tick.
 
 The [Filter menu](/support/stickies/filter-a-board) narrows the board to one person, a few colors or what is still open. So Timo can look at his own cards and nothing else.
 

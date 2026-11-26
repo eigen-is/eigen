@@ -102,7 +102,7 @@ function resolveRowTarget(
 // The card or comment a row opens in the editor. A removed card is gone, and a comment row needs its chatName.
 function resolveEventCardRef(event: FileEvent): CardOpenRef | undefined {
     const details = event.details;
-    if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
+    if (event.eventType === 'card-added' || event.eventType === 'card-moved') {
         return { cardId: details && 'cardId' in details ? details.cardId : undefined };
     }
     if (isCommentEvent(event)) {
@@ -139,12 +139,12 @@ function resolveEventUrl(event: FileEvent, path: DrivePath, ctx: 'own' | 'contai
     const itemUrl = getDriveItemUrl(containerRef);
     const details = event.details;
 
-    if (event.eventType === 'sticky-added' || event.eventType === 'sticky-moved') {
+    if (event.eventType === 'card-added' || event.eventType === 'card-moved') {
         const cardId = details && 'cardId' in details ? details.cardId : undefined;
         return getDriveItemUrl(containerRef, { card: cardId });
     }
     // A removed card is gone, so its row opens the board.
-    if (event.eventType === 'sticky-removed') return itemUrl;
+    if (event.eventType === 'card-removed') return itemUrl;
     if (isCommentEvent(event)) {
         const chatName = details && 'chatName' in details ? details.chatName : undefined;
         return getDriveItemUrl(containerRef, { chat: chatName });

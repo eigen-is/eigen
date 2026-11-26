@@ -1,10 +1,13 @@
-// The save story of Drive's inline editors: Mod+S, the dirty state, the guard on a closing tab and the
-// discard dialog. Each save sends the etag the editor loaded, or the one its last save answered, so
-// a file that changed since answers a conflict, which opens the conflict dialog.
+// The save story of Drive's inline editors: Mod+S, the dirty state and the "Discard changes?" their Cancel
+// asks. Each save sends the etag the editor loaded, or the one its last save answered, so a file that
+// changed since answers a conflict, which opens the conflict dialog. `atRisk` says a close would lose work:
+// unsaved edits, or a save in flight, which may still fail. Cancel and the editor's leave guard ask while it holds.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useFileSave } from '@workspace/lib/editor';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDiscardChanges } from '@workspace/ui/hooks/use-discard-changes';
+import type { ReactNode } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'conflict';
 
@@ -15,23 +18,47 @@ type EditorSaveOptions = {
     etag: string;
     getContent: () => string;
     getFrontmatter?: () => string | undefined;
+    onCancel: () => void;
 };
 
-export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getFrontmatter }: EditorSaveOptions) {
+type EditorSave = {
+    saveState: SaveState;
+    atRisk: boolean;
+    showConflict: boolean;
+    setShowConflict: (open: boolean) => void;
+    markDirty: () => void;
+    doSave: (force?: boolean) => Promise<boolean>;
+    cancel: () => void;
+    discardDialog: ReactNode;
+};
+
+export function useEditorSave({
+    ownerId,
+    mountId,
+    pathId,
+    etag,
+    getContent,
+    getFrontmatter,
+    onCancel,
+}: EditorSaveOptions): EditorSave {
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [showConflict, setShowConflict] = useState(false);
     const etagRef = useRef(etag);
-    const isDirtyRef = useRef(false);
+    // Counts edits, so a save that lands knows whether the user typed while it was in flight.
+    const editsRef = useRef(0);
     const fileSave = useFileSave(ownerId, mountId, pathId);
+    const unsaved = saveState === 'unsaved' || saveState === 'conflict';
+    const atRisk = unsaved || saveState === 'saving';
 
     const markDirty = useCallback(() => {
-        isDirtyRef.current = true;
+        editsRef.current++;
         setSaveState('unsaved');
     }, []);
 
     const doSave = useCallback(
         async (force = false): Promise<boolean> => {
-            if (!isDirtyRef.current && !force) return true;
+            if (!unsaved && !force) return true;
+            const sentEdits = editsRef.current;
             setSaveState('saving');
             try {
                 const result = await fileSave.mutateAsync({
@@ -46,15 +73,15 @@ export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getF
                     return false;
                 }
                 etagRef.current = result.etag;
-                isDirtyRef.current = false;
-                setSaveState('saved');
-                return true;
+                const current = editsRef.current === sentEdits;
+                setSaveState(current ? 'saved' : 'unsaved');
+                return current;
             } catch {
                 setSaveState('unsaved');
                 return false;
             }
         },
-        [fileSave, getContent, getFrontmatter],
+        [unsaved, fileSave, getContent, getFrontmatter],
     );
 
     useHotkey('Mod+S', (e) => {
@@ -62,49 +89,17 @@ export function useEditorSave({ ownerId, mountId, pathId, etag, getContent, getF
         doSave();
     });
 
-    useEffect(() => {
-        const handler = (e: BeforeUnloadEvent) => {
-            if (isDirtyRef.current) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        };
-        window.addEventListener('beforeunload', handler);
-        return () => window.removeEventListener('beforeunload', handler);
-    }, []);
-
-    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-    const pendingCloseRef = useRef<(() => void) | null>(null);
-
-    const confirmClose = useCallback((onClose: () => void) => {
-        if (!isDirtyRef.current) {
-            onClose();
-            return;
-        }
-        pendingCloseRef.current = onClose;
-        setShowDiscardConfirm(true);
-    }, []);
-
-    const handleDiscardConfirm = useCallback(() => {
-        setShowDiscardConfirm(false);
-        pendingCloseRef.current?.();
-        pendingCloseRef.current = null;
-    }, []);
-
-    const handleDiscardCancel = useCallback(() => {
-        setShowDiscardConfirm(false);
-        pendingCloseRef.current = null;
-    }, []);
+    // The editor is open while it is mounted, and a save in flight asks rather than waits, since it may fail.
+    const discard = useDiscardChanges({ open: true, changed: atRisk, pending: false, onDiscard: onCancel });
 
     return {
         saveState,
+        atRisk,
         showConflict,
         setShowConflict,
         markDirty,
         doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
+        cancel: () => discard.onOpenChange(false),
+        discardDialog: discard.dialog,
     };
 }

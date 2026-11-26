@@ -93,18 +93,18 @@ describe('file event phrasing', () => {
 
 describe('describeFileEvent', () => {
     const base = { pathName: 'Roadmap.eigenstickies', pathType: 'stickies' } as const;
-    test('sticky-moved, container ctx', () => {
+    test('card-moved, container ctx', () => {
         expect(
             describeFileEvent(
-                { ...base, eventType: 'sticky-moved', details: { card: 'Fix flaky test', toColumn: 'Done' } },
+                { ...base, eventType: 'card-moved', details: { card: 'Fix flaky test', toColumn: 'Done' } },
                 'container',
             ),
         ).toEqual({ action: 'moved a card in "Roadmap"', primary: 'Fix flaky test → Done' });
     });
-    test('sticky-added, own ctx keeps column in action', () => {
+    test('card-added, own ctx keeps column in action', () => {
         expect(
             describeFileEvent(
-                { ...base, eventType: 'sticky-added', details: { card: 'Welcome', toColumn: 'To Do' } },
+                { ...base, eventType: 'card-added', details: { card: 'Welcome', toColumn: 'To Do' } },
                 'own',
             ),
         ).toEqual({ action: 'added a card to To Do', primary: 'Welcome' });
@@ -121,6 +121,18 @@ describe('describeFileEvent', () => {
             action: 'deleted the version history',
             primary: 'Roadmap',
         });
+    });
+    test('assigned, resolved and reopened say a card on a board and a comment in other documents', () => {
+        const assigned = { eventType: 'assigned', details: { assignee: 'bob@x.test', card: 'Ship it' } } as const;
+        const resolved = { eventType: 'resolved', details: { chatName: 'c1', card: 'Ship it' } } as const;
+        const doc = { pathName: 'Plan.eigendoc', pathType: 'doc' } as const;
+        expect(describeFileEvent({ ...base, ...assigned }, 'own').action).toBe('assigned a card');
+        expect(describeFileEvent({ ...base, ...resolved }, 'container').action).toBe('resolved a card in "Roadmap"');
+        expect(describeFileEvent({ ...base, ...resolved, eventType: 'reopened' }, 'own').action).toBe(
+            'reopened a card',
+        );
+        expect(describeFileEvent({ ...doc, ...assigned }, 'own').action).toBe('assigned a comment');
+        expect(describeFileEvent({ ...doc, ...resolved }, 'own').action).toBe('resolved a comment');
     });
     test('created: names the item in the own-ctx action, name as primary in container ctx', () => {
         const e = { pathName: 'notes.txt', pathType: 'file', eventType: 'created', details: null } as const;
@@ -757,7 +769,7 @@ describe('file-event notifications carry the event details', () => {
         return `file-event:${aliceOwnerId}:${mountId}:${pathId}`;
     }
 
-    function postSticky(pathId: string, body: Record<string, unknown>): Promise<Response> {
+    function postCardEvent(pathId: string, body: Record<string, unknown>): Promise<Response> {
         return authedRequest(aliceToken, `/drive/${aliceOwnerId}/${mountId}/path/${pathId}/history`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -765,7 +777,7 @@ describe('file-event notifications carry the event details', () => {
         });
     }
 
-    test('a sticky-added event reaches the watcher with body + card details, and coalesces to the latest', async () => {
+    test('a card-added event reaches the watcher with body + card details, and coalesces to the latest', async () => {
         const board = await drivePost<DrivePath>(
             aliceToken,
             aliceOwnerId,
@@ -780,8 +792,8 @@ describe('file-event notifications carry the event details', () => {
         });
         await authedRequest(bobToken, `/drive/${aliceOwnerId}/${mountId}/path/${board.id}/watch`, { method: 'POST' });
 
-        const added = await postSticky(board.id, {
-            eventType: 'sticky-added',
+        const added = await postCardEvent(board.id, {
+            eventType: 'card-added',
             details: { card: 'Hello', toColumn: 'To Do', cardId: 'c1' },
         });
         expect(added.status).toBe(200);
@@ -793,8 +805,8 @@ describe('file-event notifications carry the event details', () => {
         expect(row!.details).toEqual({ cardId: 'c1', secondary: 'in To Do', pathType: 'stickies' });
 
         // A second, different event on the same board upserts the ONE tagged row to the latest change
-        const moved = await postSticky(board.id, {
-            eventType: 'sticky-moved',
+        const moved = await postCardEvent(board.id, {
+            eventType: 'card-moved',
             details: { card: 'Hello', toColumn: 'Done', cardId: 'c1' },
         });
         expect(moved.status).toBe(200);

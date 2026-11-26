@@ -106,11 +106,12 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Fonts** | `packages/lib/src/constants/fonts.ts`, `scripts/fonts/` | Bundled faces in `unicode-range` slices, and every font stack ([TYPOGRAPHY.md](TYPOGRAPHY.md)) |
 | **App URLs** | `packages/lib/src/constants/app-urls.ts` | `APP_URLS`, each app's production URL |
 | **Mail off** | `packages/lib/src/core/public/hooks/use-public.ts`, `packages/ui/src/components/mail/mail-off-state.tsx` | Without hosted mail, `useEnabledApps()` drops Mail and `MailOffState` is the one `/mail` screen ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#mail-off-hides-the-mail-app-and-keeps-outbound-mail)) |
-| **Admin pages** | `apps/admin/`, `packages/ui/src/components/layout/app/settings-section.tsx` | The owner's pages behind `_auth._owner.tsx`; `useIsOrgOwner` (`packages/lib/src/core/admin/hooks/use-is-admin.ts`) is the one org-owner read, `SettingsFooter` the one Save and Reset bar ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)) |
+| **Admin pages** | `apps/admin/`, `packages/ui/src/components/layout/app/settings-section.tsx` | The owner's pages behind `_auth._owner.tsx`; `useIsOrgOwner` (`packages/lib/src/core/admin/hooks/use-is-admin.ts`) is the one org-owner read, `PageForm` (`packages/ui/src/components/layout/app/page-form.tsx`) the one Save and Reset form ([SERVER-SETTINGS.md](SERVER-SETTINGS.md), [FORMS.md](FORMS.md)) |
 | **Mail constants** | `packages/lib/src/constants/mail.ts` | Send caps, relay port and default sender, shared by mailer and admin |
 | **Yjs utilities** | `packages/lib/src/core/collab/yjs-utils.ts` | `restoreYjsDoc` ([COLLAB.md](COLLAB.md)) and the stickies accessors ([STICKIES.md](STICKIES.md)) |
 | **Menus** | `packages/ui/src/components/context-menu/menu-sections.tsx` | `MenuSections`, the one group order of every menu ([LAYOUT.md](LAYOUT.md#menus-draw-their-rows-in-one-order)) |
-| **Leave guard** | `packages/ui/src/components/layout/app/leave-guard.tsx` | `LeaveGuard` asks before unsaved work is dropped |
+| **Leave guard** | `packages/ui/src/components/layout/app/leave-guard.tsx` | `LeaveGuard` asks before unsaved work is dropped; a page form gets it from `PageForm` ([FORMS.md](FORMS.md#a-page-form-with-unsaved-edits-asks-before-you-leave)) |
+| **Form shells** | `packages/ui/src/components/form-shell.tsx`, `form-dialog.tsx`, `cards/card-form.tsx`, `layout/app/page-form.tsx` | `FormShell` under `FormDialog`, `CardForm` and `PageForm`: keys, "Discard changes?", focus, errors and pending for every form, proved by `expectFormContract` ([FORMS.md](FORMS.md)) |
 | **Collab lifecycle** | `packages/lib/src/core/collab/hooks/use-collab-doc.ts` | `useCollabDoc` owns every collab editor's Y.Doc, provider and undo manager; gate loading on `loaded`, never `synced` ([COLLAB.md](COLLAB.md)) |
 | **Replaced-home reload** | `packages/lib/src/core/home/` | A tab reloads when its data epoch changes ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 | **Canvas engine** | `packages/lib/src/vector/`, `packages/ui/src/components/vector/` | A React-free element model in lib, `CanvasEditor` in ui ([CANVAS.md](CANVAS.md)) |
@@ -128,6 +129,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Everyday UI** | `@workspace/ui/components/…`, each from its own sub-path, such as `confirm-dialog` or `layout/app` | Check before building UI: `TooltipButton`, `ConfirmDialog`, `FormDialog`, `EmptyState`, `LoadingState`, `ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView`; the rest: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
 | **App shell** | `packages/ui/src/components/layout/app/app-shell.tsx`, `eigen-app.tsx` | `EigenApp` (providers) around `AppShell` (topbar, sidebar, content) ([LAYOUT.md](LAYOUT.md#every-app-is-eigenapp-around-appshell)) |
 | **Layout** | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` and `Column`, one column on a phone ([LAYOUT.md](LAYOUT.md), [MOBILE.md](MOBILE.md)) |
+| **Tiles and opened items** | `.eigen-block` in `packages/ui/src/styles/globals.css`, `packages/ui/src/components/layout/app/detail-item.tsx` | One square, flat shape for every tile and block, and `DetailItemBlock`, `DetailMeta` and `DetailSection` for an opened card, comment or event ([LAYOUT.md](LAYOUT.md#an-item-is-one-square-block-and-an-opened-item-reads-block-meta-sections)) |
 | **Routing** | `apps/[name]/src/routes/` | TanStack Router, file-based; `_auth.tsx` guards |
 | **Command palette** | `packages/lib/src/core/command-palette/` | The ⌘K dialog ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)) |
 | **In-document search** | `packages/lib/src/doc-search/`, `packages/ui/src/components/search/` | The ⌘F find bar of every eigendoc editor ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md)) |
@@ -162,7 +164,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 
 ### Dependency direction
 
-**Dependencies run one way: `sheet → lib` and `ui → lib`, never back.** `lib` serves the backend too, while `sheet` and `ui` need React and the DOM, so a lib import of either would load React into the backend. A biome rule enforces it. So the sheet types both sides need (`Cell`, `Sheet`, `Op`, `Range`, …) live in `packages/lib/src/sheets/`, re-exported by the sheet package.
+**Dependencies run one way: `sheet → lib` and `ui → lib`, never back.** `lib` serves the backend too, while `sheet` and `ui` need React and the DOM, so a lib import of either would load React into the backend. A biome rule enforces it. `sheet` also builds on `ui`, such as its dialogs, inputs and list hooks, and `ui` never imports `sheet`. So the sheet types both sides need (`Cell`, `Sheet`, `Op`, `Range`, …) live in `packages/lib/src/sheets/`, re-exported by the sheet package.
 
 `packages/math` is a leaf below all three: anything may import it, and it imports no package and no React, DOM, Bun or Node API, so the browser, the API, a Worker and Node run it unchanged. Its biome rule and tsconfig (`lib: ["ESNext"]`, no `types`) enforce it.
 

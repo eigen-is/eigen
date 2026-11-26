@@ -1,5 +1,5 @@
-// How a failed request reaches the user: AppError reads the server's message and the status from what Eden or a fetch
-// hands back, naming the status only when the server sent no message of its own. getErrorMessage turns it into the
+// How a failed request reaches the user: AppError reads the server's message and the status from what Eden, a fetch
+// or better-auth hands back, naming the status only when the server sent no message of its own. getErrorMessage turns it into the
 // toast's text, and onMutationError is the onError every mutation hook passes to show it. onEtagWriteError is that
 // onError for a write that sends an etag. wasToasted tells a caller that also sees the rejection that a toast already
 // showed it, and isRefusal tells a dialog whether another try could help.
@@ -24,13 +24,17 @@ const STATUS_MESSAGES: Record<number, string> = {
 
 export class AppError extends Error {
     public status: number;
+    // The machine-readable reason a body named beside its message, such as better-auth's error codes.
+    public code?: string;
 
     // error.status is `unknown`: a route that declares no response schema leaves Eden no codes to enumerate.
     public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
-        super(messageFromBody(response.error?.value) ?? `${STATUS_MESSAGES[status] ?? 'Request failed'} (${status})`);
+        const value = response.error?.value;
+        super(messageFromBody(value) ?? `${STATUS_MESSAGES[status] ?? 'Request failed'} (${status})`);
         this.status = status;
+        this.code = isRecord(value) ? readString(value, 'code') : undefined;
     }
 }
 
@@ -65,6 +69,14 @@ export function appErrorFromBody(status: number, contentType: string | null, bod
 
 export async function appErrorFrom(response: Response): Promise<AppError> {
     return appErrorFromBody(response.status, response.headers.get('content-type'), await response.text());
+}
+
+// better-auth's client answers a refusal with a plain object, never an Error. `fallback` is the words when it gave none.
+export function authFailure(
+    { status, message, code }: { status: number; message?: string; code?: string },
+    fallback: string,
+): AppError {
+    return new AppError({ status, error: { status, value: { message: message ?? fallback, code } } });
 }
 
 // The retry every preview that runs a transform shares: the runner's queue is bounded, so its "busy"

@@ -44,17 +44,17 @@ describe('endForStart', () => {
         expect(endForStart(new Date(2026, 10, 13, 22, 15), end)).toEqual(end);
     });
 
-    test('an end less than 15 minutes after the new start moves to 30 minutes after it', () => {
+    test('an end less than 15 minutes after the new start moves to an hour after it', () => {
         expect(endForStart(new Date(2026, 10, 13, 10, 0), { date: '2026-11-13', time: '10:10' })).toEqual({
             date: '2026-11-13',
-            time: '10:30',
+            time: '11:00',
         });
     });
 
     test('an end before the new start moves past it, onto the next day near midnight', () => {
         expect(endForStart(new Date(2026, 10, 13, 23, 45), { date: '2026-11-13', time: '23:00' })).toEqual({
             date: '2026-11-14',
-            time: '00:15',
+            time: '00:45',
         });
     });
 });

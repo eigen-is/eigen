@@ -1,5 +1,6 @@
 // The Row height and Column width dialog, opened from a row or column header's menu. It sets every selected row or
-// column to one size in pixels, and opens on their size when they all share one.
+// column to one size in pixels, and opens on their size when they all share one. A size the engine can't take says
+// why under the field as it is typed, and an empty one once Apply is pressed.
 
 import { Field, FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
@@ -26,7 +27,8 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
         return [...indexSet];
     }, [context.selections, isRow]);
 
-    const [value, setValue] = useState(() => {
+    // The size they all share, else empty.
+    const [opened] = useState(() => {
         const cfg = getSheetConfig(context);
         const lenMap = isRow ? cfg?.rowlen : cfg?.columnlen;
         const fallback = isRow ? context.defaultrowlen : context.defaultcollen;
@@ -34,27 +36,32 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
         const uniformSize = sizes.length > 0 && sizes.every((v) => v === sizes[0]) ? sizes[0] : null;
         return uniformSize != null ? String(uniformSize) : '';
     });
+    const [value, setValue] = useState(opened);
+    // An empty size says why only once Apply was pressed, until the next edit.
+    const [refused, setRefused] = useState(false);
+    const reasonId = useId();
 
     const size = Number(value);
-    const canSubmit =
-        value !== '' && Number.isInteger(size) && size >= 1 && size <= MAX_SIZE[mode] && selectedIndices.length > 0;
-    const refused = value !== '' && !canSubmit;
-    const reasonId = useId();
+    const rangeMessage = `Enter a value between 1 and ${MAX_SIZE[mode]}.`;
+    const outOfRange = value !== '' && !(Number.isInteger(size) && size >= 1 && size <= MAX_SIZE[mode]);
+    const reason = outOfRange || refused ? rangeMessage : undefined;
+
+    const apply = () => {
+        if (value === '' || outOfRange) {
+            setRefused(true);
+            return false;
+        }
+        setContext((draftCtx) => {
+            const sizeMap: Record<string, number> = {};
+            for (const i of selectedIndices) sizeMap[i] = size;
+            if (isRow) api.setRowHeight(draftCtx, sizeMap, true);
+            else api.setColumnWidth(draftCtx, sizeMap, true);
+        });
+    };
 
     return (
         <FormDialog {...dialogProps} title={isRow ? 'Row height' : 'Column width'}>
-            <FormDialogForm
-                submitLabel="OK"
-                canSubmit={canSubmit}
-                onSubmit={() =>
-                    setContext((draftCtx) => {
-                        const sizeMap: Record<string, number> = {};
-                        for (const i of selectedIndices) sizeMap[i] = size;
-                        if (isRow) api.setRowHeight(draftCtx, sizeMap, true);
-                        else api.setColumnWidth(draftCtx, sizeMap, true);
-                    })
-                }
-            >
+            <FormDialogForm submitLabel="Apply" changed={value !== opened} onSubmit={apply}>
                 <Field>
                     <div className="flex items-center gap-2">
                         <Input
@@ -64,14 +71,16 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
                             value={value}
                             className="w-24"
                             aria-label={isRow ? 'Row height in pixels' : 'Column width in pixels'}
-                            aria-describedby={refused ? reasonId : undefined}
-                            onChange={(e) => setValue(e.target.value)}
+                            aria-invalid={reason !== undefined}
+                            aria-describedby={reason ? reasonId : undefined}
+                            onChange={(e) => {
+                                setValue(e.target.value);
+                                setRefused(false);
+                            }}
                         />
                         <span className="text-sm text-muted-foreground">px</span>
                     </div>
-                    {refused && (
-                        <FieldError id={reasonId}>{`Enter a value between 1 and ${MAX_SIZE[mode]}.`}</FieldError>
-                    )}
+                    {reason && <FieldError id={reasonId}>{reason}</FieldError>}
                 </Field>
             </FormDialogForm>
         </FormDialog>

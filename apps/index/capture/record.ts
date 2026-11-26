@@ -1,7 +1,7 @@
 // Films a capture scene into the public site's About media. A video records a page's screencast frames with Chrome's
 // own timestamps, as fast as the page repaints, and ffmpeg turns them into an AV1 and an H.264 mp4 at a steady 30 fps,
 // with the first frame as a webp poster. A scene of two people can film both pages at once, joined side by side. A
-// still is one screenshot as webp. Everything is made in a scratch folder and moves into the site only once every
+// still is one screenshot as webp, or as a JPEG for one that other sites show for a link. Everything is made in a scratch folder and moves into the site only once every
 // file of the scene is done, so a failed run leaves no half file there.
 
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -16,6 +16,7 @@ import { CAPTURE_ROOT } from './stack';
 const MEDIA_DIR = join(import.meta.dir, '..', 'public', ABOUT_MEDIA);
 const OUT_DIR = join(CAPTURE_ROOT, 'out');
 const WEBP_QUALITY = '85';
+const JPEG_QUALITY = 85;
 
 // A quiet grey seam, so two pages in one theme don't run into each other.
 const SEAM_COLOR: Record<Scene['theme'], string> = { light: '#d4d4d4', dark: '#3a3a3a' };
@@ -58,6 +59,12 @@ export async function recordVideo(pages: readonly Page[], scene: Scene, run: () 
 
 export async function takeStill(page: Page, scene: Scene): Promise<void> {
     mkdirSync(OUT_DIR, { recursive: true });
+    if (scene.share) {
+        const output = `${scene.name}.jpg`;
+        await page.screenshot({ path: join(OUT_DIR, output), type: 'jpeg', quality: JPEG_QUALITY, scale: 'css' });
+        publish([output]);
+        return;
+    }
     const png = join(OUT_DIR, `${scene.name}.png`);
     await page.screenshot({ path: png });
     const output = `${scene.name}.webp`;

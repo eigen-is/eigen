@@ -1,5 +1,5 @@
-// The landing page's three blocks are always on the page, so the prerender has them. The install line under them
-// appears only when the server's admin turned it on.
+// The landing page's three blocks are always on the page, so the prerender has them. The install lines under them
+// appear only when the server's admin turned them on.
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { LandingBlocks } from '../../components/landing-blocks';
@@ -31,10 +31,10 @@ describe('LandingBlocks', () => {
         ]);
     });
 
-    test('shows the install line only when the setting is on', () => {
+    test('shows the install lines only when the setting is on', () => {
         expect(renderToStaticMarkup(<LandingBlocks showInstall={false} />)).not.toContain('curl');
         const on = renderToStaticMarkup(<LandingBlocks showInstall />);
-        expect(on).toContain('Install in one line');
-        expect(on).toContain('curl -fsSL https://eigen.is/install | sh');
+        expect(on).toContain('Install in two lines');
+        expect(on).toContain('mkdir -p /opt/eigen &amp;&amp; cd /opt/eigen\ncurl -fsSL https://eigen.is/install | sh');
     });
 });

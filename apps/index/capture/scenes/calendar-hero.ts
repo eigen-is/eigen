@@ -2,12 +2,12 @@
 // of the festival and unfolds its guest list with each answer. She closes it, hides the team's calendar so only her
 // own two lines are left, and shows it again, so the loop ends where it began.
 
+import type { Page } from 'playwright-core';
+import type { Point } from '../lib/cursor';
 import { pointOn } from '../lib/cursor';
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
-
-// The empty sidebar under the calendars, as a day cell lights up under the pointer.
-const REST = { x: 130, y: 470 };
+import { openFestivalMonth } from './festival-week';
 
 export const calendarHero = {
     name: 'calendar-hero',
@@ -17,19 +17,9 @@ export const calendarHero = {
     apps: ['calendar'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
-        await page.goto(stack.appUrl('calendar'));
-        const meeting = page.getByText('Go / no-go meeting').first();
-        await meeting.waitFor();
-        // The festival week is the month's last row, under the window's foot, so she steps on to the month it opens.
-        for (let month = 0; month < 3; month++) {
-            // Whole inside the window, where a click can reach it.
-            const box = await meeting.boundingBox();
-            if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) break;
-            await page.getByRole('button', { name: 'Next month' }).dispatchEvent('click');
-            await Bun.sleep(800);
-        }
+        await openFestivalMonth(page, stack, 'Go / no-go meeting');
         await Bun.sleep(2000);
-        await cursor.moveTo(REST, { duration: 1 });
+        await cursor.moveTo(await restPoint(page), { duration: 1 });
     },
     run: async ({ pages: [page], cursors: [cursor] }) => {
         await Bun.sleep(1000);
@@ -46,7 +36,15 @@ export const calendarHero = {
         await Bun.sleep(2000);
         await cursor.click(toggle);
         await Bun.sleep(1200);
-        await cursor.moveTo(REST, { duration: 900 });
+        await cursor.moveTo(await restPoint(page), { duration: 900 });
         await Bun.sleep(800);
     },
 } satisfies Scene;
+
+// The toolbar's empty stretch past the month's title, read from the page, since a sidebar row, a day cell or the mini
+// month lights up under the pointer.
+async function restPoint(page: Page): Promise<Point> {
+    const title = await page.locator('.eigen-toolbar-title').boundingBox();
+    if (!title) throw new Error("The calendar's toolbar has no title");
+    return { x: title.x + title.width + 80, y: title.y + title.height / 2 };
+}

@@ -1,14 +1,15 @@
-// The Custom sort dialog sorts the selected range by the column picked under Sort by, ascending or descending, and
-// closes. With a header row ticked, it names the columns by their header and leaves that row in place, and two columns
+// The Custom sort dialog keeps the dialog contract. It sorts the selected range by the column picked under Sort by,
+// ascending or descending, and closes. With a header row ticked, it names the columns by their header and leaves that row in place, and two columns
 // with the same header are still two choices. Cancel closes it with the range as it was.
 
 import { afterEach, expect, spyOn, test } from 'bun:test';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { renderSheetDialog } = await import('../sheet-dialog');
+const { renderSheetDialog, sheetDialogForm } = await import('../sheet-dialog');
 const { CustomSort } = await import('../../../components/CustomSort');
 
 const consoleError = spyOn(console, 'error');
@@ -36,24 +37,41 @@ const openWithHeaders = () =>
         selections: [A1_B3],
     });
 
-// A1:B3 selected, rows of a letter and a number. The sheet's own selection may differ from the dialog's.
-const openCustomSort = (selections = [A1_B3]) =>
-    renderSheetDialog((d) => d.showDialog(createElement(CustomSort, { selection: A1_B3 })), {
-        sheets: [
-            {
-                name: 'sheet',
-                id: 'id_1',
-                order: 0,
-                config: {},
-                data: [
-                    [cell('b'), cell(2)],
-                    [cell('c'), cell(3)],
-                    [cell('a'), cell(1)],
-                ],
-            },
+// Rows of a letter and a number in A1:B3.
+const LETTERS = [
+    {
+        name: 'sheet',
+        id: 'id_1',
+        order: 0,
+        config: {},
+        data: [
+            [cell('b'), cell(2)],
+            [cell('c'), cell(3)],
+            [cell('a'), cell(1)],
         ],
-        selections,
+    },
+];
+const openSort: Parameters<typeof sheetDialogForm>[0] = (d) =>
+    d.showDialog(createElement(CustomSort, { selection: A1_B3 }));
+
+// A1:B3 selected. The sheet's own selection may differ from the dialog's.
+const openCustomSort = (selections = [A1_B3]) => renderSheetDialog(openSort, { sheets: LETTERS, selections });
+
+const tickHeaderRow = () =>
+    act(async () => document.querySelector<HTMLElement>('[role="dialog"] [role="checkbox"]')?.click());
+
+test('Custom sort keeps the dialog contract', async () => {
+    const form = sheetDialogForm(openSort, { sheets: LETTERS, selections: [A1_B3] });
+    await expectFormContract({
+        kind: 'dialog',
+        render: form.render,
+        submitLabel: 'Sort',
+        firstField: 'Data has a header row',
+        onSubmit: form.write,
+        makeChanged: tickHeaderRow,
+        savesAtOnce: true,
     });
+});
 
 const columnA = (context: import('../../../state').Context) => context.sheets[0]?.data?.map((row) => row[0]?.v);
 const columnB = (context: import('../../../state').Context) => context.sheets[0]?.data?.map((row) => row[1]?.v);
@@ -93,7 +111,7 @@ test('Cancel closes it and leaves the range as it was', async () => {
 
 test('a header row whose columns share a name keeps one choice per column', async () => {
     await openWithHeaders();
-    await act(async () => document.querySelector<HTMLElement>('[role="dialog"] [role="checkbox"]')?.click());
+    await tickHeaderRow();
     const duplicateKeys = consoleError.mock.calls.filter((call) => String(call[0]).includes('same key'));
     expect(duplicateKeys).toEqual([]);
     expect(sortBy()).toBe('Name');
@@ -101,7 +119,7 @@ test('a header row whose columns share a name keeps one choice per column', asyn
 
 test('a ticked header row stays in place and only the rows below it sort', async () => {
     const dialog = await openWithHeaders();
-    await act(async () => document.querySelector<HTMLElement>('[role="dialog"] [role="checkbox"]')?.click());
+    await tickHeaderRow();
     await dialog.click('Sort');
     expect(columnA(dialog.context())).toEqual(['Name', 'a', 'b']);
     expect(columnB(dialog.context())).toEqual(['Name', 1, 2]);

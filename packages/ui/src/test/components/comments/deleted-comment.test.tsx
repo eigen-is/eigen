@@ -16,7 +16,7 @@ mock.module('@workspace/lib/auth', () => ({
     useAuth: () => ({ user: { id: 'me', email: 'me@test.eigen.is' } }),
     useIsGuest: () => false,
 }));
-// The document's history holds one row, a resolve of the comment of a sticky since deleted from its board.
+// The document's history holds one row, a resolve of the comment of a card since deleted from its board.
 const resolvedRow: FileEvent = {
     id: 'event-1',
     pathId: 'doc-1',

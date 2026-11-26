@@ -1,8 +1,9 @@
 // The Docs link dialog has the sheet's fields and words. Selected text shows in a box it can't change and keeps its
-// formatting; at a bare caret Display text is typed and inserted as the link. OK waits for an address a browser can
+// formatting; at a bare caret Display text is typed and inserted as the link. Apply refuses an address a browser can't
 // open, as the sheet's does, and leaves the caret after the link. On a link the dialog edits that link whole, and
 // every way out hands the focus back to the editor. A link's right-click rows open, copy, edit and remove it.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows, renderOpenMenu } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -46,44 +47,34 @@ const LINKED = {
     ],
 };
 
-beforeEach(() => {
+const resetDoc = () => {
     editor.commands.setContent({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'see the docs' }] }],
     });
     editor.commands.setTextSelection(1);
-});
+};
 
-async function openDialog() {
-    const target = linkDialogTarget(editor);
-    function Host() {
-        const [open, setOpen] = useState(true);
-        return createElement(LinkDialog, {
-            ...target,
-            open,
-            onOpenChange: setOpen,
-            onCloseAutoFocus: keepEditorFocus(editor),
-        });
-    }
-    ({ unmount } = await renderInDocument(createElement(Host)));
+beforeEach(resetDoc);
+
+function LinkHost({ target }: { target: ReturnType<typeof linkDialogTarget> }) {
+    const [open, setOpen] = useState(true);
+    return createElement(LinkDialog, {
+        ...target,
+        open,
+        onOpenChange: setOpen,
+        onCloseAutoFocus: keepEditorFocus(editor),
+    });
 }
 
-const field = (id: string) => {
-    const input = document.getElementById(id);
-    if (!(input instanceof HTMLInputElement)) throw new Error(`no ${id} field`);
-    return input;
-};
+async function openDialog() {
+    ({ unmount } = await renderInDocument(createElement(LinkHost, { target: linkDialogTarget(editor) })));
+}
+
 const title = () => document.querySelector('[role="dialog"] h2')?.textContent;
 const button = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
 const refusal = () => document.querySelector('[role="dialog"] [data-slot="field-error"]')?.textContent ?? null;
-
-async function type(id: string, value: string) {
-    const input = field(id);
-    // React reads the value off its own tracker, so the native setter is what a keystroke looks like.
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, value);
-    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
-}
 
 async function click(label: string) {
     const target = button(label);
@@ -102,26 +93,51 @@ const runs = () => {
     return found;
 };
 
-test('selected text shows in a box it cannot change, and OK waits for an address a browser can open', async () => {
+// A change to the doc is what the dialog's submit reaches.
+const written = mock(() => {});
+editor.on('update', written);
+
+test('the link dialog keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => {
+            resetDoc();
+            editor.commands.setTextSelection(5);
+            return createElement(LinkHost, { target: linkDialogTarget(editor) });
+        },
+        submitLabel: 'Apply',
+        firstField: 'Display text',
+        onSubmit: written,
+        makeChanged: () => type('Link address', 'https://eigen.is'),
+        makeInvalid: () => type('Link address', 'dashttps://example.com'),
+        invalidField: 'Link address',
+        savesAtOnce: true,
+    });
+});
+
+test('selected text shows in a box it cannot change, and Apply refuses an address a browser cannot open', async () => {
     editor.commands.setTextSelection({ from: 5, to: 13 });
     await openDialog();
     expect(title()).toBe('Insert link');
-    expect(field('link-text').value).toBe('the docs');
-    expect(field('link-text').disabled).toBe(true);
-    expect(document.activeElement).toBe(field('link-address'));
-    expect(button('OK')?.disabled).toBe(true);
+    expect(field('Display text')).toHaveProperty('value', 'the docs');
+    expect(field('Display text')).toHaveProperty('disabled', true);
+    expect(document.activeElement).toBe(field('Link address'));
     expect(refusal()).toBeNull();
+    await click('Apply');
+    expect(refusal()).toBe('Add a link address');
+    expect(field('Link address').getAttribute('aria-invalid')).toBe('true');
 
-    await type('link-address', 'dashttps://example.com');
+    await type('Link address', 'dashttps://example.com');
     expect(refusal()).toBe('Please enter a valid link');
-    expect(button('OK')?.disabled).toBe(true);
-    await type('link-address', 'javascript:alert(1)');
-    expect(button('OK')?.disabled).toBe(true);
+    await type('Link address', 'javascript:alert(1)');
+    await click('Apply');
+    expect(title()).toBe('Insert link');
+    expect(runs()).toEqual([['see the docs', undefined]]);
 
     // An address with no scheme opens as https, so it is stored that way.
-    await type('link-address', ' eigen.is/help ');
+    await type('Link address', ' eigen.is/help ');
     expect(refusal()).toBeNull();
-    await click('OK');
+    await click('Apply');
     expect(runs()).toEqual([
         ['see ', undefined],
         ['the docs', ['https://eigen.is/help']],
@@ -133,16 +149,16 @@ test('selected text shows in a box it cannot change, and OK waits for an address
 test('at a bare caret Display text goes in as the link, or the address when it is empty', async () => {
     editor.commands.setTextSelection(5);
     await openDialog();
-    expect(field('link-text').disabled).toBe(false);
-    await type('link-text', 'Eigen');
-    await type('link-address', 'https://eigen.is');
-    await click('OK');
+    expect(field('Display text')).toHaveProperty('disabled', false);
+    await type('Display text', 'Eigen');
+    await type('Link address', 'https://eigen.is');
+    await click('Apply');
     expect(runs()?.[1]).toEqual(['Eigen', ['https://eigen.is']]);
 
     editor.commands.setTextSelection(1);
     await openDialog();
-    await type('link-address', 'mailto:hi@eigen.is');
-    await click('OK');
+    await type('Link address', 'mailto:hi@eigen.is');
+    await click('Apply');
     expect(runs()?.[0]).toEqual(['mailto:hi@eigen.is', ['mailto:hi@eigen.is']]);
 });
 
@@ -150,13 +166,13 @@ test('on a link the dialog edits that link whole, and its formatting stays', asy
     editor.commands.setContent(LINKED);
     editor.commands.setTextSelection({ from: 10, to: 11 });
     await openDialog();
-    // Nothing moves until OK.
+    // Nothing moves until Apply.
     expect([editor.state.selection.from, editor.state.selection.to]).toEqual([10, 11]);
     expect(title()).toBe('Edit link');
-    expect(field('link-text').value).toBe('the docs');
-    expect(field('link-address').value).toBe('https://eigen.is');
-    await type('link-address', 'https://eigen.is/docs');
-    await click('OK');
+    expect(field('Display text')).toHaveProperty('value', 'the docs');
+    expect(field('Link address')).toHaveProperty('value', 'https://eigen.is');
+    await type('Link address', 'https://eigen.is/docs');
+    await click('Apply');
     expect(runs()).toEqual([
         ['see ', undefined],
         ['the ', ['https://eigen.is/docs', undefined]],
@@ -165,10 +181,10 @@ test('on a link the dialog edits that link whole, and its formatting stays', asy
     expect(editor.getJSON().content?.[0]?.content?.[1]?.marks).toContainEqual({ type: 'bold' });
 });
 
-test.each(['OK', 'Cancel'])('the dialog closed with %s gives focus back to the editor', async (label) => {
+test.each(['Apply', 'Cancel'])('the dialog closed with %s gives focus back to the editor', async (label) => {
     editor.commands.setTextSelection({ from: 1, to: 4 });
     await openDialog();
-    await type('link-address', 'https://eigen.is');
+    await type('Link address', 'https://eigen.is');
     await click(label);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement === editor.view.dom).toBe(true);

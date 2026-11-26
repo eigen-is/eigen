@@ -1,6 +1,7 @@
-// A Drive item's history: the events that changed it, read for the detail column's recent activity and an editor's
-// activity panel, and the card events a stickies board records itself. A folder's history holds its descendants'
-// events too. Drive events refresh it through invalidateFileHistory.
+// A Drive item's history as the client reads and adds to it. useFileHistory lists the events on an item, or under a
+// folder, for a timeline such as the editors' Activity panel or Drive's details. useRecordHistory posts the few events
+// only the client sees, such as a card moved on a Stickies board. A live event refreshes the lists through
+// invalidateFileHistory.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -12,12 +13,13 @@ import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
 
+// The route refuses a longer detail, so the hook clips a card's title and column to fit.
 export function useRecordHistory(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (input: ClientFileEventInput) => {
             const clip = (text: string) => text.slice(0, CARD_TITLE_MAX_LENGTH);
             const event: ClientFileEventInput =
-                input.eventType === 'sticky-removed'
+                input.eventType === 'card-removed'
                     ? { ...input, details: { ...input.details, card: clip(input.details.card) } }
                     : {
                           ...input,
@@ -35,7 +37,7 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// The limit is in the key, so the detail column's few events and the activity panel's many cache apart.
+// limit is part of the key, so Drive's details (5) and the Activity panel (50) cache apart.
 export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
     const { user } = useAuth();
     return useQuery({

@@ -41,6 +41,8 @@ On a phone ([MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mobileColumn` rende
 
 `AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose `condensed` is true on a tablet's rail. On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list its scroll.
 
+The **Recent files** row belongs in the sidebars of Drive and the file apps (Docs, Sheets, Slides, Stickies, Vector) only, because it lists files; Mail, Chat, Calendar and Contacts have none.
+
 A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarItem`), because opening an item in a list adds it to the URL's search, and a match on the search would unselect a filter such as **All stickies** the moment a board is picked. A fullscreen view with only the topbar, such as `RequestAccessView`, calls `setSidebarHidden(true)` from `useLayout()` and restores it on unmount.
 
 ## A dialog is wide unless it is small and has nothing to type in
@@ -49,7 +51,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 **A wide dialog's footer has a line above it and stays in view.** `DialogFooter` in an `lg` dialog runs edge to edge under a top border and sticks to the bottom of the box while the body scrolls; the header has no line under it. A narrow dialog has no lines. The content box says its width as `data-size`, and the footer reads it through the `group/dialog` variant, so no caller passes a class for it. A wide box that holds a footer drops its bottom padding, and the footer's own padding takes its place. The footer has no negative bottom margin: a sticky box is kept inside its parent, so one that hangs 24px below a form's bottom is pushed 24px back up, over the last field. Content that should run edge to edge too, such as a picker's browser, takes `-mx-6` against the box's padding. On a phone the file picker's browser keeps the padding, as the location field's does, so the drive select above its folders doesn't touch the sides.
 
-**There is one footer.** Its right side holds Cancel and the main button, as `DialogFooter`'s children. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, as its `start`, which `FormDialogForm` fills from `footerStart`. The footer is that one row at every width, its buttons at their normal size, phones included. A row too wide for the box wraps: the tools stay at the left and the right buttons move to the next line together, at the right, because the footer keeps them in one group. The title sits on the left at every width.
+**There is one footer.** Its right side holds Cancel and the main button, as `DialogFooter`'s children. Its left side holds a tool about the item, such as attach, Upload from device, Back or delete, as its `start`, which `FormDialogForm` fills from `footerStart`. The footer is that one row at every width, its buttons at their normal size, phones included. A footer tool with a text label, such as the Share dialog's Share with team, shows only its icon below the `sm` breakpoint (`max-sm:sr-only` on the label), so the row fits a phone and the label still names the button for a screen reader. A row that is still too wide wraps: the tools stay at the left and the right buttons move to the next line together, at the right, because the footer keeps them in one group. The title sits on the left at every width. How a form in a dialog behaves, its keys, its close with changes and its errors, is [FORMS.md](FORMS.md).
 
 ## A dialog never grows to fit what a user typed
 
@@ -57,7 +59,7 @@ A sidebar row is selected by its path alone (`includeSearch: false` in `SidebarI
 
 ## Every yes or no is one `ConfirmDialog`
 
-A question with only a yes and a no, such as Delete calendar, Move to trash or Leave without saving, is `ConfirmDialog`, with no wrapper per kind. Its caller writes the whole description as sentences, the item's name in bold where it reads naturally (`<>Delete <strong>{name}</strong>? All events in it will be lost.</>`), and names its own button. The dialog adds nothing to the text, so a sentence never ends in a stray name or a doubled question mark. `destructive` makes the yes red where it loses work or access: delete, trash, empty trash, remove, delete history, leave a share, and a restore that replaces an account's live data. A restore of a document version saves the current state as a version first, so it stays plain.
+A question with only a yes and a no, such as Delete calendar, Move to trash or Discard changes, is `ConfirmDialog`, with no wrapper per kind. Its caller writes the whole description as sentences, the item's name in bold where it reads naturally (`<>Delete <strong>{name}</strong>? All events in it will be lost.</>`), and names its own button. The dialog adds nothing to the text, so a sentence never ends in a stray name or a doubled question mark. `destructive` makes the yes red where it loses work or access: delete, trash, empty trash, remove, delete history, leave a share, and a restore that replaces an account's live data. A restore of a document version saves the current state as a version first, so it stays plain.
 
 ## A closing dialog gives the focus back
 
@@ -68,6 +70,10 @@ A menu row that opens a dialog is gone a moment later, so the menu names the tar
 A dropdown menu that closes with no dialog over it focuses its trigger itself, whatever holds the focus by then. `returnFocusTo` is the wrong call there: it leaves the focus with whatever took it meanwhile, and Drive's list takes it the moment a closing menu leaves the page (`useKeyboardListNavigation`), so New, the avatar and the detail ⋮ would never get it back. A context menu and a closing dialog do go through `returnFocusTo`, so in Drive they end on the list.
 
 A target still on the page is never replaced, and an element inside an open dialog never becomes one, so a dialog opened over another can't steal its target. A caller's `onCloseAutoFocus` that calls `preventDefault`, such as the sheet's grid refocus, decides for itself. Something that took the focus as the dialog closed, such as a Rename dialog a palette row opened, keeps it.
+
+A target a save drew anew, such as an event chip that moved to another day, is found again by its `data-focus-key`: the calendar's event buttons carry their occurrence (`occurrenceKey`), so Edit event gives the focus to the chip on its new day. With no element of that key left, such as an event moved out of the shown week, the focus stays on `<body>`, where the calendar's keys still work.
+
+"Discard changes?" gives the focus back itself on Keep editing (`useDiscardChanges`). The press that asked focused the X, or nothing for a click outside, so Radix's return would land there; the form dialog's content reports every focus in its form through the hook's `onFocus`, and Keep editing goes back to the last of those fields, or to the first field once it is gone. While a dialog is open, `useKeyboardListNavigation` takes no focus from `<body>`: Chrome fires `focusout` when the question's focused button leaves the page, and Drive's list would otherwise grab the focus before the dialog returns it.
 
 The returned focus shows a ring only when its target had one as it left (`:focus-visible`). A dropdown menu a pointer opened gives its trigger the focus with `focusVisible: false`, because Radix's plain `focus()` after Escape draws a ring in Chrome, and a hover-revealed ⋮ with a ring stays shown after the pointer leaves.
 
@@ -187,6 +193,14 @@ A fixed color mapped onto the palette (`eigenColor(name, step)`) takes the neare
 
 Dark mode themes the app around a document, never the document. The page in Docs, the grid in Sheets, the slide in Slides and the canvas in Vector stay white in either theme, while the bars, panels and menus around them follow it. This is intended (the owner, 14 Nov 2026). `.eigen-paper` pins the light palette on such a surface ([CANVAS.md](CANVAS.md)).
 
+## An item is one square block, and an opened item reads block, meta, sections
+
+Cards in Stickies, comments in the document apps and events in Calendar are drawn alike, so the apps read as one. Every item drawn as a block of its own reads one class, `.eigen-block` (`packages/ui/src/styles/globals.css`): square like a list row, with one flat shadow set through Tailwind's shadow variable, so a ring on the block adds to it, and in dark mode `colorSurface`'s 2px stripe in its place. `CardTile` (a board card, a comment card in a list or the hover card, the drag overlay), the calendar's blocks, bars, drafts and lane ghosts, and `DetailItemBlock` read it, and none keeps a corner or shadow of its own. It comes after the search ring in the stylesheet, since the ring rounds what it rings. A floating surface around a tile, such as the hover card's popover, keeps its own `shadow-md`.
+
+The color is `colorSurface(color, tone)` in one of two tones, which the caller always names: `'tile'` for a small item you scan by color, such as a card on the board or an event on the grid, and the paler `'panel'` for the reading block of an opened item ([STICKIES.md](STICKIES.md)).
+
+An opened item's body is built from the parts in `packages/ui/src/components/layout/app/detail-item.tsx`, in this order: `DetailItemBlock`, the item's block with its title inside, in its color's panel tone or `bg-muted` without one; `DetailMeta`, one muted line, such as who created it; then `DetailSection`s, each an `eigen-section-label` caption over its rows. An opened card or comment takes all three. An opened event, in its dialog or an `.ics` quick look, skips the block and shows its title as a plain heading, as its color only names its calendar ([CALENDAR.md](CALENDAR.md#an-event-on-the-grid-is-drawn-as-a-card-is-and-opened-it-has-no-block)).
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way, so a user reads every Eigen menu alike, and a screen reader hears each row as checked or not.
@@ -231,9 +245,11 @@ The menu key (Shift+F10 or ContextMenu) opens the same menu from the row's rect,
 
 A menu row's icon gap lives in the item primitives (`gap-4`); never add `mr-*` or a `gap-*` override to a menu icon.
 
-## Reordering uses dnd-kit, moving between lists uses native drag
+## Reordering uses dnd-kit, moving between lists uses native drag, placing uses a pointer drag
 
 Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Dragging between lists, onto a sidebar target, or to and from the OS uses native HTML5 drag (`useListDrag`, `useListDropTarget`, `useFileDropTarget`), because dnd-kit never sees an OS file drop and only the native path carries the drag type across lists.
+
+Placing and resizing a handle or block that follows one pointer uses `usePointerDrag` from `packages/ui/src/hooks/`: it follows the pointer under pointer capture, and Escape or a cancelled pointer cancels. dnd-kit has no resize. `ObjectTransform` keeps its own lifecycle, since Alt and Shift reshape a resize mid-drag. dnd-kit's sensors, `useDragScroll` and `usePointerDrag`'s default read one `DRAG_THRESHOLD_PX` from `@workspace/lib/constants/drag`, the travel before a press becomes a drag. Vector's handles pass a smaller threshold of their own, since a handle drag goes live almost at once.
 
 ## Hover-revealed affordances rest visible on touch
 
@@ -298,6 +314,7 @@ Each looks like a bug in our own code:
 
 ## See also
 
+- [FORMS.md](FORMS.md): how a form in a dialog, a card or a page behaves
 - [MOBILE.md](MOBILE.md): the breakpoints and how the shell behaves on phones and touch
 - [COMMAND-PALETTE.md](COMMAND-PALETTE.md): the ⌘K palette the shell mounts
 - [COMMENTS.md](COMMENTS.md): the comments and activity pane

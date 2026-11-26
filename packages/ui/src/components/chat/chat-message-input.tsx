@@ -7,21 +7,12 @@ import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
-import {
-    forwardRef,
-    useCallback,
-    useEffect,
-    useImperativeHandle,
-    useLayoutEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { useFitHeight } from '../../hooks/use-fit-height';
 import { useSuggestions } from '../../hooks/use-suggestions';
 import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
-import { Button } from '../button';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
@@ -83,13 +74,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         return () => window.removeEventListener('focus', onFocus);
     }, [messageCount, focusTextarea]);
 
-    // Height follows the text however it changed: typed, completed from a list, or put back after a failed send.
-    useLayoutEffect(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        textarea.style.height = 'auto';
-        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-    }, [content]);
+    useFitHeight(textareaRef, content);
 
     const handleSend = () => {
         if (!canSend) return;
@@ -110,7 +95,6 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     };
 
     const atQuery = getAtSuggestQuery(content);
-    const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
         setContent((prev) => {
@@ -121,42 +105,31 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         });
     }, []);
 
-    const closeSuggest = useCallback(() => {
-        setContent((prev) => {
-            const atIdx = prev.lastIndexOf('@');
-            return atIdx === -1 ? prev : prev.slice(0, atIdx);
-        });
-    }, []);
-
     // Shift+Enter commits an @-mention but is a newline in the slash lists below. With no matches, Enter sends
     // `@foo` as typed, where a commit on the empty list would strip it.
     const atSuggest = useSuggestions({
-        visible: suggestOpen,
+        visible: atQuery !== null,
         onSelect: handlePlayerSelect,
-        onEscape: closeSuggest,
         acceptShiftEnter: true,
         passthroughWhenEmpty: true,
     });
 
     const trimmedContent = content.trim();
     const slashQuery = trimmedContent.startsWith('/') && !trimmedContent.includes(' ') ? trimmedContent : null;
-    const slashSuggestOpen = slashQuery !== null && !SLASH_COMMANDS.includes(slashQuery);
+    const slashListVisible = slashQuery !== null && !SLASH_COMMANDS.includes(slashQuery);
 
     const handleSlashSelect = useCallback((command: string) => {
         setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
     }, []);
 
-    const clearContent = useCallback(() => setContent(''), []);
-
     const slashSuggest = useSuggestions({
-        visible: slashSuggestOpen,
+        visible: slashListVisible,
         onSelect: handleSlashSelect,
-        onEscape: clearContent,
         passthroughWhenEmpty: true,
     });
 
     const slashTarget = getSlashTargetQuery(content);
-    const slashTargetOpen = slashTarget !== null && !slashSuggestOpen;
+    const targetListVisible = slashTarget !== null && !slashListVisible;
 
     const slashTargetMembers = useMemo(() => {
         if (!slashTarget || slashTarget.mode === 'contacts') return [];
@@ -176,20 +149,9 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         [slashTarget?.appendSpace],
     );
 
-    // Escape drops the target back to just the command (keep everything before the space).
-    const clearSlashTarget = useCallback(
-        () =>
-            setContent((prev) => {
-                const spaceIdx = prev.indexOf(' ');
-                return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
-            }),
-        [],
-    );
-
     const targetSuggest = useSuggestions({
-        visible: slashTargetOpen,
+        visible: targetListVisible,
         onSelect: handleSlashTargetSelect,
-        onEscape: clearSlashTarget,
         passthroughWhenEmpty: true,
     });
 
@@ -242,12 +204,12 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     query={atQuery || ''}
                     roomMembers={roomMembers}
                     onSelect={handlePlayerSelect}
-                    visible={suggestOpen}
+                    visible={atSuggest.open}
                     selectedIndex={atSuggest.selectedIndex}
                     onItemsChange={atSuggest.onItemsChange}
                     includeContacts={false}
                 />
-                {slashTargetOpen && slashTarget && (
+                {targetSuggest.open && slashTarget && (
                     <ChatPlayerSuggest
                         query={slashTarget.query}
                         roomMembers={slashTarget.mode === 'contacts' ? [] : slashTargetMembers}
@@ -262,7 +224,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     query={slashQuery ?? ''}
                     commandsHelp={COMMANDS_HELP}
                     onSelect={handleSlashSelect}
-                    visible={slashSuggestOpen}
+                    visible={slashSuggest.open}
                     selectedIndex={slashSuggest.selectedIndex}
                     onItemsChange={slashSuggest.onItemsChange}
                 />
@@ -278,9 +240,14 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     rows={1}
                     className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
                 />
-                <Button size="icon" onClick={handleSend} disabled={!canSend} className="shrink-0 h-10 w-10">
-                    <Send className="h-4 w-4" />
-                </Button>
+                <TooltipButton
+                    icon={Send}
+                    tooltipText="Send"
+                    variant="default"
+                    className="shrink-0 h-10 w-10"
+                    onClick={handleSend}
+                    disabled={!canSend}
+                />
             </div>
         </div>
     );

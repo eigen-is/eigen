@@ -1,8 +1,11 @@
-// The New event dialog, opened from the toolbar or from a click on a day. It starts at the next quarter hour, on the
-// clicked day when there is one, for half an hour, in the default calendar, and saves through useCreateEvent.
+// The New event dialog, opened from the toolbar, a click on a day or a slot, or a drag over a range of the time grid.
+// It starts at the times the view gives, or else at the next quarter hour, on the clicked day when there is one, for
+// a new event's length, in the default calendar, and saves through useCreateEvent. It shows no form until the
+// calendars have loaded, so the event always has a calendar to go to.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
+    defaultCalendar,
     toLocalDateString,
     useCalendarOptions,
     useCalendars,
@@ -10,116 +13,146 @@ import {
     useSharedCalendars,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { LoadingState } from '@workspace/ui/components/layout/app';
 import { UsersRound } from 'lucide-react';
 import { useState } from 'react';
-import { AttendeeEditor } from './attendee-editor';
+import { AttendeeEditor, useGuestInput } from './attendee-editor';
 import { buildEventTimes, calendarKey } from './calendar-utils';
-import { EventFormFields } from './event-form-fields';
-import { endAfter, roundToNext15Minutes, toTimeString } from './time-select';
+import type { EventFieldTimes } from './event-form-fields';
+import { EventFormFields, timesDiffer } from './event-form-fields';
+import { roundToNext15Minutes, toTimeString } from './time-select';
+
+// The form's start and end fields: an all-day event's end is its last day, as the end date field shows it.
+export type NewEventTimes = { start: Date; end: Date; allDay: boolean };
 
 type CreateEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
-    defaultCalendarId?: string;
+    initial?: NewEventTimes;
 };
 
-export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCalendarId }: CreateEventDialogProps) {
+export function CreateEventDialog({ open, onOpenChange, defaultDate, initial }: CreateEventDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title="New event">
-            <CreateEventForm defaultDate={defaultDate} defaultCalendarId={defaultCalendarId} />
+            <CreateEventForm defaultDate={defaultDate} initial={initial} />
         </FormDialog>
     );
 }
 
-// Mounted with the dialog, so each opening starts empty at the next quarter hour.
-function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
+// Mounted with the dialog, so each opening starts empty at its own times.
+function CreateEventForm({ defaultDate, initial }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
-    const { data: calendars = [] } = useCalendars(ownerId);
+    const { data: calendars } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
-    const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
+    const calendarOptions = useCalendarOptions(ownerId, calendars ?? [], sharedCalendars);
 
-    const [initial] = useState(() => {
+    const [seed] = useState((): EventFieldTimes => {
         const rounded = roundToNext15Minutes(new Date());
-        const start = defaultDate ? new Date(defaultDate) : rounded;
-        start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-        return { start, end: endAfter(start, 30) };
+        const slotStart = defaultDate ? new Date(defaultDate) : rounded;
+        slotStart.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
+        const { start, end, allDay } = initial ?? {
+            start: slotStart,
+            end: new Date(slotStart.getTime() + NEW_EVENT_MINUTES * 60_000),
+            allDay: false,
+        };
+        return {
+            allDay,
+            rrule: null,
+            startDate: toLocalDateString(start),
+            startTime: toTimeString(start),
+            endDate: toLocalDateString(end),
+            endTime: toTimeString(end),
+        };
     });
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
     const [pickedCalKey, setPickedCalKey] = useState<string>();
-    const [allDay, setAllDay] = useState(false);
-    const [startDate, setStartDate] = useState(toLocalDateString(initial.start));
-    const [endDate, setEndDate] = useState(initial.end.date);
-    const [startTime, setStartTime] = useState(toTimeString(initial.start));
-    const [endTime, setEndTime] = useState(initial.end.time);
-    const [rruleString, setRruleString] = useState<string | null>(null);
+    const [times, setTimes] = useState(seed);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
+    const guestInput = useGuestInput({ attendees, onChange: setAttendees });
+    // One user action can set several of these in a row, so each builds on the last.
+    const editTimes = (change: Partial<EventFieldTimes>) => setTimes((current) => ({ ...current, ...change }));
 
-    // Until the user picks one, the default calendar follows the list, which may still be loading.
-    const defaultCal = defaultCalendarId ? calendarOptions.find((c) => c.id === defaultCalendarId) : calendarOptions[0];
-    const selectedCalKey = pickedCalKey ?? (defaultCal ? calendarKey(defaultCal) : '');
+    // Until the user picks one, the default calendar follows the list.
+    const defaultCal = calendarOptions.find((c) => c.id === defaultCalendar(calendars ?? [])?.id);
+    const defaultCalKey = defaultCal ? calendarKey(defaultCal) : '';
+    const selectedCalKey = pickedCalKey ?? defaultCalKey;
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId ?? ownerId);
 
+    if (!calendars) return <LoadingState />;
+
+    const changed =
+        [title, description, location].some((text) => text !== '') ||
+        selectedCalKey !== defaultCalKey ||
+        timesDiffer(times, seed) ||
+        attendees.length > 0 ||
+        guestInput.hasText;
+
     return (
         <FormDialogForm
-            canSubmit={title.trim() !== '' && !!selectedCal}
-            submitLabel="Save"
+            changed={changed}
+            submitLabel="Create"
             onSubmit={async () => {
-                if (!selectedCal) return false;
-                const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
+                const guests = guestInput.commitGuests() ?? attendees;
+                // A calendar picked here that a refetch dropped shows the picker's placeholder.
+                if (!title.trim() || guests === false || !selectedCal) return false;
+                const { start, end } = buildEventTimes(
+                    times.allDay,
+                    times.startDate,
+                    times.endDate,
+                    times.startTime,
+                    times.endTime,
+                );
                 await createEvent.mutateAsync({
                     calendarId: selectedCal.id,
                     title: title.trim(),
                     startTime: start,
                     endTime: end,
-                    allDay,
+                    allDay: times.allDay,
                     description: description.trim() || null,
                     location: location.trim() || null,
-                    rrule: rruleString,
-                    timezone: allDay ? null : viewerTimeZone(),
-                    data: attendees.length > 0 ? { attendees } : undefined,
+                    rrule: times.rrule,
+                    timezone: times.allDay ? null : viewerTimeZone(),
+                    data: guests.length > 0 ? { attendees: guests } : undefined,
                 });
             }}
         >
             <EventFormFields
                 title={title}
                 setTitle={setTitle}
-                allDay={allDay}
-                setAllDay={setAllDay}
-                startDate={startDate}
-                setStartDate={setStartDate}
-                endDate={endDate}
-                setEndDate={setEndDate}
-                startTime={startTime}
-                setStartTime={setStartTime}
-                endTime={endTime}
-                setEndTime={setEndTime}
+                allDay={times.allDay}
+                setAllDay={(allDay) => editTimes({ allDay })}
+                startDate={times.startDate}
+                setStartDate={(startDate) => editTimes({ startDate })}
+                endDate={times.endDate}
+                setEndDate={(endDate) => editTimes({ endDate })}
+                startTime={times.startTime}
+                setStartTime={(startTime) => editTimes({ startTime })}
+                endTime={times.endTime}
+                setEndTime={(endTime) => editTimes({ endTime })}
                 location={location}
                 setLocation={setLocation}
                 description={description}
                 setDescription={setDescription}
-                rruleString={rruleString}
-                setRruleString={setRruleString}
+                rruleString={times.rrule}
+                setRruleString={(rrule) => editTimes({ rrule })}
                 selectedCalKey={selectedCalKey}
                 setSelectedCalKey={setPickedCalKey}
                 calendarOptions={calendarOptions}
-                recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
+                recurrenceStartDate={new Date(`${times.startDate}T00:00:00`)}
                 timezone={viewerTimeZone()}
                 attendeesSection={
                     <div className="flex items-start gap-3">
                         <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                         <div className="flex-1">
-                            <AttendeeEditor
-                                attendees={attendees}
-                                onChange={setAttendees}
-                                currentUserEmail={user?.email}
-                            />
+                            <AttendeeEditor attendees={attendees} onChange={setAttendees} input={guestInput} />
                         </div>
                     </div>
                 }

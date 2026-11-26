@@ -18,7 +18,7 @@ const row = {
 } as const;
 const events: FileEvent[] = [
     { ...row, id: 'e1', eventType: 'commented', details: { preview: 'Looks good', chatName: 'live.eigenchat' } },
-    { ...row, id: 'e2', eventType: 'sticky-added', details: { card: 'Ship it', toColumn: 'Done', cardId: 'card-2' } },
+    { ...row, id: 'e2', eventType: 'card-added', details: { card: 'Ship it', toColumn: 'Done', cardId: 'card-2' } },
 ];
 
 const realDrive = { ...(await import('@workspace/lib/drive')) };

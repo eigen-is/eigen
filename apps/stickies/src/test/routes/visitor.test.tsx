@@ -49,7 +49,7 @@ test('a visitor reads a public board, with its name in the bar, and asks only fo
 test('a visitor lands on login, with the way back, for a board the link does not open', async () => {
     const router = await open(URL_OF('secret'));
     expect(router.state.location.pathname).toBe('/login');
-    expect(router.state.location.search).toEqual({ redirect: URL_OF('secret') });
+    expect(router.state.location.search).toEqual({ redirect: `http://localhost:3000${URL_OF('secret')}` });
 });
 
 test("a signed-in writer's board is editable, offers Share and reads the comment index", async () => {

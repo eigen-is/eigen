@@ -1,8 +1,12 @@
-// The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
-// with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
-// removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the
-// second step is a button that opens the folder browser, and a chat made after that goes into the folder it shows. A
-// typed address that is one of the user's contacts names the chat by the contact's name.
+// The New chat wizard keeps the dialog contract on its second step, where Create makes the chat. It opens on the
+// people field, and its second step on the name, selected. A person typed but not added counts as a change and is
+// added by Next, and the user's own address says why it can't be added. A name another chat there has is said under
+// the name, which gets the focus. It lists each picked person with an × that
+// removes them, and with a team picked it shows the team with an × of its own. A screen reader hears each × by what it
+// removes, never a row of bare "Remove"s, and a click removes only that one. A mouse user sees each × on hover only,
+// and Tab reaches and shows it. The Location bar of the second step is a button that opens the folder browser, and a
+// chat made after that goes into the folder it shows. A typed address that is one of the user's contacts names the
+// chat by the contact's name.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
@@ -20,6 +24,12 @@ const DESIGN_TEAM = {
 };
 let myTeams: (typeof DESIGN_TEAM)[] = [];
 const createdRooms: unknown[] = [];
+const createRoom = mock(async (room: unknown) => {
+    createdRooms.push(room);
+    return drivePath({ name: 'Ada & Me.eigenchat', mimeType: 'application/eigenchat' });
+});
+// One object, so the effects that depend on it settle.
+const createRoomMutation = { mutateAsync: createRoom, isPending: false };
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
@@ -32,13 +42,7 @@ const realChat = { ...(await import('@workspace/lib/chat')) };
 mock.module('@workspace/lib/chat', () => ({
     ...realChat,
     useChatSections: () => ({ teams: [], isLoading: false }),
-    useCreateChatRoom: () => ({
-        mutateAsync: async (room: unknown) => {
-            createdRooms.push(room);
-            return drivePath({ name: 'Ada & Me.eigenchat', mimeType: 'application/eigenchat' });
-        },
-        isPending: false,
-    }),
+    useCreateChatRoom: () => createRoomMutation,
     useFindChatByMembers: () => ({ data: [], isPending: false }),
 }));
 const grace: Contact = {
@@ -70,11 +74,18 @@ afterAll(() => {
 });
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
+const { expectFormContract, type } = await import('../../form-contract');
 const { ChatCreateWizard } = await import('../../../components/chat/chat-create-wizard');
 const { clickRow } = await import('../../menu-rows');
 const { pressKey } = await import('../../press-key');
 const { expectKeyboardReveal } = await import('../../hover-reveal');
+
+// The wizard as a host keeps it: open until it closes itself.
+function HostedWizard() {
+    const [open, setOpen] = useState(true);
+    return createElement(ChatCreateWizard, { open, onOpenChange: setOpen, onNavigate: () => {} });
+}
 
 async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     myTeams = teams;
@@ -90,15 +101,14 @@ async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
 
 // Types a person into the people field and presses its + button, as a user picks someone.
 async function pick(email: string) {
-    const input = document.querySelector<HTMLInputElement>('#chat-wizard-people');
+    await type('People', email);
     const add = document.querySelector<HTMLButtonElement>('button[aria-label="Add"]');
-    if (!input || !add) throw new Error('the wizard drew no people field');
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, email);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    if (!add) throw new Error('the wizard drew no + button');
     await act(async () => add.click());
 }
+
+// The first step waits for its debounced look for an existing chat with these people.
+const lookUp = () => act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
 
 const buttonNamed = (name: string) => document.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
 
@@ -143,19 +153,76 @@ test('a picked team has a remove button named after the team, and it goes back t
     expect(document.querySelector('#chat-wizard-people')).not.toBeNull();
 });
 
-const letsChat = () => {
-    const button = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === "Let's chat");
-    if (!button) throw new Error("the wizard drew no Let's chat button");
-    return button;
+const button = (label: string) => {
+    const found = [...document.querySelectorAll('button')].find((b) => b.lastChild?.textContent?.trim() === label);
+    if (!found) throw new Error(`the wizard drew no ${label} button`);
+    return found;
 };
+const create = () => button('Create');
+
+async function goToSecondStep(...emails: string[]) {
+    for (const email of emails.length ? emails : ['ada@example.com']) await pick(email);
+    await lookUp();
+    await act(async () => button('Next').click());
+}
 
 async function openSecondStep(...emails: string[]) {
     await openWizard();
-    for (const email of emails.length ? emails : ['ada@example.com']) await pick(email);
-    // The first step waits for its debounced look for an existing chat with these people.
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
-    await act(async () => letsChat().click());
+    await goToSecondStep(...emails);
 }
+
+test('the second step keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(HostedWizard),
+        submitLabel: 'Create',
+        firstField: 'Name',
+        onSubmit: createRoom,
+        makeChanged: () => goToSecondStep(),
+        makeInvalid: async () => {
+            await goToSecondStep();
+            await type('Name', ' ');
+        },
+        invalidField: 'Name',
+        except: { focus: 'the dialog opens on the people field of step 1; the test below pins both steps' },
+    });
+    // Each probe waits out step 1's look for an existing chat.
+}, 30_000);
+
+test('the wizard opens on the people field, and its second step on the name, selected', async () => {
+    await openWizard();
+    expect(document.activeElement?.id).toBe('chat-wizard-people');
+    await goToSecondStep('ada@example.com');
+    const name = document.querySelector<HTMLInputElement>('#chat-wizard-name');
+    expect(document.activeElement?.id).toBe('chat-wizard-name');
+    expect([name?.selectionStart, name?.selectionEnd]).toEqual([0, name?.value.length]);
+});
+
+test('a person typed but not added counts as a change, and Next adds them before it goes on', async () => {
+    await renderInDocument(createElement(HostedWizard));
+    await type('People', 'ada@example.com');
+    await act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(document.body.textContent).toContain('Discard changes?');
+    await act(async () => button('Keep editing').click());
+
+    await act(async () => button('Next').click());
+    expect(buttonNamed('Remove ada@example.com')).not.toBeNull();
+    expect(document.querySelector('#chat-wizard-name')).toBeNull();
+    await lookUp();
+    await act(async () => button('Next').click());
+    expect(document.querySelector('#chat-wizard-name')).not.toBeNull();
+});
+
+test('your own address is refused with the reason, and the text stays', async () => {
+    await openWizard();
+    await pick('me@example.com');
+    const people = document.querySelector<HTMLInputElement>('#chat-wizard-people');
+    expect(people?.value).toBe('me@example.com');
+    expect(people?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.body.textContent).toContain('You are already in the chat');
+});
 
 test('the Location bar is a button named for what it does, and Enter on it opens the folder browser', async () => {
     await openSecondStep();
@@ -170,7 +237,7 @@ test('the Location bar is a button named for what it does, and Enter on it opens
 test('a chat whose location was never opened names no folder, so the server picks the chats folder', async () => {
     createdRooms.length = 0;
     await openSecondStep();
-    await act(async () => letsChat().click());
+    await act(async () => create().click());
     expect(createdRooms).toEqual([expect.objectContaining({ parentId: undefined, members: ['ada@example.com'] })]);
 });
 
@@ -179,19 +246,35 @@ test('once the location is opened, the chat waits for the drive’s root and goe
     rootLoaded = false;
     await openSecondStep();
     await act(async () => buttonNamed('Change location')?.click());
-    expect(letsChat().disabled).toBe(true);
-    await act(async () => letsChat().click());
+    expect(create().disabled).toBe(true);
+    await act(async () => create().click());
     expect(createdRooms).toEqual([]);
 
     rootLoaded = true;
     // Closing the browser draws the wizard again, as the root's arrival does.
     await act(async () => buttonNamed('Change location')?.click());
-    expect(letsChat().disabled).toBe(false);
-    await act(async () => letsChat().click());
+    expect(create().disabled).toBe(false);
+    await act(async () => create().click());
     expect(createdRooms).toEqual([expect.objectContaining({ parentId: 'root', members: ['ada@example.com'] })]);
 });
 
 test("a typed contact's address names the chat by the contact, and an unknown one by its local part", async () => {
     await openSecondStep('ada@example.com', 'grace@example.com');
     expect(document.querySelector<HTMLInputElement>('#chat-wizard-name')?.value).toBe('ada & Grace Hopper');
+});
+
+test('a name another chat has is said under the name, which keeps the focus and the dialog', async () => {
+    const { AppError } = await import('@workspace/lib/api-error');
+    await openSecondStep();
+    await type('Name', 'Plans');
+    createRoom.mockImplementationOnce(async () => {
+        throw new AppError({ error: { status: 409, value: 'Taken' }, status: 409 });
+    });
+    await act(async () => create().click());
+    const name = document.querySelector('#chat-wizard-name');
+    expect(name?.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement?.id).toBe('chat-wizard-name');
+    expect(document.body.textContent).toContain('A chat named "Plans" already exists here.');
+    await type('Name', 'Plans 2');
+    expect(name?.getAttribute('aria-invalid')).toBeNull();
 });

@@ -1,7 +1,10 @@
-// An all-day event is stored as midnight UTC with an exclusive end, and a pill reads its state the same way in
-// the month and week views: free/busy can't be opened, a pending invite is an outline, a declined one fades.
+// An all-day event is stored as midnight UTC with an exclusive end, and an event reads its state the same way in
+// every view: a past one dims, free/busy can't be opened, a pending invite is an outline, a declined one fades.
 import { describe, expect, test } from 'bun:test';
-import { buildEventTimes, eventPillStateClasses } from '../../components/calendar-utils';
+import { eigenColor } from '@workspace/lib/constants/colors';
+import { colorSurface } from '@workspace/ui/lib/color-surface';
+import { cn } from '@workspace/ui/lib/utils';
+import { buildEventTimes, eventSurfaceClasses } from '../../components/calendar-utils';
 
 describe('buildEventTimes', () => {
     test('a one-day all-day event runs from its midnight UTC to the next', () => {
@@ -23,23 +26,53 @@ describe('buildEventTimes', () => {
     });
 });
 
-describe('eventPillStateClasses', () => {
-    const classes = (...args: Parameters<typeof eventPillStateClasses>) => eventPillStateClasses(...args).split(' ');
+describe('eventSurfaceClasses', () => {
+    const plain = { past: false, freeBusy: false, inviteStatus: null };
+    const classes = (...args: Parameters<typeof eventSurfaceClasses>) => eventSurfaceClasses(...args).split(' ');
+    // A block lays its state over the calendar's color surface, as EventChip does.
+    const onSurface = (state: Parameters<typeof eventSurfaceClasses>[1]) =>
+        cn(colorSurface(eigenColor('pink', 500), 'tile').className, eventSurfaceClasses('block', state)).split(' ');
 
-    test('a free/busy block shows no pointer, in either variant', () => {
-        expect(classes('block', true, null)).toContain('cursor-default');
-        expect(classes('dot', true, null)).toContain('cursor-default');
-        expect(classes('block', false, null)).toContain('cursor-pointer');
+    test('a past event dims, and an upcoming one does not', () => {
+        expect(classes('block', { ...plain, past: true })).toContain('opacity-60');
+        expect(classes('dot', { ...plain, past: true })).toContain('opacity-60');
+        expect(classes('block', plain).some((c) => c.startsWith('opacity-'))).toBe(false);
     });
 
-    test('a pending invite is a dashed outline as a block, and a plain row as a dot', () => {
-        expect(classes('block', false, 'pending')).toContain('border-dashed');
-        expect(classes('dot', false, 'pending')).not.toContain('border-dashed');
+    test('a free/busy block fades and shows no pointer, in either variant', () => {
+        expect(classes('block', { ...plain, freeBusy: true })).toEqual(
+            expect.arrayContaining(['opacity-50', 'cursor-default']),
+        );
+        expect(classes('dot', { ...plain, freeBusy: true })).toContain('cursor-default');
+        expect(classes('block', plain)).toContain('cursor-pointer');
     });
 
-    test('a declined invite fades in both variants', () => {
-        expect(classes('block', false, 'declined')).toContain('opacity-40');
-        expect(classes('dot', false, 'declined')).toContain('opacity-40');
-        expect(classes('dot', false, null)).not.toContain('opacity-40');
+    test('a pending invite is a dashed outline on the background instead of the fill, as a block', () => {
+        const pending = onSurface({ ...plain, inviteStatus: 'pending' });
+        expect(pending).toEqual(
+            expect.arrayContaining(['border', 'border-dashed', 'border-(--surface-indicator)', 'bg-background']),
+        );
+        expect(pending).not.toContain('bg-(--surface-bg)');
+        expect(pending.some((c) => c.startsWith('dark:bg-[color-mix'))).toBe(false);
+        expect(pending).not.toContain('dark:shadow-[inset_2px_0_0_0_var(--surface-indicator)]');
+        expect(classes('dot', { ...plain, inviteStatus: 'pending' })).not.toContain('border-dashed');
+    });
+
+    test('a declined invite fades and is struck through, in both variants', () => {
+        for (const variant of ['block', 'dot'] as const) {
+            expect(classes(variant, { ...plain, inviteStatus: 'declined' })).toEqual(
+                expect.arrayContaining(['opacity-40', 'line-through']),
+            );
+        }
+        expect(classes('dot', plain)).not.toContain('line-through');
+    });
+
+    test('the past dims first, so a declined or free/busy fade wins over it', () => {
+        const declined = classes('block', { ...plain, past: true, inviteStatus: 'declined' });
+        expect(declined).toContain('opacity-40');
+        expect(declined).not.toContain('opacity-60');
+        const freeBusy = classes('block', { ...plain, past: true, freeBusy: true });
+        expect(freeBusy).toContain('opacity-50');
+        expect(freeBusy).not.toContain('opacity-60');
     });
 });

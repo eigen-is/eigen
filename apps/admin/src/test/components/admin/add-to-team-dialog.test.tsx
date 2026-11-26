@@ -1,6 +1,7 @@
 // Add to team: the teams load when the dialog opens, and a click on a team hands the selected users to
-// one add, which closes the dialog once every user has settled.
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+// one add, which closes the dialog once every user has settled. While it runs, that team's row is busy and
+// the other rows wait.
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -11,28 +12,28 @@ installHappyDom();
 // refused add. Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts
 // the originals back.
 const realAdmin = { ...(await import('@workspace/lib/admin')) };
-const teamLoads: (string | undefined)[] = [];
-const added: { teamId: string; userIds: string[] }[] = [];
+const teamLoads: string[] = [];
+type Add = { teamId: string; userIds: string[] };
+const added: Add[] = [];
+// The add that is running, if any.
+let running: Add | undefined;
 const teams = {
     data: [
         { id: 'team-0', name: 'Acme', createdAt: new Date('2026-09-01') },
         { id: 'team-1', name: 'Design', createdAt: new Date('2026-10-01') },
     ],
 };
-const addMembers = {
-    isPending: false,
-    mutate: (variables: { teamId: string; userIds: string[] }, options: { onSettled: () => void }) => {
-        added.push(variables);
-        options.onSettled();
-    },
+const mutate = (variables: Add, options: { onSettled: () => void }) => {
+    added.push(variables);
+    options.onSettled();
 };
 mock.module('@workspace/lib/admin', () => ({
     ...realAdmin,
-    useTeams: (organizationId?: string) => {
+    useTeams: (organizationId: string) => {
         teamLoads.push(organizationId);
         return teams;
     },
-    useAddTeamMembers: () => addMembers,
+    useAddTeamMembers: () => ({ isPending: running !== undefined, variables: running, mutate }),
 }));
 // The public config names the default team, which the picker never offers.
 const realPublic = { ...(await import('@workspace/lib/public')) };
@@ -51,6 +52,9 @@ const { AddToTeamDialog } = await import('../../../components/admin/add-to-team-
 
 let unmount = async () => {};
 afterEach(() => unmount());
+beforeEach(() => {
+    running = undefined;
+});
 
 const user = (id: string, teams: AdminUserRow['teams'] = []): AdminUserRow => ({
     id,
@@ -74,7 +78,6 @@ async function renderDialog(open: boolean, onOpenChange: (open: boolean) => void
                 open,
                 onOpenChange,
                 users: [user('u1'), user('u2', [{ id: 'team-1', name: 'Design' }]), user('u3')],
-                organizationId: 'org-1',
             }),
         ),
     ));
@@ -103,4 +106,21 @@ test('the default team every user joins is not offered', async () => {
     const names = [...document.querySelectorAll('button')].map((b) => b.textContent);
     expect(names).toContain('Design');
     expect(names).not.toContain('Acme');
+});
+
+test('while an add runs its team row is busy, a click adds nothing more, and the other rows wait', async () => {
+    teams.data.push({ id: 'team-2', name: 'Sales', createdAt: new Date('2026-10-02') });
+    running = { teamId: 'team-1', userIds: ['u1', 'u3'] };
+    await renderDialog(true);
+    teams.data.pop();
+    const row = (name: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes(name));
+    expect(row('Design')?.getAttribute('aria-busy')).toBe('true');
+    expect(row('Sales')?.disabled).toBe(true);
+    await act(async () => row('Design')?.click());
+    expect(added).toEqual([]);
+});
+
+test('the search field has the focus as the dialog opens', async () => {
+    await renderDialog(true);
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Search teams');
 });

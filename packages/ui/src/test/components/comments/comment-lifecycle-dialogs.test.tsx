@@ -115,7 +115,7 @@ async function mountBoard() {
             canWrite: true,
             commentContextMenu,
             onDelete,
-            noun: 'sticky',
+            noun: 'card',
             onCardDialogClose,
         });
     }
@@ -160,8 +160,8 @@ test('deleting from the edit form asks first, then runs the delete and closes th
     const { onDelete, onCardDialogClose } = await mountBoard();
     await act(async () => seen.onDelete?.('card-1'));
     expect(onDelete).not.toHaveBeenCalled();
-    expect(confirmDialog()?.querySelector('h2')?.textContent).toBe('Delete sticky');
-    expect(confirmDialog()?.querySelector('p')?.textContent).toBe('This deletes the sticky and its replies.');
+    expect(confirmDialog()?.querySelector('h2')?.textContent).toBe('Delete card');
+    expect(confirmDialog()?.querySelector('p')?.textContent).toBe('This deletes the card and its replies.');
     expect(dialogButton('Delete').getAttribute('data-variant')).toBe('destructive');
     expect(seen.open).toBe(true);
 
@@ -176,7 +176,7 @@ test('deleting from the edit form asks first, then runs the delete and closes th
 test('cancelling keeps the card and leaves its dialog open, and the menu asks the same way', async () => {
     const { onDelete } = await mountBoard();
     await act(async () => seen.menuDelete?.('card-1'));
-    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+    expect(confirmDialog()?.textContent).toContain('Delete card');
 
     await act(async () => dialogButton('Cancel').click());
     expect(onDelete).not.toHaveBeenCalled();
@@ -187,7 +187,7 @@ test('cancelling keeps the card and leaves its dialog open, and the menu asks th
 test("a host's own menu asks in the same dialog, through the bundle's requestDelete", async () => {
     const { onDelete, handle } = await mountBoard();
     await act(async () => handle.requestDelete?.('card-1'));
-    expect(confirmDialog()?.textContent).toContain('Delete sticky');
+    expect(confirmDialog()?.textContent).toContain('Delete card');
 
     await act(async () => dialogButton('Delete').click());
     expect(onDelete).toHaveBeenCalledWith('card-1');

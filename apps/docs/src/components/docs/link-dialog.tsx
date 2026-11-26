@@ -10,7 +10,7 @@ import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog
 import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { useState } from 'react';
 
-// href is the link being edited, or empty for a new one. The selection stays as it is until OK.
+// href is the link being edited, or empty for a new one. The selection stays as it is until Apply.
 export type LinkDialogTarget = { editor: Editor; from: number; to: number; href: string };
 
 export function linkDialogTarget(editor: Editor): LinkDialogTarget {
@@ -44,14 +44,15 @@ export function LinkDialog({ open, onOpenChange, onCloseAutoFocus, ...target }: 
 // Mounted with the dialog, so each opening starts from its target.
 function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
     const atCaret = from === to;
-    const [text, setText] = useState(() => editor.state.doc.textBetween(from, to, ' '));
+    const [initialText] = useState(() => editor.state.doc.textBetween(from, to, ' '));
+    const [text, setText] = useState(initialText);
     const [address, setAddress] = useState(href);
     const linkHref = webLinkHref(address);
 
     return (
         <FormDialogForm
-            canSubmit={linkHref != null}
-            submitLabel="OK"
+            submitLabel="Apply"
+            changed={text !== initialText || address !== href}
             onSubmit={() => {
                 if (linkHref == null) return false;
                 // The caret ends after the link, as a selection left on it would be replaced by the next key.
@@ -74,7 +75,7 @@ function LinkForm({ editor, from, to, href }: LinkDialogTarget) {
             }}
         >
             <LinkTextField value={text} onValueChange={setText} disabled={!atCaret} />
-            <LinkAddressField value={address} onValueChange={setAddress} autoFocus />
+            <LinkAddressField value={address} onValueChange={setAddress} />
         </FormDialogForm>
     );
 }

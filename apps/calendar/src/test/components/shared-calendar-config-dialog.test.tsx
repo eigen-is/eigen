@@ -1,9 +1,11 @@
-// Shared calendar settings names the calendar and the access the user has. Save keeps the user's own color, or none
+// Shared calendar settings keeps the dialog contract, opening on its color, the one thing it edits. It names the
+// calendar and the access the user has. Save keeps the user's own color, or none
 // when it is the owner's, and closes, and a save the server refuses stays open with no unhandled rejection. Remove
 // asks first, on top of the open dialog. A team's calendar can't be removed and lists no people.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { SharedCalendar } from '@workspace/lib/types/calendar';
+import { expectFormContract } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -115,6 +117,28 @@ const click = (target: HTMLButtonElement | undefined) =>
         target.click();
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+// Opens the swatch and picks a color the calendar doesn't have. The popover gives the focus back to the swatch a tick
+// after it closes.
+const pickOtherColor = async () => {
+    await click(button(settings(), 'Color'));
+    const unpicked = [
+        ...document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button[title]'),
+    ].find((swatch) => !swatch.querySelector('svg'));
+    await click(unpicked);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+};
+
+test('Shared calendar settings keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness, { item: shared({}) }),
+        submitLabel: 'Save',
+        firstField: 'Color',
+        onSubmit: updateShared.mutateAsync,
+        makeChanged: pickOtherColor,
+    });
+});
 
 test('it names the calendar and the access in the share words, and lists the owner and the people with access', async () => {
     await open(shared({}));

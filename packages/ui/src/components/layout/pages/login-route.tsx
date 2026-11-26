@@ -1,10 +1,15 @@
+// The /login route every app builds from createLoginRouteOptions: it sends a visitor who already has a session on to
+// the page that asked for sign-in, and shows everyone else LoginPage. A guest's address, such as one from a share
+// invite, comes along in the search, either as its own param or inside the redirect URL, and opens the Guest tab. A
+// redirect that is no page of Eigen's own becomes the start page.
+
 import { redirect, useSearch } from '@tanstack/react-router';
+import { safeRedirect } from '@workspace/lib/api';
 import { z } from 'zod';
 import { LoginPage } from './login-page';
 
 function LoginRoute() {
-    const search = useSearch({ strict: false }) as { email?: string; redirect?: string };
-    // email may be a top-level param or embedded inside the redirect URL
+    const search = useSearch({ strict: false });
     const email =
         search.email ||
         (search.redirect?.includes('email=') ? new URLSearchParams(search.redirect.split('?')[1]).get('email') : null);
@@ -12,7 +17,11 @@ function LoginRoute() {
 }
 
 const loginSearchSchema = z.object({
-    redirect: z.string().optional().catch(''),
+    redirect: z
+        .string()
+        .optional()
+        .catch('')
+        .transform((target) => target && safeRedirect(target)),
     email: z.string().optional().catch(''),
 });
 
@@ -27,9 +36,10 @@ export function createLoginRouteOptions(fallback = '/') {
             context: { auth: { isAuthenticated: boolean } };
             search: { redirect?: string; email?: string };
         }) => {
-            if (context.auth.isAuthenticated) {
-                throw redirect({ to: search.redirect || fallback });
-            }
+            if (!context.auth.isAuthenticated) return;
+            const target = search.redirect || fallback;
+            // A full URL leaves by a page load; `to` would put this app's basepath in front of it.
+            throw URL.canParse(target) ? redirect({ href: target }) : redirect({ to: target });
         },
     };
 }

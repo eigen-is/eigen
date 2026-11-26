@@ -1,6 +1,7 @@
 // The Chart panel edits the selected chart's spec and frame through the doc's own undo manager: each change one undo
-// step, a typed title too, and Edit data's Save one write.
+// step, a typed title too, and Edit data's Apply one write.
 import { afterEach, describe, expect, test } from 'bun:test';
+import { type as typeInto } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -26,8 +27,6 @@ afterEach(async () => {
     for (const unmount of unmounts) await unmount();
     unmounts = [];
 });
-
-const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
 // A collab editor over `doc` holding one chart, selected, its panel and its Edit data dialog mounted as the editor
 // mounts them: the inserted one, or the one a peer's doc already holds. Every write past the insert would be its own
@@ -125,13 +124,11 @@ const typeInB2 = async (value: string) => {
     });
     await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]'), value);
 };
-const type = (input: HTMLInputElement | null | undefined, value: string) =>
-    act(async () => {
-        if (!input) throw new Error('no field to type in');
-        input.focus();
-        setValue?.call(input, value);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+const type = async (input: HTMLInputElement | null | undefined, value: string) => {
+    if (!input) throw new Error('no field to type in');
+    await act(async () => input.focus());
+    await typeInto(input, value);
+};
 // A keydown on the field, returned so the test can see whether the browser's own handling of it was prevented.
 const press = async (input: HTMLInputElement | null, init: KeyboardEventInit) => {
     const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
@@ -316,7 +313,7 @@ test('Edit data saves the grid as one undo step', async () => {
     const { undoManager, spec } = await mount();
     await click(button(document.body, 'Edit data'));
     await typeInB2('7');
-    await click(button(dialog(), 'Save'));
+    await click(button(dialog(), 'Apply'));
     const saved = spec();
     expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
     expect(dialog()).toBeUndefined();
@@ -351,7 +348,7 @@ test("a title typed into the panel keeps what this build doesn't know: a key on 
     expect(stored()).toEqual({ ...raw, title: { text: 'Goals' } });
 });
 
-test("Edit data's Save applies onto the node as it is then, so a peer's colours and title while it was open stay", async () => {
+test("Edit data's Apply applies onto the node as it is then, so a peer's colours and title while it was open stay", async () => {
     const { spec, store } = await mount();
     await click(button(document.body, 'Edit data'));
     const sample = sampleChartSpec('column');
@@ -359,7 +356,7 @@ test("Edit data's Save applies onto the node as it is then, so a peer's colours 
     const points = { 's-1': { 1: { color: '#000002' } } };
     await store({ ...sample, title: { text: 'Peer title' }, series, points });
     await typeInB2('7');
-    await click(button(dialog(), 'Save'));
+    await click(button(dialog(), 'Apply'));
     const saved = spec();
     expect(saved?.title.text).toBe('Peer title');
     expect(saved?.points).toEqual(points);
@@ -468,11 +465,11 @@ describe('two editors on one chart, each through its own panel', () => {
         expect(a.attrs()['specPoints']).toBeNull();
     });
 
-    test("Edit data's Save on one and a recolour on the other: both kept on both", async () => {
+    test("Edit data's Apply on one and a recolour on the other: both kept on both", async () => {
         const { a, b, sync } = await peers();
         await click(button(a.container, 'Edit data'));
         await typeInB2('7');
-        await click(button(dialog(), 'Save'));
+        await click(button(dialog(), 'Apply'));
         const color = await recolor(b.container, 'Bulb (incandescent)');
         await sync();
         for (const peer of [a, b]) {

@@ -221,7 +221,7 @@ test('a double-click enters the band under the pointer, or none in particular be
 // Radix would hand focus back to the Options trigger, where the next keystrokes reach nothing.
 test.each([
     ['Page setup…', 'Cancel'],
-    ['Page setup…', 'OK'],
+    ['Page setup…', 'Apply'],
     ['Header format…', 'Cancel'],
 ])("%s from a band's Options, closed with %s, gives focus back to the band's editor", async (item, close) => {
     const editor = new Editor({

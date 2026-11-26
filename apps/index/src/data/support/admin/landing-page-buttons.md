@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, settings, landing, links]
 related: [admin/server-settings, admin/waitlist]
 order: 85
-updated: 2026-11-14
+updated: 2026-11-25
 ---
 
 The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
@@ -18,7 +18,7 @@ Only the server owner can do this.
 2. Scroll down to **Landing page**.
 3. Click **Add button**. A new row appears with two boxes.
 4. Type the button's text in the first box, and the full address in the second, for example `https://status.example.com`.
-5. Click **Save** at the bottom of the page.
+5. Click **Save** at the bottom of the page, or press Enter in either box.
 
 **Save** and **Reset** only appear once you have changed something. **Reset** throws away every unsaved change on the page, not only the buttons.
 

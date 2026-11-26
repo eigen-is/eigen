@@ -3,7 +3,7 @@
 
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
-import { openFestivalWeek } from './festival-week';
+import { openFestivalMonth, openFestivalWeek } from './festival-week';
 
 const still: Pick<Scene, 'kind' | 'viewport' | 'apps' | 'personas'> = {
     kind: 'still',
@@ -27,8 +27,7 @@ export const calendarStillBuild = {
     name: 'calendar-still-build',
     theme: 'dark',
     run: async ({ pages: [page], stack }) => {
-        await page.goto(stack.appUrl('calendar'));
-        await page.getByText('Build day').first().click();
+        await (await openFestivalMonth(page, stack, 'Build day')).click();
         await page.getByRole('dialog').getByText('Fencing, stages, power.').waitFor();
         await Bun.sleep(1500);
     },

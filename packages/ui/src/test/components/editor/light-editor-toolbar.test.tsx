@@ -1,9 +1,11 @@
 // The link field of the light editor's toolbar, inside a form such as the card form or Email collaborators. Enter in
-// the field sets the link and leaves the form alone. Escape closes the field, and inside a dialog only the field: Radix
-// hears Escape on the document before the field does. Opening the field in the floating toolbar places the toolbar
+// the field sets the link and leaves the form alone. Escape closes the field, drops what was typed in it and gives the
+// focus back to the editor, and inside a dialog closes only the field: Radix hears Escape on the document before the
+// field does. Opening the field in the floating toolbar places the toolbar
 // again, and the focus does not scroll the dialog.
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
+import { type } from '../../form-contract';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -65,14 +67,6 @@ async function openLinkField() {
     expect(document.activeElement).toBe(linkField());
 }
 
-const type = (value: string) =>
-    act(async () => {
-        const field = linkField();
-        if (!field) throw new Error('no link field');
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
 // A browser's Enter in a text field submits its form unless the keydown is prevented.
 const pressKey = (key: string) =>
     act(async () => {
@@ -86,26 +80,36 @@ const pressKey = (key: string) =>
 test('Enter in the link field sets the link and does not submit the form around it', async () => {
     await open();
     await openLinkField();
-    await type('example.com');
+    await type('Link URL', 'example.com');
     await pressKey('Enter');
     expect(editor().getHTML()).toContain('href="https://example.com"');
     expect(linkField()).toBeNull();
     expect(onSubmit).not.toHaveBeenCalled();
 });
 
-test('Escape closes the link field and sets no link', async () => {
+test('Escape closes the link field, sets no link, and gives the focus back to the editor', async () => {
     await open();
     await openLinkField();
-    await type('example.com');
+    await type('Link URL', 'example.com');
     await pressKey('Escape');
     expect(linkField()).toBeNull();
     expect(editor().getHTML()).not.toContain('href');
+    expect(document.activeElement === document.querySelector('.ProseMirror')).toBe(true);
+});
+
+test('the link field opens empty after an Escape, so the next link is only what is typed then', async () => {
+    await open();
+    await openLinkField();
+    await type('Link URL', 'example.com/run');
+    await pressKey('Escape');
+    await openLinkField();
+    expect(linkField()?.value).toBe('');
 });
 
 test('Escape in the link field inside a dialog closes the field and leaves the dialog open', async () => {
     await open({ inDialog: true });
     await openLinkField();
-    await type('example.com');
+    await type('Link URL', 'example.com');
     await pressKey('Escape');
     expect(linkField()).toBeNull();
     expect(onOpenChange).not.toHaveBeenCalled();

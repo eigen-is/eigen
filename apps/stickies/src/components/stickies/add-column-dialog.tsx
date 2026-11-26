@@ -1,9 +1,9 @@
 // The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
 // writes the column into the board's document.
 
-import { Field, FieldLabel } from '@workspace/ui/components/field';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { Input } from '@workspace/ui/components/input';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { useState } from 'react';
 
 type AddColumnDialogProps = {
@@ -24,22 +24,20 @@ export function AddColumnDialog({ open, onOpenChange, onAddColumn }: AddColumnDi
 function AddColumnForm({ onAddColumn }: Pick<AddColumnDialogProps, 'onAddColumn'>) {
     const [title, setTitle] = useState('');
 
+    const handleSubmit = () => {
+        if (!title.trim()) return false;
+        onAddColumn(title.trim());
+    };
+
     return (
-        <FormDialogForm
-            canSubmit={title.trim() !== ''}
-            submitLabel="Add column"
-            onSubmit={() => onAddColumn(title.trim())}
-        >
-            <Field>
-                <FieldLabel htmlFor="column-title">Title</FieldLabel>
-                <Input
-                    id="column-title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Enter column title"
-                    autoFocus
-                />
-            </Field>
+        <FormDialogForm changed={title !== ''} submitLabel="Add column" onSubmit={handleSubmit}>
+            <RequiredTextField
+                label="Title"
+                value={title}
+                onChange={setTitle}
+                placeholder="Enter column title"
+                message={FIELD_MESSAGES.titleMissing}
+            />
         </FormDialogForm>
     );
 }

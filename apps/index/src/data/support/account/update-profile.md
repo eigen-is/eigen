@@ -5,7 +5,7 @@ type: how-to
 tags: [account, profile, avatar, name]
 related: [account/change-password]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 Your name and profile picture appear to other people across Eigen: in shared documents, messages, and workspaces. You can update both at any time from the [**Personal info**](/space/user) page in Space.
@@ -17,6 +17,8 @@ Your name and profile picture appear to other people across Eigen: in shared doc
 3. Click **Save**.
 
 The first name is required. The last name is optional.
+
+Once your profile is saved, Eigen takes you back to the start page of Space, and a message says the profile was saved.
 
 ## Change your profile picture
 

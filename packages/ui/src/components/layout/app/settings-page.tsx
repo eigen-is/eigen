@@ -1,3 +1,7 @@
+// A settings page, such as Space's Personal info or Admin's Server settings: one column with the page's title in its
+// toolbar and its sections below, scrolling inside a readable width. On a phone its back arrow opens the sidebar. An
+// app's settings routes render their page inside it.
+
 import type { ReactNode } from 'react';
 import { ToolbarTitle } from '../toolbar/toolbar-title';
 import { Column, ColumnLayout } from './column-layout';

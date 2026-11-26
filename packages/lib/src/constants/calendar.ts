@@ -1,5 +1,5 @@
-// Calendar limits and words both the API and the apps need, such as the largest `.ics` a surface accepts and the
-// label of each share permission.
+// Calendar limits, defaults and words the API and the apps share, such as the largest `.ics` a surface accepts, how
+// long a new event starts and the label of each share permission.
 
 import type { CalendarShare } from '../types/calendar';
 
@@ -9,6 +9,10 @@ export const ICS_MAX_BYTES = 5 * 1024 * 1024;
 // Shared FE/BE: `createCalendar` / `updateCalendar` hold the rule, so REST, MKCALENDAR and PROPPATCH inherit it.
 export const CALENDAR_NAME_MAX_LENGTH = 200;
 export const DEFAULT_CALENDAR_COLOR = '#4285f4';
+
+// As Google Calendar: how long a new event lasts wherever it is made, and how far past a moved start the end goes
+// when that start leaves it less than 15 minutes, in New event and Edit event alike.
+export const NEW_EVENT_MINUTES = 60;
 
 // The words for each share permission, in this order wherever a person picks one.
 export const CALENDAR_PERMISSION_LABELS: Record<CalendarShare['permission'], string> = {

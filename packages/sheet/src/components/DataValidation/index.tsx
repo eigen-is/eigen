@@ -1,5 +1,5 @@
 // The data-validation dialog, opened from the Data menu: it edits a rule for a range, such as a drop-down list, a tick
-// box or a number condition. It opens on the focus cell's rule, and OK checks the draft and puts the rule on the
+// box or a number condition. It opens on the focus cell's rule, and Apply checks the draft and puts the rule on the
 // range. A refused range or value keeps it open with the reason under the field. A grid button hands its place to the
 // cell-range picker, which opens this dialog again with the draft and the picked range or list source.
 
@@ -10,6 +10,7 @@ import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@workspace/ui/components/input-group';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { isEqual } from 'es-toolkit';
 import { Table, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useContext, useId, useState } from 'react';
@@ -28,7 +29,7 @@ import {
     validationRange,
     validationValueProblem,
 } from '../../state';
-import { CellRangeDialog } from '../CellRangeDialog';
+import { CellRangeDialog, NO_RANGE_MESSAGE } from '../CellRangeDialog';
 
 // Each rule type with the condition a new rule of it starts on. A list and a tick box have none.
 const VALIDATION_TYPES = [
@@ -75,20 +76,21 @@ const HINT_TOGGLES = [
     { value: 'hintShow', label: 'Show prompt when the cell is selected' },
 ] as const;
 
-// What OK and Remove validation say when the range names no cells.
-const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
-
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 
-// Why OK or Remove validation refused the draft: its range, or the values its condition compares against.
+// Why Apply or Remove validation refused the draft: its range, or the values its condition compares against.
 type Problem = { field: 'range' | 'value'; message: string };
 
-// `draft` is the rule as the user left it when the range picker took this dialog's place.
-export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidationDraft }) {
+// `reopened` is the rule as the user left it when the range picker took this dialog's place, and the rule the dialog
+// first opened on, which tells whether anything changed.
+type Reopened = { draft: DataValidationDraft; opened: DataValidationDraft };
+
+export function DataValidation({ reopened }: { reopened?: Reopened }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const { showDialog, showNonModalDialog } = useDialog();
-    const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
+    const [opened] = useState(() => reopened?.opened ?? draftAtSelection(context));
+    const [draft, setDraft] = useState(reopened?.draft ?? opened);
     const [problem, setProblem] = useState<Problem>();
     const id = useId();
     const problemId = `${id}-problem`;
@@ -100,19 +102,24 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
     };
 
     // A field a label element names passes no `label`.
-    const textField = (field: TextField, label?: string) => ({
-        'aria-label': label,
-        'aria-describedby': problem?.field === (field === 'rangeTxt' ? 'range' : 'value') ? problemId : undefined,
-        value: draft[field],
-        onChange: (e: React.ChangeEvent<HTMLInputElement>) => update({ [field]: e.target.value }),
-    });
+    const textField = (field: TextField, label?: string) => {
+        const refused = problem?.field === (field === 'rangeTxt' ? 'range' : 'value');
+        return {
+            'aria-label': label,
+            'aria-invalid': refused,
+            'aria-describedby': refused ? problemId : undefined,
+            value: draft[field],
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => update({ [field]: e.target.value }),
+        };
+    };
 
     const problemMessage = (field: Problem['field']) =>
         problem?.field === field && <FieldError id={problemId}>{problem.message}</FieldError>;
 
-    // The picker's OK opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
+    // The picker's Select opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
     const pickRange = (field: 'rangeTxt' | 'value1') => {
-        const reopen = (picked: string) => showDialog(<DataValidation draft={{ ...draft, [field]: picked }} />);
+        const reopen = (picked: string) =>
+            showDialog(<DataValidation reopened={{ draft: { ...draft, [field]: picked }, opened }} />);
         const cancel = () => reopen(draft[field]);
         showNonModalDialog(
             <CellRangeDialog value={draft[field]} variant="validation" onConfirm={reopen} onCancel={cancel} />,
@@ -153,7 +160,8 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidatio
     return (
         <FormDialog {...dialogProps} title="Data validation">
             <FormDialogForm
-                submitLabel="OK"
+                submitLabel="Apply"
+                changed={!isEqual(draft, opened)}
                 onSubmit={apply}
                 footerStart={<TooltipButton icon={Trash2} tooltipText="Remove validation" onClick={removeValidation} />}
             >

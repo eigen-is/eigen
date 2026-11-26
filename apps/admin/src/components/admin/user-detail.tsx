@@ -17,6 +17,7 @@ import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserDetailHero } from '@workspace/ui/components/user';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { KeyRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { BackupSection } from './backup-section';
@@ -57,7 +58,7 @@ export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
 type UserDetailProps = {
     user: AdminUserRow;
     usage?: HomeSizeResponse;
-    organizationId?: string;
+    organizationId: string;
     // A guest has no role, teams, storage or backup: it only reaches what others shared with it.
     guest?: boolean;
 };
@@ -66,6 +67,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
     const { user: me } = useAuth();
     const [draftRole, setDraftRole] = useState(user.role);
     const updateRole = useUpdateMemberRole(organizationId);
+    const { pending, run } = useDialogPending();
     const deleteUser = useDeleteUser(organizationId);
     const navigate = useNavigate();
 
@@ -75,11 +77,11 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
         setDraftRole(user.role);
     }, [user.id, user.role]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         // Both are set wherever the select that changes the draft is rendered: a user with no
         // organization row has no role to pick and no member row to change.
         if (!user.memberId || !draftRole) return;
-        updateRole.mutate({ memberId: user.memberId, userId: user.id, role: draftRole });
+        await updateRole.mutateAsync({ memberId: user.memberId, userId: user.id, role: draftRole });
     };
 
     const handleCancel = () => {
@@ -88,7 +90,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
 
     const handleDelete = async () => {
         await deleteUser.mutateAsync(user.id);
-        navigate({ to: guest ? '/guests' : '/users', search: {} });
+        await navigate({ to: guest ? '/guests' : '/users', search: {} });
     };
 
     return (
@@ -132,11 +134,11 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
 
             {hasChanges && (
                 <div className="flex items-center justify-end gap-2">
-                    <Button variant="outline" onClick={handleCancel}>
+                    <Button variant="outline" onClick={handleCancel} disabled={pending}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSave} disabled={updateRole.isPending}>
-                        {updateRole.isPending ? 'Saving...' : 'Save'}
+                    <Button onClick={() => run(handleSave)} pending={pending}>
+                        Save
                     </Button>
                 </div>
             )}
@@ -145,7 +147,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
             {!guest && user.role !== null && (
                 <>
                     <Separator />
-                    <UserTeamsSection user={user} organizationId={organizationId} />
+                    <UserTeamsSection user={user} />
                 </>
             )}
 

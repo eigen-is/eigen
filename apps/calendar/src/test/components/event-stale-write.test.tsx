@@ -11,8 +11,10 @@ import type {
     CalendarItem,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { dialogTitles } from '../dialog-titles';
 
 installHappyDom();
 
@@ -261,16 +263,8 @@ const startDateField = () => {
     if (!field) throw new Error('no dialog has a date field');
     return field;
 };
-const typeInto = (field: HTMLInputElement | HTMLTextAreaElement, value: string) =>
-    act(async () => {
-        const prototype =
-            field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
-        Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-const typeTitle = (value: string) => typeInto(titleField(), value);
-const typeDescription = (value: string) => typeInto(descriptionField(), value);
-const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+const typeTitle = (value: string) => type(titleField(), value);
+const typeDescription = (value: string) => type(descriptionField(), value);
 // Radix opens its Select and picks an option on the pointer events, not on click.
 const pointAt = (element: Element) =>
     act(async () => {
@@ -513,7 +507,7 @@ test('a date, its times and the repeat stay together: one typed holds them all a
     };
     server.event = { ...dentist, rrule: 'FREQ=WEEKLY' };
     await openEdit();
-    await typeInto(startDateField(), '2026-10-20');
+    await type(startDateField(), '2026-10-20');
     changeFieldsElsewhere({
         title: 'Standup, renamed',
         startTime: new Date(2026, 9, 9, 16, 0),

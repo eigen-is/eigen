@@ -5,13 +5,13 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2383 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2462 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (329)
+## Components (334)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -48,12 +48,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Card` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardContent` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardDescription` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
-| `CardFooter` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardHeader` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardTitle` | `@workspace/ui/components/card` | packages/ui/src/components/card.tsx |
 | `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
 | `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `CardTile` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-tile.tsx |
 | `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
 | `ChartSections` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-sections.tsx |
@@ -84,6 +84,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
 | `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
+| `CommentCardTile` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-card-tile.tsx |
 | `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
 | `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
 | `CommentHoverCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-hover-card.tsx |
@@ -91,7 +92,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
 | `CommentLifecycleMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx |
 | `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
-| `CommentNoteCard` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-note-card.tsx |
 | `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
 | `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
 | `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
@@ -113,6 +113,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `OrderMenuSub` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `CopyInput` | `@workspace/ui/components/copy-input` | packages/ui/src/components/copy-input.tsx |
 | `CountBadge` | `@workspace/ui/components/count-badge` | packages/ui/src/components/count-badge.tsx |
+| `DateCalendar` | `@workspace/ui/components/date-calendar` | packages/ui/src/components/date-calendar.tsx |
 | `Dialog` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogContent` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
 | `DialogDescription` | `@workspace/ui/components/dialog` | packages/ui/src/components/dialog.tsx |
@@ -175,8 +176,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormItem` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormLabel` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
 | `FormMessage` | `@workspace/ui/components/form` | packages/ui/src/components/form.tsx |
+| `FooterTool` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialog` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
 | `FormDialogForm` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
+| `FormFooter` | `@workspace/ui/components/form-dialog` | packages/ui/src/components/form-dialog.tsx |
+| `FormShell` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `HintPill` | `@workspace/ui/components/hint-pill` | packages/ui/src/components/hint-pill.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `StorageUsageBars` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
@@ -202,6 +206,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CollabDocumentGate` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/collab-document-gate.tsx |
 | `Column` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-layout.tsx |
+| `DetailItemBlock` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
+| `DetailMeta` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
+| `DetailSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/detail-item.tsx |
 | `EigenApp` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenDocEditorRoute` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-doc-editor-route.tsx |
 | `EigenDocRouteStatus` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/eigen-doc-route-status.tsx |
@@ -211,8 +218,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LeaveGuard` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/leave-guard.tsx |
 | `ListDetailLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/list-detail-layout.tsx |
 | `LoadingState` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/loading-state.tsx |
+| `PageForm` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/page-form.tsx |
 | `RequestAccessView` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/request-access-view.tsx |
-| `SettingsFooter` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-footer.tsx |
 | `SettingsPage` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-page.tsx |
 | `SettingsSection` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/settings-section.tsx |
 | `Topbar` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/topbar.tsx |
@@ -221,7 +228,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LoginPage` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-page.tsx |
 | `AppSidebar` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `DroppableSidebarItem` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/droppable-sidebar-item.tsx |
-| `RecentFilesSidebarItem` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/recent-files-sidebar-item.tsx |
 | `SidebarBody` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItem` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarPrimaryButton` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/sidebar-primary-button.tsx |
@@ -260,8 +266,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NavigationMenuLink` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuList` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
 | `NavigationMenuTrigger` | `@workspace/ui/components/navigation-menu` | packages/ui/src/components/navigation-menu.tsx |
-| `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
-| `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `Popover` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverAnchor` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
 | `PopoverContent` | `@workspace/ui/components/popover` | packages/ui/src/components/popover.tsx |
@@ -289,6 +293,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ZOrderButtons` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `RadioGroup` | `@workspace/ui/components/radio-group` | packages/ui/src/components/radio-group.tsx |
 | `RadioGroupItem` | `@workspace/ui/components/radio-group` | packages/ui/src/components/radio-group.tsx |
+| `RequiredTextField` | `@workspace/ui/components/required-text-field` | packages/ui/src/components/required-text-field.tsx |
 | `ScrollArea` | `@workspace/ui/components/scroll-area` | packages/ui/src/components/scroll-area.tsx |
 | `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
@@ -382,7 +387,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (311)
+## Hooks (321)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -421,7 +426,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useStartServerBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useTeams` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUpdateMemberRole` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
-| `useUpdateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUploadBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useUploadServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useVerifyBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
@@ -435,13 +439,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useInitialize2FA` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `useInviteRegister` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-invite-signup.ts |
 | `useIsGuest` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-is-guest.ts |
+| `usePasswordSignIn` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
+| `useRequestGuestCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
 | `useValidateInviteToken` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-invite-signup.ts |
 | `useVerifyBackupCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
+| `useVerifyGuestCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
 | `useVerifyTotp` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `useAllSharedCalendarEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarAccess` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarOptions` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useCalendarShortcuts` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar-shortcuts.ts |
+| `useCanReschedule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-can-reschedule.ts |
 | `useCreateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCreateEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useDeleteCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -457,6 +466,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRefuseStaleEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useSaveOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-save-occurrence.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useUpdateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -512,6 +522,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMeContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
+| `useUpdateProfile` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useDocsTextWidth` | `@workspace/lib/docs` | packages/lib/src/core/docs/hooks/use-docs-text-width.ts |
 | `useFileDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
@@ -617,13 +628,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSearchQuery` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useHardenS3Bucket` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
+| `useSaveServerSettingsPage` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-save-server-settings-page.ts |
 | `useSendTestMail` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-test-mail.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
 | `useServerStatus` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-status.ts |
-| `useUpdateOrgName` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-organization.ts |
-| `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useUpdateServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
+| `useSaveSignature` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useSettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useTheme` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-theme.ts |
@@ -632,11 +643,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
 | `useAddTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useRemoveTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
+| `useSaveTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useTeamMembers` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-members.ts |
 | `useTeamMounts` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUpdateTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
-| `useUpdateTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUploadTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
 | `useDebouncedValue` | `@workspace/lib/use-debounced-value` | packages/lib/src/core/use-debounced-value.ts |
 | `useHeldEtag` | `@workspace/lib/use-held-etag` | packages/lib/src/core/use-held-etag.ts |
@@ -657,6 +668,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useFileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
+| `useFormSubmitted` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `useApp` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useLayout` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
@@ -681,11 +693,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMenuOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `useDialogValue` | `@workspace/ui/hooks/use-dialog-value` | packages/ui/src/hooks/use-dialog-value.ts |
+| `useDiscardChanges` | `@workspace/ui/hooks/use-discard-changes` | packages/ui/src/hooks/use-discard-changes.tsx |
 | `useDragScroll` | `@workspace/ui/hooks/use-drag-scroll` | packages/ui/src/hooks/use-drag-scroll.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useElementSize` | `@workspace/ui/hooks/use-element-size` | packages/ui/src/hooks/use-element-size.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `useFitHeight` | `@workspace/ui/hooks/use-fit-height` | packages/ui/src/hooks/use-fit-height.ts |
 | `useFocusReturn` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `useFollowedFields` | `@workspace/ui/hooks/use-followed-fields` | packages/ui/src/hooks/use-followed-fields.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
@@ -694,11 +708,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |
 | `useListSelection` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `useLongPress` | `@workspace/ui/hooks/use-long-press` | packages/ui/src/hooks/use-long-press.ts |
+| `usePointerDrag` | `@workspace/ui/hooks/use-pointer-drag` | packages/ui/src/hooks/use-pointer-drag.ts |
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (468)
+## Types (476)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -716,7 +731,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Span` | `@workspace/formula/text` | packages/formula/src/edit/map.ts |
 | `Table` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
 | `TableFinder` | `@workspace/formula/text` | packages/formula/src/text/tables.ts |
-| `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `EventTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `LaneBar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `TimedBlock` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `ChatRoomState` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -868,6 +886,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmailAddress` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EmailSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `EmailSignature` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `EmailSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `EventData` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ExportFormat` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -913,16 +932,19 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecentPath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `RecurrenceScope` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `RouterAppContext` | `@workspace/lib/types` | packages/lib/src/types/auth.ts |
+| `RsvpStatus` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3LifecycleState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3VersioningState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `SaveOccurrenceInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1047,6 +1069,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
+| `HeldEtag` | `@workspace/lib/use-held-etag` | packages/lib/src/core/use-held-etag.ts |
 | `BackupMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
@@ -1122,7 +1145,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
 | `CommentContextMenuItem` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
 | `ConfirmDialogProps` | `@workspace/ui/components/confirm-dialog` | packages/ui/src/components/confirm-dialog.tsx |
-| `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveListDate` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
@@ -1169,9 +1191,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
+| `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1248)
+## Utilities & constants (1304)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1297,6 +1320,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `openDocument` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `publicApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `safeRedirect` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `searchApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `SERVER_HOSTNAME` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `serverBackupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1307,6 +1331,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `appErrorFrom` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `appErrorFromBody` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `authFailure` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isRefusal` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isStaleWrite` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
@@ -1319,36 +1344,68 @@ rather than inlining `queryClient.invalidateQueries`.
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `isMailApp` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
+| `isExpiredSignIn` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
+| `isRefusedAddress` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
+| `isRefusedCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
+| `isRefusedCredentials` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
+| `isWrongCode` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
+| `loadIntoSession` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-sign-in.ts |
 | `backgroundCss` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `gradientStops` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
 | `linearize` | `@workspace/lib/background` | packages/lib/src/background/gradient.ts |
+| `addDays` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `allocateLanes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `CALENDAR_VIEW_LABELS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `CALENDAR_VIEW_MODES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `calendarEventLink` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `dayEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `defaultCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `eventDaySpan` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `eventQueryConfig` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getCalendarColor` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getDaysInRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getEventsForDay` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getInviteStatus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
+| `inAllDayLane` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `isCalendarViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `isInvitationOnCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `layoutTimedEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `localToUtc` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `MIN_BLOCK_MINUTES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `monthWeekLayout` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `movedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `occurrenceScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `ownerAddressToLookUp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `parseDayKey` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `rescheduleScopes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `resizedTimes` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
 | `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `seriesEditFromOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `slotAt` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `slotRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `SNAP_MINUTES` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-layout.ts |
+| `stepFocus` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `utcToLocal` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `viewDays` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `viewRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `viewTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `WEEK_STARTS_ON` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `weekdayHeader` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-view.ts |
+| `writableShares` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `applyChartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/change.ts |
 | `BAR_GROUP_WIDTH` | `@workspace/lib/charts` | packages/lib/src/charts/scales.ts |
 | `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/defaults.ts |
@@ -1485,6 +1542,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DOCUMENT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCUMENT_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `DRAG_THRESHOLD_PX` | `@workspace/lib/constants` | packages/lib/src/constants/drag.ts |
 | `DUPLICATE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1493,7 +1551,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_FONT_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `EIGEN_STICKIES_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
-| `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `eigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `EMOJI_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1511,6 +1568,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hexChannels` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `ICS_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `INDICATOR_RED` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
+| `indicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isExiftoolExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isHexColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1540,7 +1598,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MIN_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `NEW_EVENT_MINUTES` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `nextFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `paleTone` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `parseRgb` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `PASTE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -1654,12 +1714,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `listTypeOfStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/ordered-list.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
-| `MAX_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MAX_HEADING_LEVEL` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MAX_PAPER_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_PAPER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_TEXT_BOX_PADDING` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
-| `MIN_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1742,6 +1800,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
+| `isNameTaken` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `labelFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
@@ -1796,6 +1855,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripRemoteRefs` | `@workspace/lib/mail` | packages/lib/src/core/mail/remote-content.ts |
 | `CUSTOM_MAILBOX_ICON` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
 | `MAILBOX_ICONS` | `@workspace/lib/mailbox-icons` | packages/lib/src/core/mailbox-icons.ts |
+| `MOBILE_MEDIA_QUERY` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `accessRequestTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarInviteTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
 | `calendarShareTag` | `@workspace/lib/notification` | packages/lib/src/core/notification/tags.ts |
@@ -1965,10 +2025,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `missingS3Fields` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MOUNT_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `RECURRENCE_SCOPES` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `RESTART_REASONS` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SEARCH_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -2013,6 +2075,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CONTROL_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `FIELD_MESSAGES` | `@workspace/lib/validation` | packages/lib/src/validation/field-messages.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isSafeFileName` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
@@ -2362,6 +2425,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `browseCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `focusFirstField` | `@workspace/ui/components/form-shell` | packages/ui/src/components/form-shell.tsx |
 | `STRETCHED_TRIGGER_CLASS` | `@workspace/ui/components/info-block` | packages/ui/src/components/info-block.tsx |
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
@@ -2396,7 +2460,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `updateMetaInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
+| `isDialogOpen` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
+| `DISCARD_CHANGES_QUESTION` | `@workspace/ui/hooks/use-discard-changes` | packages/ui/src/hooks/use-discard-changes.tsx |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `handFocusReturnTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `hasFocusRing` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
@@ -2410,6 +2476,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
+| `expectFormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `expectFormProbe` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `field` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
+| `type` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 | `expectKeyboardReveal` | `@workspace/ui/test/hover-reveal` | packages/ui/src/test/hover-reveal.ts |
 | `checkRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
@@ -2423,3 +2493,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `loadReact` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `unmountAllRoots` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
+| `isVisitorRoute` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `labelled` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `OWNER` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `providers` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `session` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `sessionAuth` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `visitorServer` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `withProviders` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `withSession` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |

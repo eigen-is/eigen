@@ -1,6 +1,7 @@
 // When Copy to… or Move to… gets only part of a selection through, the picker stays open, and confirming
 // again sends only the items that failed, so a copy doesn't land twice and a moved item isn't moved again.
-// The Move to… picker starts in its item's drive, and a move into another drive is refused.
+// The Move to… picker starts in its item's drive, and a move into another drive is refused under the location, with
+// the picker left open.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
@@ -18,10 +19,19 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 const realLocationField = { ...(await import('../../../components/drive/drive-location-field')) };
 // The drive the picker shows, and the way to pick another, both read from the field it draws.
 type Location = { ownerId: string; mountId: string; folderId: string };
-const field: { ownerId: string; pick: (location: Location) => void } = { ownerId: '', pick: () => {} };
+const field: { ownerId: string; error?: string; pick: (location: Location) => void } = { ownerId: '', pick: () => {} };
 mock.module('../../../components/drive/drive-location-field', () => ({
-    DriveLocationField: ({ value, onChange }: { value: Location; onChange: (location: Location) => void }) => {
+    DriveLocationField: ({
+        value,
+        onChange,
+        error,
+    }: {
+        value: Location;
+        onChange: (location: Location) => void;
+        error?: string;
+    }) => {
         field.ownerId = value.ownerId;
+        field.error = error;
         field.pick = onChange;
         return null;
     },
@@ -128,9 +138,14 @@ test.each([
     expect(field.ownerId).toBe(ownerId);
 });
 
-test('move-to: an item is not moved into a folder of another drive', async () => {
+test('move-to: a folder of another drive is refused under the location, and the picker stays open', async () => {
     await openPicker('move-to', [teamItem]);
     await act(async () => field.pick({ ownerId: 'user-1', mountId: 'default', folderId: 'root' }));
     await confirm('Move here');
     expect(posted).toEqual([]);
+    expect(field.error).toBe('Moving across drives isn’t supported yet. Use Copy to… instead.');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Move to');
+
+    await act(async () => field.pick({ ownerId: 'team-1', mountId: 'default', folderId: 'team-root' }));
+    expect(field.error).toBeUndefined();
 });

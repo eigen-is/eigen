@@ -1,20 +1,23 @@
-// The form that creates or edits a contact: names, emails, phone numbers, addresses, labels, birthday and notes.
+// The page form that creates or edits a contact: names, emails, phone numbers, addresses, labels, birthday and notes.
 // Routes such as the new-contact route show it and save what it returns. A field the user changed stays, and every
-// other field follows the contact it is given, so a sync or a refused Save moves only what nobody touched.
+// other field follows the contact it is given, so a sync or a refused Save moves only what nobody touched; the same
+// change is what the page asks about before it is left.
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { rethrowUntoasted } from '@workspace/lib/api-error';
 import { readableTextColor } from '@workspace/lib/constants/colors';
 import { useLabels } from '@workspace/lib/contacts';
 import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { contactFullName } from '@workspace/lib/types/contact';
 import { useHeldEtag } from '@workspace/lib/use-held-etag';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { AvatarEditor } from '@workspace/ui/components/avatar-editor';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
+import { FieldError } from '@workspace/ui/components/field';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { PageForm } from '@workspace/ui/components/layout/app';
 import { Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Textarea } from '@workspace/ui/components/textarea';
@@ -22,7 +25,7 @@ import { useContactAvatarUpload } from '@workspace/ui/components/use-contact-ava
 import { useFollowedFields } from '@workspace/ui/hooks/use-followed-fields';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus, Trash2 } from 'lucide-react';
-import type React from 'react';
+import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import type { Control } from 'react-hook-form';
 import { useFieldArray, useForm } from 'react-hook-form';
@@ -34,7 +37,7 @@ const formSchema = z
         lastName: z.string(),
         company: z.string(),
         jobTitle: z.string(),
-        email: z.array(z.object({ value: z.email('Enter a valid email address').or(z.literal('')) })),
+        email: z.array(z.object({ value: z.email(FIELD_MESSAGES.invalidEmail).or(z.literal('')) })),
         phone: z.array(z.object({ value: z.string() })),
         address: z.array(
             z.object({
@@ -75,11 +78,12 @@ export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
 
 type ContactEditProps = {
     contact: Contact;
+    isNew: boolean;
     onSave: (data: CreateContactInput, etag: string) => Promise<void>;
     onCancel: () => void;
 };
 
-export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
+export function ContactEdit({ contact, isNew, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
     const record = useMemo(() => formValues(contact), [contact]);
     const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: record });
@@ -111,7 +115,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                 },
                 heldEtag,
             ),
-        ).catch(rethrowUntoasted),
+        ),
     );
 
     const { isSubmitting } = form.formState;
@@ -119,15 +123,14 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     return (
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto app-gutter">
-                {labelsError && (
-                    <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
-                        An error occurred while loading labels.
-                    </div>
-                )}
-
-                <div className="space-y-8 pb-20">
+                <div className="pb-20">
                     <Form {...form}>
-                        <form onSubmit={handleSubmit} className="space-y-8">
+                        <PageForm
+                            changed={typing}
+                            onSubmit={handleSubmit}
+                            onCancel={onCancel}
+                            submitLabel={isNew ? 'Create' : 'Save'}
+                        >
                             <div className="flex justify-center mb-8">
                                 <AvatarEditor
                                     name={contactFullName(contact)}
@@ -147,12 +150,12 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                 </div>
 
                                 <div className="grid gap-4">
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <TextField control={form.control} name="firstName" label="First name" />
                                         <TextField control={form.control} name="lastName" label="Last name" />
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <TextField control={form.control} name="company" label="Company" />
                                         <TextField control={form.control} name="jobTitle" label="Job title" />
                                     </div>
@@ -165,21 +168,22 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 <FormLabel>Labels</FormLabel>
                                                 <div className="flex flex-wrap gap-2 mt-2">
                                                     {field.value.map((labelId, index) => {
-                                                        const labelObj = labels.find((l) => l.id === labelId);
+                                                        const label = labels.find((l) => l.id === labelId);
                                                         return (
                                                             <Badge
-                                                                key={index}
+                                                                key={labelId}
                                                                 className="px-3 py-1"
                                                                 style={
-                                                                    labelObj && {
-                                                                        backgroundColor: labelObj.color,
-                                                                        color: readableTextColor(labelObj.color),
+                                                                    label && {
+                                                                        backgroundColor: label.color,
+                                                                        color: readableTextColor(label.color),
                                                                     }
                                                                 }
                                                             >
-                                                                {labelObj?.name}
+                                                                {label?.name}
                                                                 <button
                                                                     type="button"
+                                                                    aria-label="Remove label"
                                                                     className="ml-1 hover:text-destructive"
                                                                     onClick={() =>
                                                                         field.onChange(field.value.toSpliced(index, 1))
@@ -218,6 +222,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                         ))}
                                                     </select>
                                                 </div>
+                                                {labelsError && <FieldError>Labels could not be loaded</FieldError>}
                                                 <FormMessage />
                                             </FormItem>
                                         )}
@@ -268,7 +273,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                     placeholder="Street address"
                                                 />
 
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <TextField
                                                         control={form.control}
                                                         name={`address.${index}.city`}
@@ -283,7 +288,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                     />
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                     <TextField
                                                         control={form.control}
                                                         name={`address.${index}.zipCode`}
@@ -346,16 +351,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                     />
                                 </div>
                             </div>
-
-                            <div className="flex gap-4 justify-end">
-                                <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Saving...' : 'Save'}
-                                </Button>
-                            </div>
-                        </form>
+                        </PageForm>
                     </Form>
                 </div>
             </div>
@@ -367,14 +363,14 @@ function formValues(contact: Contact): FormValues {
     return {
         firstName: contact.firstName,
         lastName: contact.lastName,
-        company: contact.company || '',
-        jobTitle: contact.jobTitle || '',
+        company: contact.company ?? '',
+        jobTitle: contact.jobTitle ?? '',
         email: contact.email.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
         phone: contact.phone.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
         address: contact.address?.length ? contact.address : [{}],
-        birthday: contact.birthday || '',
-        notes: contact.notes || '',
-        labels: contact.labels || [],
+        birthday: contact.birthday ?? '',
+        notes: contact.notes ?? '',
+        labels: contact.labels ?? [],
         avatar: contact.avatar ?? null,
     };
 }
@@ -413,7 +409,7 @@ type RepeatableFieldProps = {
     label: string;
     onAdd: () => void;
     className?: string;
-    children: React.ReactNode;
+    children: ReactNode;
 };
 
 function RepeatableField({ label, onAdd, className, children }: RepeatableFieldProps) {

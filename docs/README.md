@@ -23,6 +23,7 @@ How each part of Eigen works and why, one doc per domain. Where each concept liv
 - Self-hosting and `./eigen`: [SELF-HOSTING.md](SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
 - Server config, settings, quotas: [SERVER-SETTINGS.md](SERVER-SETTINGS.md), [QUOTA.md](QUOTA.md); demo instance: [DEMO_MODE.md](DEMO_MODE.md)
 - Cross-home relay and sharding: [SCALABILITY.md](SCALABILITY.md)
+- Forms, dialogs with fields, settings pages and their shells: [FORMS.md](FORMS.md)
 - Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](LAYOUT.md); mobile: [MOBILE.md](MOBILE.md); typography: [TYPOGRAPHY.md](TYPOGRAPHY.md); command palette: [COMMAND-PALETTE.md](COMMAND-PALETTE.md)
 - The design system has no doc of its own: its tokens are `packages/ui/src/styles/globals.css`, each with its meaning beside it; its components are `packages/ui`, indexed in [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md); its rules are [LAYOUT.md](LAYOUT.md), [TYPOGRAPHY.md](TYPOGRAPHY.md) and [MOBILE.md](MOBILE.md)
 - Testing and browser verification: [TESTING.md](TESTING.md), the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md); the Docker harnesses: [TESTING-DOCKER.md](TESTING-DOCKER.md)

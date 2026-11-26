@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, compose, send]
 related: [mail/read-and-reply, mail/get-started]
 order: 90
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 Composing a message in Mail takes a few seconds: add who it's going to, write a subject and a message, and click **Send**. This page walks through writing a brand-new email from start to finish.
@@ -45,13 +45,13 @@ When the message is ready, click **Send**. Mail sends the email and takes you ba
 
 A couple of checks happen before the email goes out:
 
-- If you haven't added anyone to **To**, Mail asks you to specify at least one recipient.
+- If you haven't added anyone to **To**, Mail says **Add at least one recipient** under it and puts your cursor there.
 - If you've left the subject empty but written a message, Mail asks **Send without subject?** first. Click **Send** to send it anyway, or close the question to go back and add one.
-- If the subject and the message are both empty, Mail asks you to add a subject or message.
+- If the subject and the message are both empty, Mail says **Add a subject or a message** under **Subject**.
 
 <div class="eigen-callout">
 
-You don't have to finish a message in one sitting. Mail saves your draft as you type and keeps it in the **Drafts** folder. Open it from there later to carry on, then send it the same way.
+You don't have to finish a message in one sitting. Mail saves your draft as you type and keeps it in the **Drafts** folder. Open it from there later to carry on, then send it the same way. If you close the tab before your last change is saved, your browser asks before it closes.
 
 </div>
 

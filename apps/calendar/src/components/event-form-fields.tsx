@@ -2,10 +2,13 @@
 // and notes. The dialogs own the state; this file keeps an end after its start when the start or all day changes.
 
 import { toLocalDateString } from '@workspace/lib/calendar';
+import { NEW_EVENT_MINUTES } from '@workspace/lib/constants/calendar';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
+import { FIELD_MESSAGES } from '@workspace/lib/validation';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { RequiredTextField } from '@workspace/ui/components/required-text-field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
@@ -14,6 +17,23 @@ import { useId } from 'react';
 import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, endAfter, endForStart, roundToNext15Minutes, TimeSelect, toTimeString } from './time-select';
+
+// The times and the repeat as the fields show them. They change together, because a preset rule names the start's
+// weekday and an end means nothing beside another start.
+export type EventFieldTimes = {
+    allDay: boolean;
+    rrule: string | null;
+    startDate: string;
+    startTime: string;
+    endDate: string;
+    endTime: string;
+};
+
+const TIME_FIELDS = ['allDay', 'rrule', 'startDate', 'startTime', 'endDate', 'endTime'] as const;
+
+export function timesDiffer(a: EventFieldTimes, b: EventFieldTimes): boolean {
+    return TIME_FIELDS.some((field) => a[field] !== b[field]);
+}
 
 type EventFormFieldsProps = {
     title: string;
@@ -88,20 +108,16 @@ export function EventFormFields({
 
     return (
         <div className="space-y-4">
-            <div>
-                <Label htmlFor={`${id}-title`} className="sr-only">
-                    Title
-                </Label>
-                <Input
-                    id={`${id}-title`}
-                    placeholder="Add title"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    disabled={detailsDisabled}
-                    autoFocus
-                    className="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
-                />
-            </div>
+            <RequiredTextField
+                label="Title"
+                labelClassName="sr-only"
+                placeholder="Add title"
+                value={title}
+                onChange={setTitle}
+                message={FIELD_MESSAGES.titleMissing}
+                disabled={detailsDisabled}
+                inputClassName="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
+            />
 
             <div className="flex items-start gap-3">
                 <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
@@ -187,7 +203,7 @@ export function EventFormFields({
                                     setAllDay(isAllDay);
                                     if (!isAllDay) {
                                         const start = toTimeString(roundToNext15Minutes(new Date()));
-                                        const end = endAfter(new Date(`${startDate}T${start}`), 30);
+                                        const end = endAfter(new Date(`${startDate}T${start}`), NEW_EVENT_MINUTES);
                                         setStartTime(start);
                                         setEndTime(end.time);
                                         // An event over several days keeps its last day.

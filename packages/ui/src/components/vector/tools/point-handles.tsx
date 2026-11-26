@@ -1,54 +1,33 @@
-// Draggable vertex handles for a single selected line/arrow — round
-// `.eigen-vertex-handle` dots, one per point, visually distinct from the square resize grips (a 2-point
-// line/arrow shows these ONLY, with no ObjectTransform box). Clicking a vertex SELECTS that point (the
-// host fills the selected dot via `selectedIndex` and lets Delete remove it); a plain drag still reshapes
-// the line through normalizeLinear as one sealed undo step, and leaves the dragged point selected on
-// release. Between every pair of adjacent vertices sits a translucent `.eigen-midpoint-handle` dot
-// (Excalidraw's midpoint handle, the 2-point case included): dragging it INSERTS a vertex at that segment
-// and continues as a normal vertex drag — the insert and the drag land in the single sealed write on
-// release, and the inserted vertex ends up selected; a plain click on it (no travel past a few screen px)
-// adds nothing, and Escape cancels the insert entirely. Elbow arrows derive their route from the two
-// endpoints, so they show no midpoint dots (the elbow arrow's own handles own that UI). Self-contained like ObjectTransform:
-// it owns its drag lifecycle (document listeners under an AbortController) and reports the live points
-// via `onPreview`, committing once on release. Freedraw shows no handles.
+// The round vertex dots of a selected line or arrow, and a translucent midpoint dot between each pair of them. A click
+// selects a vertex for Delete; a drag reshapes the line and commits once on release, as one undo step. Dragging a
+// midpoint dot inserts a vertex there, a plain click on it adds nothing, and Escape drops the insert. The host
+// renders the live points through `onPreview`. Elbow arrows show only their endpoints, as their bends are routed.
 
 import type { Box, Point, VectorArrowElement, VectorLinearElement } from '@workspace/lib/vector';
 import { linearLocalToScene, linearSceneToLocal, parsePoints } from '@workspace/lib/vector';
+import { cn } from '@workspace/ui/lib/utils';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
-import { useHandleDrag } from './use-handle-drag';
+import { usePointerDrag } from '../../../hooks/use-pointer-drag';
 
-// A midpoint drag only inserts once the pointer travels past this many CLIENT px — below it the gesture
-// is a plain click that adds nothing (Excalidraw's DRAG_THRESHOLD for the midpoint handle).
+// Client px a midpoint press travels before it inserts, so a plain click adds nothing (Excalidraw's value).
 const MIDPOINT_DRAG_THRESHOLD_PX = 2;
-// A midpoint dot is hidden when its segment is shorter than this on SCREEN, so short segments don't
-// clutter (Excalidraw's POINT_HANDLE_SIZE·4). The dot size itself lives in one place — the .eigen-*-handle
-// CSS token; the JSX only positions it.
+// A segment shorter than this on screen shows no midpoint dot, so short segments don't clutter (Excalidraw's).
 const MIDPOINT_MIN_SEGMENT_SCREEN_PX = 40;
-// Two adjacent vertices this close on SCREEN render as ONE (doubled) dot instead of z-fighting; a click
-// then prefers the higher index (the top-most DOM node, which we keep). Excalidraw's coincident-point merge.
+// Two adjacent vertices this close on screen draw as one doubled dot, so a click takes the top-most, higher index.
 const OVERLAP_MERGE_SCREEN_PX = 2;
 
 type LinePointHandlesProps = {
-    // A line or an arrow — both carry `points`; an arrow's endpoint drag additionally (re)binds,
-    // which the host resolves from the dragged vertex index.
     line: VectorLinearElement | VectorArrowElement;
-    // Screen scale — gates the midpoint-length and overlap-merge thresholds to constant on-screen distances.
     zoom: number;
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
     frozenRef: MutableRefObject<boolean>;
-    // Live points during a drag (null clears the preview) and the vertex index being dragged; the host
-    // renders the reshaped element and highlights a binding candidate under an arrow's endpoint.
+    // Null clears the preview.
     onPreview: (points: Point[] | null, index: number) => void;
-    // One sealed write of the reshaped points on release, with the dragged vertex index.
     onCommit: (points: Point[], index: number) => void;
-    // The currently point-selected vertex index (null = none) — that dot renders filled; the host
-    // deletes THIS point on Delete/Backspace.
     selectedIndex: number | null;
-    // Select a vertex (or clear with null): fired on a vertex pointerdown (click or drag start) and on
-    // drag release (so a reshaped/inserted vertex stays selected). Midpoint dots never select on press —
-    // only on their release, once the insert has actually landed.
+    // A midpoint dot selects only on release, once its insert has landed.
     onSelect: (index: number | null) => void;
 };
 
@@ -63,21 +42,15 @@ export function LinePointHandles({
     selectedIndex,
     onSelect,
 }: LinePointHandlesProps) {
-    // The drag in flight: the base points it moves through (the original set for a vertex drag, or the
-    // original set with the inserted vertex for a midpoint drag), the moving index, and its live local
-    // position so the grabbed handle follows the cursor.
+    // `base` holds the inserted vertex during a midpoint drag; `local` lets the grabbed dot follow the cursor.
     const [drag, setDrag] = useState<{ base: Point[]; index: number; local: Point } | null>(null);
-    const startHandleDrag = useHandleDrag(frozenRef);
+    const startPointerDrag = usePointerDrag(frozenRef);
     const points = parsePoints(line.points);
-    // Elbow arrows store only the two endpoints and derive their bends — no midpoint insert here.
     const isElbow = line.type === 'arrow' && line.elbow;
 
-    // Begin dragging `index` through `base`. `insert` gates the drag behind a small travel threshold
-    // (a midpoint that must not fire on a plain click); an existing-vertex drag is live from move one.
     const startDrag = (e: React.PointerEvent, base: Point[], index: number, insert: boolean) => {
         let latest: Point[] | null = null;
-        startHandleDrag(e, {
-            // A midpoint drag stays inert until the pointer travels; then it becomes a live vertex drag.
+        startPointerDrag(e, {
             threshold: insert ? MIDPOINT_DRAG_THRESHOLD_PX : 0,
             move: (me) => {
                 const local = linearSceneToLocal(line, clientToScene(me.clientX, me.clientY));
@@ -88,15 +61,11 @@ export function LinePointHandles({
             },
             end: () => {
                 setDrag(null);
-                // A midpoint click that never traveled leaves `latest` null → nothing is inserted.
                 if (latest) {
                     onCommit(latest, index);
-                    // Leave the dragged vertex selected on release (a midpoint drag selects the vertex it
-                    // just inserted), so Delete pressed immediately after acts on THIS point.
                     onSelect(index);
                 } else onPreview(null, index);
             },
-            // Cancels the whole gesture — a mid-insert drag drops the inserted vertex too.
             cancel: () => {
                 setDrag(null);
                 onPreview(null, index);
@@ -104,23 +73,18 @@ export function LinePointHandles({
         });
     };
 
-    // During a drag the base set (with any inserted vertex) is the source of truth; idle, it's the
-    // stored points. Midpoint dots are hidden mid-drag so they never sit on a stale segment.
+    // Midpoint dots hide mid-drag, so they never sit on a stale segment.
     const vertices = drag ? drag.base : points;
 
-    // Position a dot centered on a local point, in the host's screen frame — its 22px hit area / 20px hover
-    // halo / dot size all come from the .eigen-*-handle CSS token, so the JSX only places it.
+    // The dot's size and hit area come from its .eigen-*-handle CSS class; this only places it.
     const dotStyle = (local: Point): React.CSSProperties => {
         const scene = linearLocalToScene(line, local);
         const { left, top } = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
         return { left, top, transform: 'translate(-50%, -50%)' };
     };
 
-    // The vertex position a dot renders at (its live drag position for the grabbed one).
     const vertexLocal = (i: number, p: Point) => (drag?.index === i ? drag.local : p);
-    // Overlap merge: a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbor is hidden
-    // into it, and that neighbor draws doubled — so coincident points read as one dot and a click resolves
-    // to the higher (top-most) index. Suppressed mid-drag, where the grabbed vertex has left its neighbors.
+    // No merge mid-drag, where the grabbed vertex has left its neighbors.
     const mergeGap = OVERLAP_MERGE_SCREEN_PX / zoom;
     const hiddenVertex = (i: number): boolean =>
         !drag &&
@@ -134,16 +98,16 @@ export function LinePointHandles({
     return (
         <>
             {vertices.map((p, i) =>
-                // An elbow arrow shows ONLY its two endpoint dots — its interior vertices are the routed/
-                // pinned polyline, managed by ElbowPinHandles, not draggable here.
                 (isElbow && i !== 0 && i !== vertices.length - 1) || hiddenVertex(i) ? null : (
                     <div
                         key={`v${i}`}
-                        className={`eigen-vertex-handle pointer-events-auto touch-none cursor-pointer${
-                            selectedIndex === i ? ' eigen-vertex-handle-selected' : ''
-                        }${doubledVertex(i) ? ' eigen-point-handle-doubled' : ''}${drag ? ' eigen-point-handle-no-halo' : ''}`}
+                        className={cn(
+                            'eigen-vertex-handle pointer-events-auto touch-none cursor-pointer',
+                            selectedIndex === i && 'eigen-vertex-handle-selected',
+                            doubledVertex(i) && 'eigen-point-handle-doubled',
+                            drag && 'eigen-point-handle-no-halo',
+                        )}
                         style={dotStyle(vertexLocal(i, p))}
-                        // Click selects THIS point (a following drag reshapes it and keeps it selected).
                         onPointerDown={(e) => {
                             onSelect(i);
                             startDrag(e, points, i, false);
@@ -155,10 +119,8 @@ export function LinePointHandles({
                 !isElbow &&
                 points.slice(0, -1).map((p, i) => {
                     const next = points[i + 1];
-                    // Hide the midpoint dot on a segment too short to be worth one — screen length.
                     if (Math.hypot(next.x - p.x, next.y - p.y) * zoom < MIDPOINT_MIN_SEGMENT_SCREEN_PX) return null;
                     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
-                    // The vertex this dot would insert, at index i+1 between its two neighbors.
                     const base = [...points.slice(0, i + 1), mid, ...points.slice(i + 1)];
                     return (
                         <div

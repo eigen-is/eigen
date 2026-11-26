@@ -20,7 +20,7 @@ import { TeamSettingsSection } from './team-settings-section';
 
 type TeamDetailProps = {
     team: OrgTeam;
-    organizationId?: string;
+    organizationId: string;
 };
 
 export function TeamDetailToolbar({ team, organizationId }: TeamDetailProps) {
@@ -31,7 +31,7 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailProps) {
 
     const handleRemove = async () => {
         await removeTeam.mutateAsync(team.id);
-        navigate({ to: '/teams', search: {} });
+        await navigate({ to: '/teams', search: {} });
     };
 
     return (
@@ -82,7 +82,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
             <Separator />
 
-            <TeamMembersSection teamId={team.id} organizationId={organizationId} />
+            <TeamMembersSection team={team} organizationId={organizationId} />
         </div>
     );
 }

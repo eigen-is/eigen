@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, kanban, columns]
 related: [stickies/get-started, stickies/create-board]
 order: 50
-updated: 2026-10-28
+updated: 2026-11-25
 ---
 
 You can rename any column on a board you have write access to, or delete one you no longer need. Both actions are available from the **Column settings** dialog.
@@ -20,7 +20,7 @@ The pencil icon only appears if you can edit the board. If you have view-only ac
 
 1. Open **Column settings** for the column you want to rename.
 2. Edit the text in the **Title** field.
-3. Click **Save changes**.
+3. Click **Save**.
 
 The column header updates straight away.
 

@@ -13,8 +13,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { downloadBlob } from '@workspace/lib/download';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { Column } from '@workspace/ui/components/layout/app';
+import { Column, LeaveGuard } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
@@ -117,6 +116,8 @@ export function MarkdownEditor({
     const editor = useEditor({
         extensions: useMarkdownExtensions(content),
         content,
+        // It mounts when Edit is pressed, so typing goes into the text at once.
+        autofocus: true,
         // No equation node: a pasted equation reads as its linear text.
         editorProps: { transformPastedHTML: mathAsText },
         onUpdate: () => {
@@ -140,24 +141,16 @@ export function MarkdownEditor({
 
     const getFrontmatter = useCallback(() => frontmatter ?? undefined, [frontmatter]);
 
-    const {
-        saveState,
-        showConflict,
-        setShowConflict,
-        markDirty,
-        doSave,
-        confirmClose,
-        showDiscardConfirm,
-        handleDiscardConfirm,
-        handleDiscardCancel,
-    } = useEditorSave({
-        ownerId,
-        mountId,
-        pathId,
-        etag,
-        getContent,
-        getFrontmatter,
-    });
+    const { saveState, atRisk, showConflict, setShowConflict, markDirty, doSave, cancel, discardDialog } =
+        useEditorSave({
+            ownerId,
+            mountId,
+            pathId,
+            etag,
+            getContent,
+            getFrontmatter,
+            onCancel,
+        });
 
     const handleToggleSource = useCallback(() => {
         if (sourceMode) {
@@ -182,12 +175,7 @@ export function MarkdownEditor({
     };
 
     const toolbar = (
-        <EditToolbar
-            onBack={() => confirmClose(onBack)}
-            onCancel={() => confirmClose(onCancel)}
-            onSave={handleSave}
-            isSaving={saveState === 'saving'}
-        >
+        <EditToolbar onBack={onBack} onCancel={cancel} onSave={handleSave} isSaving={saveState === 'saving'}>
             <MarkdownToolbarButtons editor={editor} sourceMode={sourceMode} onToggleSource={handleToggleSource} />
         </EditToolbar>
     );
@@ -230,17 +218,8 @@ export function MarkdownEditor({
                     }}
                     onDownload={handleDownload}
                 />
-                <ConfirmDialog
-                    open={showDiscardConfirm}
-                    onOpenChange={(open) => {
-                        if (!open) handleDiscardCancel();
-                    }}
-                    title="Discard changes?"
-                    description="You have unsaved changes. Discard them?"
-                    confirmText="Discard"
-                    destructive
-                    onConfirm={handleDiscardConfirm}
-                />
+                {discardDialog}
+                <LeaveGuard active={atRisk} />
             </Column>
         </DocSearchProvider>
     );

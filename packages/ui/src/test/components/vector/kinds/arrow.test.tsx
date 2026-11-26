@@ -1,19 +1,18 @@
+// An arrow's label size, typed, is one undo step that writes the size alone.
 import { expect, test } from 'bun:test';
 import type { VectorElement } from '@workspace/lib/vector';
 import { DEFAULT_ELEMENT_PROPS } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { type } from '../../../form-contract';
 import { installHappyDom } from '../../../happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { holdCapture, sealed } = await import('../../../../components/properties-panel/property-gesture');
 const { PropertyGestureContext } = await import('../../../../components/properties-panel');
 const { ArrowPanelSection } = await import('../../../../components/vector/kinds/arrow');
-
-// React tracks an input's value on the instance, so assigning `input.value` looks like no change to it.
-const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 const arrow: VectorElement = {
     ...DEFAULT_ELEMENT_PROPS,
@@ -71,11 +70,8 @@ test('a label size typed is one undo step that writes the size alone', async () 
     const input = container.querySelector<HTMLInputElement>('input[type="number"]');
     if (!input) throw new Error('the arrow section did not render its Size field');
     for (const typed of ['1', '12']) {
-        await act(async () => {
-            input.focus();
-            nativeValueSetter?.call(input, typed);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await act(async () => input.focus());
+        await type(input, typed);
     }
     await act(async () => input.dispatchEvent(new Event('focusout', { bubbles: true })));
 

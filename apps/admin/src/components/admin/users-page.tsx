@@ -31,7 +31,7 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
         navigate({ to, search: {} });
     };
 
-    if (isLoading) {
+    if (isLoading || !config) {
         return <LoadingState />;
     }
 
@@ -48,7 +48,7 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
                     <UserDetail
                         user={selected}
                         usage={usage?.[selected.id]}
-                        organizationId={config?.orgId}
+                        organizationId={config.orgId}
                         guest={guests}
                     />
                 ) : (
@@ -64,7 +64,6 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
                 searchQuery={searchQuery}
                 activeUserId={userId}
                 onRowClick={(id) => navigate({ to, search: { userId: id } })}
-                organizationId={config?.orgId}
                 guests={guests}
             />
         </ListDetailLayout>

@@ -1,11 +1,13 @@
 // The Insert link and Edit link dialog, which the link card opens in the sheet's dialog slot. It edits a cell's link
-// to a web page, a range or a sheet in the workbook, and its OK waits for an address Sheets can open. Picking a range
-// hands its place to the range picker, which opens this dialog again with the draft, back on the link's cell.
+// to a web page, a range or a sheet in the workbook, and its Apply refuses an address Sheets can't open, with the
+// reason under the field. Picking a range hands its place to the range picker, which opens this dialog again with the
+// draft, back on the link's cell.
 
 import type { CellLinkType } from '@workspace/lib/sheets';
 import { isCellLinkType } from '@workspace/lib/sheets';
 import { Field, FieldError, FieldLabel } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
+import { useFormSubmitted } from '@workspace/ui/components/form-shell';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@workspace/ui/components/input-group';
 import { LinkAddressField, LinkTextField } from '@workspace/ui/components/link-fields';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -24,7 +26,7 @@ import {
     overlayRegionForCell,
     saveHyperlink,
 } from '../../state';
-import { CellRangeDialog } from '../CellRangeDialog';
+import { CellRangeDialog, NO_RANGE_MESSAGE } from '../CellRangeDialog';
 
 // The range picker opens a few pixels under the link's cell.
 const RANGE_PICKER_GAP = 5;
@@ -47,7 +49,6 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     const [linkAddress, setLinkAddress] = useState(draft?.address ?? link.originAddress);
     const { r, c } = link;
     const validity = isLinkValid(linkType, linkAddress);
-    const refusalId = useId();
 
     // The position is in sheet-content coordinates, where the cell's overlay region applies the pane's scroll. The
     // picker is portaled and fixed, so it is converted here off the same pane the region would use.
@@ -70,7 +71,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         );
     };
 
-    // A pick may wander to another sheet, so coming back also goes back to the link's sheet and cell. The picker's OK
+    // A pick may wander to another sheet, so coming back also goes back to the link's sheet and cell. The picker's Select
     // comes back with the picked range, and Cancel or Escape with the draft as it was.
     const pickRange = (before: LinkDraft) => {
         const reopen = (address: string) => {
@@ -90,9 +91,14 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     return (
         <FormDialog {...dialogProps} title={link.originAddress ? 'Edit link' : 'Insert link'}>
             <FormDialogForm
-                submitLabel="OK"
-                canSubmit={validity.isValid}
-                onSubmit={() => setContext((ctx) => saveHyperlink(ctx, r, c, linkText, linkType, linkAddress))}
+                submitLabel="Apply"
+                changed={
+                    linkText !== link.originText || linkType !== link.originType || linkAddress !== link.originAddress
+                }
+                onSubmit={() => {
+                    if (!validity.isValid) return false;
+                    setContext((ctx) => saveHyperlink(ctx, r, c, linkText, linkType, linkAddress));
+                }}
             >
                 <LinkTextField value={linkText} onValueChange={setLinkText} autoFocus />
                 <Field>
@@ -128,29 +134,12 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 </Field>
                 {linkType === 'webpage' && <LinkAddressField value={linkAddress} onValueChange={setLinkAddress} />}
                 {linkType === 'cellrange' && (
-                    <Field>
-                        <FieldLabel htmlFor="link-cell">Cell range</FieldLabel>
-                        <InputGroup>
-                            <InputGroupInput
-                                id="link-cell"
-                                aria-invalid={validity.tooltip !== ''}
-                                aria-describedby={validity.tooltip ? refusalId : undefined}
-                                spellCheck={false}
-                                value={linkAddress}
-                                onChange={(e) => setLinkAddress(e.target.value)}
-                            />
-                            <InputGroupAddon align="inline-end">
-                                <InputGroupButton
-                                    size="icon-xs"
-                                    aria-label="Select cell range"
-                                    onClick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
-                                >
-                                    <Grid3x3 />
-                                </InputGroupButton>
-                            </InputGroupAddon>
-                        </InputGroup>
-                        {validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>}
-                    </Field>
+                    <RangeField
+                        value={linkAddress}
+                        refusal={validity.tooltip}
+                        onValueChange={setLinkAddress}
+                        onPick={() => pickRange({ text: linkText, type: linkType, address: linkAddress })}
+                    />
                 )}
                 {linkType === 'sheet' && (
                     <Field>
@@ -177,5 +166,44 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                 )}
             </FormDialogForm>
         </FormDialog>
+    );
+}
+
+// A range typed in, or picked with the grid button. `refusal` says why Sheets can't read what was typed, and an empty
+// range says so once Apply was pressed.
+function RangeField({
+    value,
+    refusal,
+    onValueChange,
+    onPick,
+}: {
+    value: string;
+    refusal: string;
+    onValueChange: (value: string) => void;
+    onPick: () => void;
+}) {
+    const missing = useFormSubmitted() && !value;
+    const problem = refusal || (missing ? NO_RANGE_MESSAGE : '');
+    const problemId = useId();
+    return (
+        <Field>
+            <FieldLabel htmlFor="link-cell">Cell range</FieldLabel>
+            <InputGroup>
+                <InputGroupInput
+                    id="link-cell"
+                    aria-invalid={problem !== ''}
+                    aria-describedby={problem ? problemId : undefined}
+                    spellCheck={false}
+                    value={value}
+                    onChange={(e) => onValueChange(e.target.value)}
+                />
+                <InputGroupAddon align="inline-end">
+                    <InputGroupButton size="icon-xs" aria-label="Select cell range" onClick={onPick}>
+                        <Grid3x3 />
+                    </InputGroupButton>
+                </InputGroupAddon>
+            </InputGroup>
+            {problem && <FieldError id={problemId}>{problem}</FieldError>}
+        </Field>
     );
 }

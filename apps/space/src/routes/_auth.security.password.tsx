@@ -1,10 +1,8 @@
-// Space's Change password page, which shows the password form and returns to Space's start page when it is done.
-// The form checks the fields, and useChangePassword sends the change to the server.
+// Space's Change password page: a settings page around the password form, which sends the change and returns to
+// Space's start page when it is done.
 
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useChangePassword } from '@workspace/lib/auth';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { createFileRoute } from '@tanstack/react-router';
+import { SettingsPage } from '@workspace/ui/components/layout/app';
 import { ChangePassword } from '../components/space/change-password';
 
 export const Route = createFileRoute('/_auth/security/password')({
@@ -12,27 +10,9 @@ export const Route = createFileRoute('/_auth/security/password')({
 });
 
 function PasswordComponent() {
-    const navigate = useNavigate();
-    const changePassword = useChangePassword();
-
-    const handlePasswordChange = async (data: {
-        currentPassword: string;
-        newPassword: string;
-        revokeOtherSessions: boolean;
-    }) => {
-        await changePassword.mutateAsync(data);
-        await navigate({ to: '/' });
-    };
-
     return (
-        <ColumnLayout>
-            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Change password</ToolbarTitle>}>
-                <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl app-gutter">
-                        <ChangePassword onPasswordChange={handlePasswordChange} />
-                    </div>
-                </div>
-            </Column>
-        </ColumnLayout>
+        <SettingsPage title="Change password">
+            <ChangePassword />
+        </SettingsPage>
     );
 }

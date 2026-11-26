@@ -17,7 +17,7 @@ const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
     title: 'Welcome to stickies!',
     description:
-        'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
+        'Drag this card to another column to get started. You can add more cards with the "Add a card" button.',
 };
 
 // Reuse the previous column object when its fields are unchanged, so memoized columns skip re-rendering when an edit

@@ -1,10 +1,11 @@
-// New event is a form: Enter in the title saves the event, while Enter in the guest field adds a guest and Enter in a
-// time field sets the time, and neither saves. The guest row's buttons are named, the remove button after its guest,
-// and save nothing either. A save the
-// server refuses keeps the dialog open beside the hook's toast, with no unhandled rejection, and every opening starts
-// empty.
+// New event keeps the dialog contract, says Create, and with no title says "Add a title" under the field. Enter in the
+// guest field adds the guest and Enter in a time field sets the time, and neither saves. A guest typed but not added
+// goes out with the event, and one the field refuses keeps the dialog open with the reason. The guest row's buttons are
+// named and save nothing. A save the server refuses keeps the dialog open with no unhandled rejection, every opening
+// starts empty, and there is no form until the calendars have loaded.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
-import type { CalendarItem, CreateEventInput } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarItem, CreateEventInput } from '@workspace/lib/types/calendar';
+import { expectFormContract, type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -24,7 +25,10 @@ const work: CalendarItem = {
     updatedAt: created,
 };
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
-const calendars = { data: [work] };
+// Stable across renders, as React Query's results are.
+const loaded = { data: [work] };
+const loading = { data: undefined };
+let calendars: { data: CalendarItem[] | undefined } = loaded;
 const sharedCalendars = { data: [] };
 const createEvent = { mutateAsync: mock(async (_input: CreateEventInput) => {}), isPending: false };
 const noSuggestions = { suggestions: [], isLoading: false };
@@ -84,6 +88,7 @@ beforeEach(() => {
     createEvent.mutateAsync.mockReset();
     createEvent.mutateAsync.mockImplementation(async () => {});
     onOpenChange.mockClear();
+    calendars = loaded;
     unhandled.length = 0;
 });
 
@@ -99,7 +104,6 @@ function Harness() {
             setOpenState(next);
         },
         defaultDate: new Date(2026, 9, 9),
-        defaultCalendarId: 'work',
     });
 }
 
@@ -115,8 +119,12 @@ const input = (selector: string) => {
 };
 const titleField = () => input('input[placeholder="Add title"]');
 const guestField = () => input('#attendee-input');
+// A pending button's spinner comes before its label.
 const button = (label: string) =>
-    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (b) => b.lastChild?.textContent === label,
+    );
+const create = () => act(async () => button('Create')?.click());
 
 // An icon-only button, found by the name a screen reader reads out.
 const named = (label: string) => {
@@ -125,22 +133,32 @@ const named = (label: string) => {
     return found;
 };
 
-const type = (field: HTMLInputElement, value: string) =>
-    act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
-        field.dispatchEvent(new Event('input', { bubbles: true }));
-    });
 const enter = (field: HTMLInputElement) => act(async () => pressEnter(field));
 const guests = () => [...(dialog()?.querySelectorAll('.group') ?? [])].map((row) => row.textContent);
+const errorText = () => dialog()?.querySelector('[data-slot="field-error"]')?.textContent;
+const titles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((h) => h.textContent);
+const ada: Attendee = { email: 'ada@example.org', name: undefined, status: 'pending', role: 'required' };
 
-test('Enter in the title saves the event, and the dialog closes', async () => {
+test('New event keeps the dialog contract', async () => {
+    await expectFormContract({
+        kind: 'dialog',
+        render: () => createElement(Harness),
+        submitLabel: 'Create',
+        firstField: 'Title',
+        onSubmit: createEvent.mutateAsync,
+        makeChanged: () => type(titleField(), 'Dentist'),
+        makeInvalid: () => type(titleField(), '   '),
+        invalidField: 'Title',
+        modEnterFields: ['Guests', 'Start time', 'Description'],
+    });
+});
+
+test('a title of only spaces says "Add a title" under the field and saves nothing', async () => {
     await open();
-    await type(titleField(), 'Dentist');
-    await enter(titleField());
-    expect(createEvent.mutateAsync.mock.calls.map(([event]) => [event.calendarId, event.title])).toEqual([
-        ['work', 'Dentist'],
-    ]);
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
+    await type(titleField(), '   ');
+    await create();
+    expect(errorText()).toBe('Add a title');
+    expect(createEvent.mutateAsync).not.toHaveBeenCalled();
 });
 
 test('Enter in the guest field adds the guest and saves nothing, and the guest goes out with the event', async () => {
@@ -153,10 +171,37 @@ test('Enter in the guest field adds the guest and saves nothing, and the guest g
     expect(createEvent.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await act(async () => button('Save')?.click());
-    expect(createEvent.mutateAsync.mock.calls[0]?.[0].data).toEqual({
-        attendees: [{ email: 'ada@example.org', name: undefined, status: 'pending', role: 'required' }],
+    await create();
+    expect(createEvent.mutateAsync.mock.calls[0]?.[0].data).toEqual({ attendees: [ada] });
+});
+
+test('a guest typed but not added goes out with the event', async () => {
+    await open();
+    await type(titleField(), 'Dentist');
+    await type(guestField(), 'ada@example.org');
+    await create();
+    expect(createEvent.mutateAsync.mock.calls[0]?.[0].data).toEqual({ attendees: [ada] });
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a typed guest the field refuses keeps the dialog open, with the reason under the field', async () => {
+    await open();
+    await type(titleField(), 'Dentist');
+    await type(guestField(), 'me@test.eigen.is');
+    await create();
+    expect(createEvent.mutateAsync).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(errorText()).toBe('You cannot invite yourself');
+    expect(document.activeElement).toBe(guestField());
+});
+
+test('a typed guest is a change, so Esc asks before it drops it', async () => {
+    await open();
+    await type(guestField(), 'ada@');
+    await act(async () => {
+        guestField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
+    expect(titles()).toContain('Discard changes?');
 });
 
 test("the guest row's add and remove buttons are named and save nothing", async () => {
@@ -184,17 +229,8 @@ test('Enter in a time field sets the time and saves nothing', async () => {
     expect(createEvent.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await act(async () => button('Save')?.click());
+    await create();
     expect(createEvent.mutateAsync.mock.calls[0]?.[0].startTime).toEqual(new Date(2026, 9, 9, 14, 0));
-});
-
-test('Save waits for a title with more than spaces, and keeps its label', async () => {
-    await open();
-    expect(button('Save')?.disabled).toBe(true);
-    await type(titleField(), '   ');
-    expect(button('Save')?.disabled).toBe(true);
-    await type(titleField(), 'Dentist');
-    expect(button('Save')?.disabled).toBe(false);
 });
 
 test('a save the server refuses keeps the dialog open, with no unhandled rejection', async () => {
@@ -203,12 +239,33 @@ test('a save the server refuses keeps the dialog open, with no unhandled rejecti
     });
     await open();
     await type(titleField(), 'Dentist');
-    await act(async () => button('Save')?.click());
+    await create();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(createEvent.mutateAsync).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(button('Save')?.disabled).toBe(false);
+    expect(button('Create')?.getAttribute('aria-busy')).toBeNull();
     expect(unhandled).toEqual([]);
+});
+
+test('times the caller gives fill the start and end, and all day', async () => {
+    const save = async (initial: { start: Date; end: Date; allDay: boolean }) => {
+        createEvent.mutateAsync.mockClear();
+        ({ unmount } = await renderInDocument(createElement(CreateEventDialog, { open: true, onOpenChange, initial })));
+        await type(titleField(), 'Focus');
+        await create();
+        await unmount();
+        const input = createEvent.mutateAsync.mock.calls[0]?.[0];
+        // toMatchObject would pass any Date against any other.
+        return { startTime: input?.startTime, endTime: input?.endTime, allDay: input?.allDay };
+    };
+    expect(
+        await save({ start: new Date(2026, 9, 9, 10, 0), end: new Date(2026, 9, 9, 11, 30), allDay: false }),
+    ).toEqual({ startTime: new Date(2026, 9, 9, 10, 0), endTime: new Date(2026, 9, 9, 11, 30), allDay: false });
+    expect(await save({ start: new Date(2026, 9, 9), end: new Date(2026, 9, 9), allDay: true })).toEqual({
+        startTime: new Date(Date.UTC(2026, 9, 9)),
+        endTime: new Date(Date.UTC(2026, 9, 10)),
+        allDay: true,
+    });
 });
 
 test('closing and reopening starts empty', async () => {
@@ -220,4 +277,11 @@ test('closing and reopening starts empty', async () => {
     await act(async () => setOpen(true));
     expect(titleField().value).toBe('');
     expect(guests()).toEqual([]);
+});
+
+test('there is no form until the calendars have loaded', async () => {
+    calendars = loading;
+    await open();
+    expect(dialog()?.querySelector('input')).toBeNull();
+    expect(button('Create')).toBeUndefined();
 });

@@ -17,21 +17,22 @@ function NewContactRoute() {
 
     const handleSave = async (data: CreateContactInput) => {
         const contactId = await addContactMutation.mutateAsync(data);
-        navigate({
+        await navigate({
             to: '/$filterType/$filterId',
             params: { filterType: 'book', filterId: 'all' },
             search: { contactId },
+            ignoreBlocker: true,
         });
     };
 
-    const handleCancel = () => {
-        navigate({ to: '/$filterType/$filterId', params: { filterType: 'book', filterId: 'all' } });
-    };
+    // Cancel discards without asking; the back arrow asks first when something changed.
+    const toBook = (ignoreBlocker: boolean) =>
+        navigate({ to: '/$filterType/$filterId', params: { filterType: 'book', filterId: 'all' }, ignoreBlocker });
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew />}>
-                <ContactEdit contact={emptyContact} onSave={handleSave} onCancel={handleCancel} />
+            <Column id="editor" width="flex" onBack={() => toBook(false)} toolbar={<ContactEditToolbar isNew />}>
+                <ContactEdit contact={emptyContact} isNew onSave={handleSave} onCancel={() => toBook(true)} />
             </Column>
         </ColumnLayout>
     );

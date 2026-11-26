@@ -7,6 +7,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
@@ -16,7 +17,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
-import { CommentLifecycleDialogs, CommentNoteCard, PanelColumn } from '@workspace/ui/components/comments';
+import { CommentCardTile, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     CollabDocumentGate,
@@ -183,7 +184,7 @@ export function StickiesBoard({
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             recordHistory.mutate({
-                eventType: 'sticky-added',
+                eventType: 'card-added',
                 details: {
                     card: patch.title ?? '',
                     toColumn: board.columns[targetColumnId]?.title ?? '',
@@ -232,17 +233,13 @@ export function StickiesBoard({
         return next;
     }, [board, cards, isCardVisible]);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: { distance: 5 },
-        }),
-    );
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_THRESHOLD_PX } }));
 
     const getActiveComponent = () => {
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem;
             return (
-                <CommentNoteCard
+                <CommentCardTile
                     card={card}
                     entry={entryOf(card)}
                     title={card.title}
@@ -385,8 +382,8 @@ export function StickiesBoard({
                                         allowAttachments={!!mediaFolderId}
                                         members={members}
                                         currentUserEmail={user?.email}
-                                        dialogTitle="Add sticky"
-                                        submitLabel="Add sticky"
+                                        dialogTitle="Add card"
+                                        submitLabel="Add card"
                                     />
 
                                     <AddColumnDialog
@@ -417,11 +414,11 @@ export function StickiesBoard({
                                             const removed = cards[cardId];
                                             deleteCardFromBoard(cardId);
                                             recordHistory.mutate({
-                                                eventType: 'sticky-removed',
+                                                eventType: 'card-removed',
                                                 details: { card: removed?.title ?? '', cardId },
                                             });
                                         }}
-                                        noun="sticky"
+                                        noun="card"
                                         onCardDialogClose={onClearInitialChat}
                                     />
                                 </div>

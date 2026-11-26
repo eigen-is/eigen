@@ -1,68 +1,91 @@
-// The Calendar app's month grid: every week the month touches, each day with up to four events, all-day ones first
-// as pills in their calendar's color and timed ones as a dot and a time, then a count of the rest. A click on an
-// event opens its detail dialog and a click on a day creates an event there; the route around it fetches the events.
+// The Calendar app's month grid: every week the month touches as a row of seven days, its events in lanes under the
+// dates, a multi-day one as one bar across its days. A row holds as many lanes as its height fits, and a day with more
+// events than that shows "N more", which lists the whole day. A date links to that day's view, a click on an event
+// opens its detail dialog and a click on an empty part of a day creates an event there. A mouse or pen drags an event
+// to other days, and the drop saves it; the route fetches the events.
 
-import { useAuth } from '@workspace/lib/auth';
+import { Link } from '@tanstack/react-router';
+import type { EventTimes } from '@workspace/lib/calendar';
 import {
-    formatEventTime,
-    getCalendarColor,
-    getDaysInRange,
-    getEventsForDay,
-    getInviteStatus,
-    getMonthRange,
-    isFreeBusyEvent,
-    WEEKDAY_HEADERS,
+    allocateLanes,
+    dayEvents,
+    monthWeekLayout,
+    movedTimes,
+    toLocalDateString,
+    viewDays,
+    weekdayHeader,
 } from '@workspace/lib/calendar';
-import { readableTextColor } from '@workspace/lib/constants/colors';
 import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { useMemo } from 'react';
-import { eventPillStateClasses } from './calendar-utils';
+import { useMemo, useRef, useState } from 'react';
+import { cellAt, isDragPointer } from './calendar-utils';
+import { EventBar, LaneGhost } from './event-chip';
 import { EventDetailDialog } from './event-detail-dialog';
+import { EventDropHost } from './event-drop-host';
 import { useEventDetailState } from './hooks/use-event-detail-state';
+import { useEventDrop } from './hooks/use-event-drop';
+import { useViewDrag } from './hooks/use-view-drag';
+import { MonthDayPopover } from './month-day-popover';
 
 type MonthViewProps = {
-    currentDate: Date;
-    events: CalendarEventOccurrence[];
-    calendars: CalendarItem[];
-    sharedCalendars?: SharedCalendar[];
-    onDayClick?: (date: Date) => void;
+    focus: Date;
+    events: readonly CalendarEventOccurrence[];
+    calendars: readonly CalendarItem[];
+    sharedCalendars: readonly SharedCalendar[];
+    onDayClick: (date: Date) => void;
     initialEventId?: string;
 };
 
-const MAX_VISIBLE_EVENTS = 4;
+// In pixels: the lanes start under the date row (top-7), each lane is a text-xs line with py-0.5, gap-y-0.5 apart.
+const DATE_ROW = 28;
+const LANE = 20;
+const GAP = 2;
 
-export function MonthView({
-    currentDate,
-    events,
-    calendars,
-    sharedCalendars,
-    onDayClick,
-    initialEventId,
-}: MonthViewProps) {
-    const { user } = useAuth();
+export function MonthView({ focus, events, calendars, sharedCalendars, onDayClick, initialEventId }: MonthViewProps) {
     const { handleEventClick, detailDialogProps } = useEventDetailState({
         events,
         calendars,
         sharedCalendars,
         initialEventId,
     });
+    const { shownEvents, canDrag, drop, dropHostProps } = useEventDrop({ events, calendars, sharedCalendars });
+    // The rows share the height equally, so the first one measures them all.
+    const [rowRef, rowSize] = useElementSize<HTMLDivElement>();
+    const lanes = Math.max(1, Math.floor((rowSize.height - DATE_ROW) / (LANE + GAP)));
+    const weeksRef = useRef<HTMLDivElement>(null);
+    // The dragged event at the days it would land on.
+    const [ghost, setGhost] = useState<CalendarEventOccurrence | null>(null);
+    const { runDrag, rootProps } = useViewDrag();
 
-    const { startDate, endDate } = useMemo(() => getMonthRange(currentDate), [currentDate]);
-    const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
-    const currentMonth = currentDate.getMonth();
+    const weeks = useMemo(() => {
+        const days = viewDays('month', focus);
+        return Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7));
+    }, [focus]);
+    const currentMonth = focus.getMonth();
+    const surfaceProps = { calendars, sharedCalendars, onClick: handleEventClick };
 
-    const weeks: Date[][] = [];
-    for (let i = 0; i < days.length; i += 7) {
-        weeks.push(days.slice(i, i + 7));
-    }
+    const moveEvent = (event: CalendarEventOccurrence, e: React.PointerEvent<HTMLElement>) => {
+        const grid = weeksRef.current;
+        if (!isDragPointer(e) || !canDrag(event) || !grid) return;
+        const pressed = dayAt(grid, weeks.length, e.clientX, e.clientY);
+        let moved: EventTimes = event;
+        runDrag(e, {
+            move: (me) => {
+                moved = movedTimes(event, dayAt(grid, weeks.length, me.clientX, me.clientY) - pressed, 0);
+                setGhost({ ...event, ...moved });
+            },
+            land: () => drop(event, moved),
+            stop: () => setGhost(null),
+        });
+    };
 
     return (
         <>
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full" {...rootProps}>
                 <div className="grid grid-cols-7 border-b">
-                    {WEEKDAY_HEADERS.map((day) => (
+                    {weeks[0].map(weekdayHeader).map((day) => (
                         <div
                             key={day}
                             className="text-center text-xs font-medium text-muted-foreground py-2 border-r last:border-r-0"
@@ -73,116 +96,90 @@ export function MonthView({
                 </div>
 
                 <div
-                    className="flex-1 grid overflow-auto"
+                    ref={weeksRef}
+                    className="flex-1 grid overflow-hidden"
                     style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(0, 1fr))` }}
                 >
-                    {weeks.map((week, weekIdx) => (
-                        <div key={weekIdx} className="grid grid-cols-7 border-b last:border-b-0">
-                            {week.map((day, dayIdx) => {
-                                const dayEvents = getEventsForDay(events, day);
-                                const allDayEvents = dayEvents.filter((e) => e.allDay);
-                                const timedEvents = dayEvents
-                                    .filter((e) => !e.allDay)
-                                    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-                                const sortedEvents = [...allDayEvents, ...timedEvents];
-                                const visibleEvents = sortedEvents.slice(0, MAX_VISIBLE_EVENTS);
-                                const moreCount = sortedEvents.length - MAX_VISIBLE_EVENTS;
-                                const isCurrentMonth = day.getMonth() === currentMonth;
-                                const today = isToday(day);
-
-                                return (
-                                    <div
-                                        key={dayIdx}
-                                        className={cn(
-                                            'border-r last:border-r-0 p-1 cursor-pointer hover:bg-accent/30 transition-colors',
-                                            !isCurrentMonth && 'bg-muted/30',
-                                        )}
-                                        onClick={() => onDayClick?.(day)}
-                                    >
+                    {weeks.map((week, weekIdx) => {
+                        const { bars, hidden } = monthWeekLayout(week, shownEvents, lanes);
+                        const ghostBar = ghost ? allocateLanes([ghost], week)[0] : undefined;
+                        return (
+                            <div
+                                key={toLocalDateString(week[0])}
+                                ref={weekIdx === 0 ? rowRef : undefined}
+                                className="relative grid grid-cols-7 overflow-hidden border-b last:border-b-0"
+                            >
+                                {week.map((day) => {
+                                    const isCurrentMonth = day.getMonth() === currentMonth;
+                                    const today = isToday(day);
+                                    const key = toLocalDateString(day);
+                                    return (
                                         <div
+                                            key={key}
                                             className={cn(
-                                                'text-xs font-medium mb-0.5 w-6 h-6 flex items-center justify-center rounded-full',
-                                                today && 'bg-primary text-primary-foreground',
-                                                !isCurrentMonth && !today && 'text-muted-foreground',
+                                                'border-r last:border-r-0 p-1 cursor-pointer hover:bg-accent/30 transition-colors',
+                                                !isCurrentMonth && 'bg-muted/30',
                                             )}
+                                            onClick={(e) => e.target === e.currentTarget && onDayClick(day)}
                                         >
-                                            {day.getDate()}
+                                            <Link
+                                                to="/view/$mode/$date"
+                                                params={{ mode: 'day', date: key }}
+                                                className={cn(
+                                                    'text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full',
+                                                    today
+                                                        ? 'bg-(--app-current-color) text-background'
+                                                        : 'hover:bg-accent',
+                                                    !isCurrentMonth && !today && 'text-muted-foreground',
+                                                )}
+                                            >
+                                                {day.getDate()}
+                                            </Link>
                                         </div>
+                                    );
+                                })}
 
-                                        <div className="space-y-0.5">
-                                            {visibleEvents.map((event, idx) => {
-                                                const freeBusy = isFreeBusyEvent(event);
-                                                const color = getCalendarColor(event, calendars, sharedCalendars);
-                                                const inviteStatus = freeBusy
-                                                    ? null
-                                                    : getInviteStatus(event, user?.email);
-                                                if (event.allDay) {
-                                                    return (
-                                                        <div
-                                                            key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                            className={cn(
-                                                                'text-xs leading-tight px-1 py-0.5 rounded truncate',
-                                                                eventPillStateClasses('block', freeBusy, inviteStatus),
-                                                            )}
-                                                            style={
-                                                                inviteStatus === 'pending'
-                                                                    ? { borderColor: color, color }
-                                                                    : {
-                                                                          backgroundColor: color,
-                                                                          color: readableTextColor(color),
-                                                                      }
-                                                            }
-                                                            onClick={(e) => handleEventClick(event, e)}
-                                                            title={event.title}
-                                                        >
-                                                            {event.title}
-                                                        </div>
-                                                    );
-                                                }
-                                                return (
-                                                    <div
-                                                        key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                        className={cn(
-                                                            'text-xs leading-tight flex items-center gap-1 truncate rounded px-0.5',
-                                                            eventPillStateClasses('dot', freeBusy, inviteStatus),
-                                                        )}
-                                                        onClick={(e) => handleEventClick(event, e)}
-                                                        title={event.title}
-                                                    >
-                                                        <div
-                                                            className={cn(
-                                                                'h-1.5 w-1.5 rounded-full shrink-0',
-                                                                inviteStatus === 'pending' &&
-                                                                    'ring-1 ring-current bg-transparent',
-                                                            )}
-                                                            style={{
-                                                                backgroundColor:
-                                                                    inviteStatus === 'pending' ? 'transparent' : color,
-                                                                color,
-                                                            }}
-                                                        />
-                                                        <span className="text-muted-foreground">
-                                                            {formatEventTime(event)}
-                                                        </span>
-                                                        <span className="truncate">{event.title}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                            {moreCount > 0 && (
-                                                <div className="text-xs text-muted-foreground font-medium px-0.5">
-                                                    {moreCount} more
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
+                                <div
+                                    className="pointer-events-none absolute inset-x-0 top-7 grid grid-cols-7 gap-y-0.5 *:pointer-events-auto"
+                                    style={{ gridTemplateRows: `repeat(${lanes}, ${LANE}px)` }}
+                                >
+                                    {bars.map((bar) => (
+                                        <EventBar
+                                            key={`${bar.event.id}-${bar.event.occurrenceDate}-${bar.start}`}
+                                            bar={bar}
+                                            {...surfaceProps}
+                                            onDragStart={moveEvent}
+                                        />
+                                    ))}
+                                    {hidden.map(
+                                        (count, idx) =>
+                                            count > 0 && (
+                                                <MonthDayPopover
+                                                    key={toLocalDateString(week[idx])}
+                                                    day={week[idx]}
+                                                    events={dayEvents(shownEvents, week[idx])}
+                                                    hiddenCount={count}
+                                                    {...surfaceProps}
+                                                    style={{ gridRow: lanes, gridColumn: idx + 1 }}
+                                                />
+                                            ),
+                                    )}
+                                    {ghostBar && <LaneGhost bar={ghostBar} {...surfaceProps} />}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
             <EventDetailDialog {...detailDialogProps} />
+            {dropHostProps && <EventDropHost {...dropHostProps} />}
         </>
     );
+}
+
+// The day under a pointer, counted from the grid's first day: its rows share the height and each holds seven days.
+function dayAt(grid: Element, rows: number, clientX: number, clientY: number): number {
+    const { left, top, width, height } = grid.getBoundingClientRect();
+    return cellAt(top, height, clientY, rows) * 7 + cellAt(left, width, clientX, 7);
 }

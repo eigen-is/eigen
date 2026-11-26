@@ -37,6 +37,9 @@ export type Scene = {
     composite?: 'side-by-side';
     // A still draws no pointer unless it points at something on purpose, such as an open menu.
     pointer?: boolean;
+    // A still other sites show for a link, such as the preview card under a shared page: a JPEG at the viewport's own
+    // size, since some of them take no webp.
+    share?: boolean;
     // Runs before the camera rolls, such as opening the app and waiting for it to load.
     setup?: (ctx: SceneContext) => Promise<void>;
     run: (ctx: SceneContext) => Promise<void>;

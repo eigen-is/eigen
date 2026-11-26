@@ -241,7 +241,7 @@ test('a signed-in user on the editor URL gets the editor', async () => {
 test('a visitor lands on login, with the way back, for an item the link does not open', async () => {
     const { router } = await open(`/fs/${OWNER}/default/secret`);
     expect(router.state.location.pathname).toBe('/login');
-    expect(router.state.location.search).toEqual({ redirect: `/fs/${OWNER}/default/secret` });
+    expect(router.state.location.search).toEqual({ redirect: `http://localhost:3000/fs/${OWNER}/default/secret` });
 });
 
 test('a visitor lands on login when the permission read fails', async () => {

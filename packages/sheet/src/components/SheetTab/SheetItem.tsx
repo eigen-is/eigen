@@ -1,5 +1,5 @@
-// One tab in the sheet tab strip: its name, renamed in place on a double click, its color, its context menu,
-// and the drag and drop that moves it. A drop renumbers every sheet's order from 0.
+// One tab in the sheet tab strip: its name, renamed in place on a double click (Enter saves, Escape drops), its color,
+// its context menu, and the drag and drop that moves it. A drop renumbers every sheet's order from 0.
 
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
@@ -87,15 +87,16 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
 
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLSpanElement>) => {
-            // Enter commits the name instead of starting a new line in it, and the next keys go to the grid.
-            if (e.key === 'Enter') {
+            // The blur saves, so Escape puts the old name back first. Either way the next keys go to the grid.
+            if (e.key === 'Escape' && editable.current) editable.current.innerText = sheet.name;
+            if (e.key === 'Enter' || e.key === 'Escape') {
                 e.preventDefault();
                 editable.current?.blur();
                 refs.cellInput.current?.focus({ preventScroll: true });
             }
             e.stopPropagation();
         },
-        [refs.cellInput],
+        [refs.cellInput, sheet.name],
     );
 
     const onDragStart = useCallback(

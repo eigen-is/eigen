@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, rows, columns, resize]
 related: [sheets/create-and-edit, sheets/enter-and-edit-data]
 order: 80
-updated: 2026-11-08
+updated: 2026-11-25
 ---
 
 You can add and remove rows and columns at any point, and adjust their size to fit your data. All of these actions are available from the menu bar or by right-clicking directly on the grid.
@@ -23,7 +23,7 @@ You can add and remove rows and columns at any point, and adjust their size to f
 1. Right-click the row number of the row next to where you want the new row.
 2. Choose **Insert 1 row above** or **Insert 1 row below**.
 
-To add rows to the end of the sheet, use the **Add** button at the very bottom of the grid. Type a count in the box next to it, then click **Add**.
+To add rows to the end of the sheet, use the **Add** button at the very bottom of the grid. Type a count in the box next to it, then click **Add**. An empty box adds 50 rows. A count that isn't a whole number from 1 to 10,000, or that would take the sheet past 10,000 rows, adds nothing and shows a message that says why.
 
 ## Insert columns
 
@@ -76,7 +76,7 @@ To set a column to fit its contents, double-click the right edge of the column l
 
 1. Click a row number or column letter to select it.
 2. Right-click the selection.
-3. Choose **Resize the row** or **Resize the column**. Type a number in the dialog that opens, then click **OK**. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
+3. Choose **Resize the row** or **Resize the column**. Type a number in the dialog that opens, then click **Apply**. Row height accepts values from 1 to 545 px; column width accepts values from 1 to 2038 px.
 
 ## Hide and show rows or columns
 

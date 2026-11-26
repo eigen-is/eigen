@@ -5,10 +5,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
+import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
-const window = installHappyDom();
+installHappyDom();
 
 const { act, createElement } = await import('react');
 const { PropertySection } = await import('@workspace/ui/components/properties-panel');
@@ -20,8 +21,6 @@ const chart: SheetChart = { id: 'c1', index: 'a1', ...newChartSpecParts(sampleCh
 
 let unmount = async () => {};
 afterEach(() => unmount());
-
-const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
 
 async function render(item: SheetFloatingItem, canWrite = true) {
     const heard: unknown[] = [];
@@ -72,11 +71,9 @@ describe.each([
         expect(inputs.map((input) => input.value).slice(0, 4)).toEqual(['12', '30', '200', '100']);
         expect(inputs.at(-1)?.value).toBe('45');
         const angle = inputs.at(-1);
-        await act(async () => {
-            angle?.focus();
-            nativeValueSetter?.call(angle, '90');
-            angle?.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        if (!angle) throw new Error('no angle field');
+        await act(async () => angle.focus());
+        await type(angle, '90');
         expect(heard).toEqual(['hold', { angle: 90 }]);
     });
 
@@ -158,10 +155,7 @@ test('âŒ˜Z in a typed chart title takes the whole title back in one step, and â‡
         title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
     });
     for (const text of ['U', 'Un', 'Und', 'Undo']) {
-        await act(async () => {
-            nativeValueSetter?.call(title, text);
-            title.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await type(title, text);
     }
     const press = (shiftKey: boolean) =>
         act(async () => {
