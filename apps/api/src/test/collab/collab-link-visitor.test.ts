@@ -1,5 +1,5 @@
 import type { Mock } from 'bun:test';
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -7,7 +7,7 @@ import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { MAX_SYNC_STEP_1_BYTES } from '../../lib/collab/collab-document';
+import { MAX_SYNC_STEP_1_BYTES, SYNC_STEP_1_INTERVAL_MS } from '../../lib/collab/collab-document';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/shared-schema';
@@ -37,6 +37,9 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const STEP_1 = syncProtocol.messageYjsSyncStep1;
 const STEP_2 = syncProtocol.messageYjsSyncStep2;
+
+// Each round trip waits out the server's step 1 interval, so a test with a few of them outlasts the default.
+setDefaultTimeout(30_000);
 
 const ACCESS_LOST = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 const NO_INFO = { canRead: false, canWrite: false, path: null, folderContents: null };
@@ -151,6 +154,9 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     // is an awareness frame with no state in it, and the server's own state, which a member gets at sync, is empty.
     const syncFrames: number[] = [];
     const awareness: AwarenessEntry[] = [];
+    // When the server's last step 2, its answer to a step 1, arrived.
+    let answeredAt = 0;
+    let pongs = 0;
 
     let upgraded = false;
     ws.onopen = () => {
@@ -162,13 +168,16 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
         ws.send(syncFrame((encoder) => syncProtocol.writeUpdate(encoder, update)));
     });
     ws.onmessage = ({ data }) => {
+        if (data === 'pong') pongs++;
         if (!(data instanceof ArrayBuffer)) return;
         const decoder = decoding.createDecoder(new Uint8Array(data));
         const messageType = decoding.readVarUint(decoder);
         if (messageType === MESSAGE_SYNC) {
             const reply = encoding.createEncoder();
             encoding.writeVarUint(reply, MESSAGE_SYNC);
-            syncFrames.push(syncProtocol.readSyncMessage(decoder, reply, doc, ws));
+            const kind = syncProtocol.readSyncMessage(decoder, reply, doc, ws);
+            syncFrames.push(kind);
+            if (kind === STEP_2) answeredAt = Date.now();
             if (encoding.length(reply) > 1) ws.send(frameOf(reply));
         } else if (messageType === MESSAGE_AWARENESS) {
             const entries = decoding.createDecoder(decoding.readVarUint8Array(decoder));
@@ -186,7 +195,9 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     });
     const count = (kind: number) => syncFrames.filter((frame) => frame === kind).length;
     const text = () => doc.getText('probe').toString();
-    return { ws, doc, closed, awareness, count, text, upgraded: () => upgraded };
+    // Resolves once the server would answer this socket's next step 1.
+    const paced = () => Bun.sleep(Math.max(0, answeredAt + SYNC_STEP_1_INTERVAL_MS + 10 - Date.now()));
+    return { ws, doc, closed, awareness, count, text, paced, pongs: () => pongs, upgraded: () => upgraded };
 }
 
 type Client = ReturnType<typeof connect>;
@@ -201,7 +212,9 @@ async function open(user: TestUser | null, pathId: string, doc?: Y.Doc): Promise
 
 // The server handles one socket's frames in order and sends in order, so once this step 1 is answered the server has
 // handled every frame the client sent before it, and the client has every frame the server sent it before the answer.
+// The server answers a socket's step 1 at most once per interval, so it waits that out first.
 async function roundTrip(client: Client): Promise<void> {
+    await client.paced();
     const before = client.count(STEP_2);
     client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, client.doc)));
     await waitFor(() => client.count(STEP_2) > before, 5_000);
@@ -265,15 +278,33 @@ describe('a socket without a login opens what a public link opens', () => {
         expect(visitor.text()).toBe('inside');
     });
 
-    test('every step 1 is answered, as y-websocket sends one every few seconds, and the socket stays', async () => {
+    // An answer to an empty state vector is the whole document, so a burst would hold the event loop.
+    test('a burst of step 1 frames gets one answer, the next after the interval another, for a member and a visitor', async () => {
         const doc = await newPublicDoc();
-        const visitor = await open(null, doc.id);
-        const before = visitor.count(STEP_2);
-        for (let i = 0; i < 3; i++) {
-            visitor.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, visitor.doc)));
+        for (const user of [alice, null]) {
+            const client = await open(user, doc.id);
+            await client.paced();
+            const before = client.count(STEP_2);
+            for (let i = 0; i < 50; i++) {
+                client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, new Y.Doc())));
+            }
+            await waitFor(() => client.count(STEP_2) === before + 1, 5_000);
+            await roundTrip(client);
+            expect(client.count(STEP_2)).toBe(before + 2);
+            expect(client.ws.readyState).toBe(WebSocket.OPEN);
         }
-        await waitFor(() => visitor.count(STEP_2) === before + 3, 5_000);
-        expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
+    });
+
+    test("another socket's first step 1 is answered at once", async () => {
+        const doc = await newPublicDoc();
+        for (const user of [alice, null]) {
+            const first = await open(user, doc.id);
+            const start = Date.now();
+            const second = await open(user, doc.id);
+            expect(Date.now() - start).toBeLessThan(SYNC_STEP_1_INTERVAL_MS);
+            expect(second.count(STEP_2)).toBe(1);
+            await roundTrip(first);
+        }
     });
 
     test('a step 1 over the cap gets no answer, for a member and a visitor, and the next one does', async () => {
@@ -294,13 +325,26 @@ describe('a socket without a login opens what a public link opens', () => {
 
         for (const user of [alice, null]) {
             const client = await open(user, doc.id);
+            await client.paced();
             const before = client.count(STEP_2);
             client.ws.send(huge);
-            client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, client.doc)));
-            await waitFor(() => client.count(STEP_2) > before, 5_000);
             // Frames are answered in order, so after this round trip an answer to the big one would have arrived.
             await roundTrip(client);
-            expect(client.count(STEP_2)).toBe(before + 2);
+            expect(client.count(STEP_2)).toBe(before + 1);
+            expect(client.ws.readyState).toBe(WebSocket.OPEN);
+        }
+    });
+
+    // Every other text frame is dropped unread, and Elysia hands it over unparsed (collab-ws-text-frames.test.ts).
+    test('ping gets its pong after a few MB of JSON in a text frame, for a member and a visitor', async () => {
+        const doc = await newPublicDoc();
+        const json = `[${'0,'.repeat(2 * 1024 * 1024)}0]`;
+        for (const user of [alice, null]) {
+            const client = await open(user, doc.id);
+            client.ws.send(json);
+            client.ws.send('ping');
+            await waitFor(() => client.pongs() === 1, 5_000);
+            await roundTrip(client);
             expect(client.ws.readyState).toBe(WebSocket.OPEN);
         }
     });

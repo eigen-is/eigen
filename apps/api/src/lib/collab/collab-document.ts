@@ -42,6 +42,9 @@ const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 // A step 1 is a state vector, a few bytes per client id that ever edited, so 1 MiB is over a hundred thousand
 // editors. Decoding and answering a larger, forged one would hold the event loop.
 export const MAX_SYNC_STEP_1_BYTES = 1024 * 1024;
+// An answer to a step 1 can be the whole document. y-websocket resends one every 5 s, and on a quiet document that
+// answer keeps it from closing the socket, so a connection is answered at most this often and the rest are dropped.
+export const SYNC_STEP_1_INTERVAL_MS = 2_000;
 
 // Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
@@ -65,6 +68,7 @@ export class CollabDocument {
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
     private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
+    private readonly syncStep1AnsweredAt = new Map<ServerWebSocket<unknown>, number>();
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
     // The hold on the Home while the document lingers. Edits over a socket are no requests, so the Home's idle time
@@ -220,6 +224,9 @@ export class CollabDocument {
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
                 if (message.byteLength > MAX_SYNC_STEP_1_BYTES) return;
+                const now = Date.now();
+                if (now - (this.syncStep1AnsweredAt.get(conn) ?? 0) < SYNC_STEP_1_INTERVAL_MS) return;
+                this.syncStep1AnsweredAt.set(conn, now);
                 sendFrame(
                     conn,
                     encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
@@ -295,6 +302,7 @@ export class CollabDocument {
             if (clientIds.size > 0) awarenessProtocol.removeAwarenessStates(this.awareness, [...clientIds], null);
         }
         this.connectionClientIds.delete(conn);
+        this.syncStep1AnsweredAt.delete(conn);
     }
 
     private scheduleClose(): void {
