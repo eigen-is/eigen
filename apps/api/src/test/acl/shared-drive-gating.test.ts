@@ -74,6 +74,7 @@ describe('SharedDrive gating enumeration', () => {
         requireMove: { gate: 'private-helper', reason: 'the write gates of a move, on source and target' },
         isEffectiveOwner: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
         sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
+        requireShare: { gate: 'private-helper', reason: 'the gate for ACL changes: write held by name' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },
@@ -254,12 +255,12 @@ describe('SharedDrive gating enumeration', () => {
         },
         inviteToChat: {
             gate: 'denies',
-            reason: 'write-gated',
+            reason: 'gated on write held by name, as it shares the document',
             call: (sd) => sd.inviteToChat(mountId, docId, charlie.email),
         },
         updateACLDelta: {
             gate: 'denies',
-            reason: 'write-gated (blocks self-escalation)',
+            reason: 'gated on write held by name (blocks self-escalation)',
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },

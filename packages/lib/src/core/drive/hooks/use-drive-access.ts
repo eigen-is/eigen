@@ -1,16 +1,21 @@
 // Who can reach a Drive item, as the share dialog and the detail panel show it: the owner and the item's own
 // ACL entries first, then what each parent folder grants, each person once. The rest of the file answers
-// smaller questions, such as whether the user owns an item directly or through a team, had it shared, or may
-// write in a folder.
+// smaller questions, such as whether the user owns an item directly or through a team, had it shared, may share
+// it, or may write in a folder.
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { DirectAccessItem, DriveAccessItem, InheritedAccessItem } from '@workspace/lib/types/drive-access';
+import type {
+    DirectAccessItem,
+    DriveACL,
+    DriveAccessItem,
+    InheritedAccessItem,
+} from '@workspace/lib/types/drive-access';
 import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { useCallback, useMemo } from 'react';
-import { useAuth } from '../../auth';
+import { useAuth, useIsGuest } from '../../auth';
 import { useMyTeams } from '../../home';
 import { usePublicUser } from '../../public';
 import { useBreadcrumb } from './reads';
@@ -162,6 +167,27 @@ export function useCanWriteFolder(ownerId: string, mountId: string, pathId: stri
     const askServer = !isOwner && pathId !== 'root';
     const { data: permissions } = useCheckPermissions(ownerId, mountId, askServer ? pathId : undefined);
     return isOwner || permissions?.canWrite === true;
+}
+
+// Whether the user may change who has access, as the server decides it: an owner, or someone an entry on the item or
+// a folder above it lets write, by email or team, unless the owner restricted sharing. Write from "Anyone signed in
+// can edit" changes the content only. Until the folders above load, only the item's own entries count.
+export function useCanShare(path: DrivePath): boolean {
+    const { user } = useAuth();
+    const isGuest = useIsGuest();
+    const { data: myTeams } = useMyTeams();
+    const isOwner = useIsEffectiveOwner(path.ownerId);
+    const { data: chain } = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    if (!user || isGuest) return false;
+    if (isOwner) return true;
+    if (path.sharingRestricted) return false;
+    const email = user.email.toLowerCase();
+    const holdsWrite = (entry: DriveACL) => {
+        const parsed = parseOwnerId(entry.id);
+        if (parsed.type === 'team') return !!myTeams?.some((team) => team.id === parsed.id);
+        return entry.id.toLowerCase() === email;
+    };
+    return [...(chain ?? []), path].some((crumb) => !!crumb.acl?.some((entry) => entry.write && holdsWrite(entry)));
 }
 
 // Only the path's own ACL naming the user is a direct share, which a delete leaves instead of trashing the owner's

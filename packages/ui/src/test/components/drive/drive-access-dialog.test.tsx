@@ -4,7 +4,8 @@
 // to Remove, yourself included, may be added back. A save that fails stays open with the edits kept. General access
 // is one picker of three choices, the third offered on a file, folder or document while the server allows public
 // links, and a stored link shows whatever the server says. The read-only list's header is a button the keyboard
-// reaches. The owner gets the Share with team menu, and a viewer who may only look gets Close alone.
+// reaches. The owner gets the Share with team menu, and a viewer who may only look gets Close alone, as does someone
+// who edits only through the signed-in link: sharing needs an owner, or write held by name.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -19,9 +20,16 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-// The people and contacts the rows look up.
+// The people and contacts the rows look up, and the folders above the item, which a test sets.
+let breadcrumb: DrivePath[] = [];
 const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
-    Object.assign(async () => Response.json([]), { preconnect: fetch.preconnect }),
+    Object.assign(
+        async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            return Response.json(url.includes('/breadcrumb') ? breadcrumb : []);
+        },
+        { preconnect: fetch.preconnect },
+    ),
 );
 
 const OWNER: DirectAccessItem = { id: 'owner@example.com', read: true, write: true, owner: true };
@@ -34,7 +42,6 @@ const CAROL: InheritedAccessItem = { id: 'carol@example.com', read: true, write:
 let baseDirectList: DirectAccessItem[] = [];
 let isGuest = false;
 let isEffectiveOwner = true;
-let canWrite = true;
 let myTeams: { id: string; name: string }[] = [];
 let publicLinks = true;
 
@@ -49,7 +56,6 @@ mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useUpdateACL: () => ({ mutateAsync: updateACL }),
     useIsEffectiveOwner: () => isEffectiveOwner,
-    useCheckPermissions: () => ({ data: { canRead: true, canWrite } }),
     useDriveAccess: (path: DrivePath, override?: DirectAccessItem[]) => {
         // A second item, which Erin can see and nobody else.
         const base = path.id === plans.id ? [OWNER, ERIN] : baseDirectList;
@@ -96,6 +102,13 @@ const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveAccessDialog } = await import('../../../components/drive/drive-access-dialog');
 
 const notes = drivePath({ id: 'notes', name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC });
+// Notes in someone else's drive, where the signed-in user holds the given entry, or none.
+const sharedNotes = (entry?: { id: string; read: boolean; write: boolean }): DrivePath => ({
+    ...notes,
+    ownerId: 'someone-else',
+    acl: entry ? [entry] : null,
+});
+const MY_EDITOR_ENTRY = { id: OWNER.id, read: true, write: true };
 const plans = drivePath({ id: 'plans', name: 'Plans.eigendoc', mimeType: DRIVE_MIME_DOC });
 const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
@@ -107,7 +120,7 @@ beforeEach(() => {
     baseDirectList = [OWNER, ADA, BOB];
     isGuest = false;
     isEffectiveOwner = true;
-    canWrite = true;
+    breadcrumb = [];
     sharedPath = notes;
     myTeams = [];
     publicLinks = true;
@@ -324,6 +337,7 @@ test('a person set to Remove is added back with the access they had', async () =
 test('your own entry set to Remove is added back by your own address', async () => {
     baseDirectList = [{ ...ADA, id: OWNER.id }, BOB];
     isEffectiveOwner = false;
+    sharedPath = sharedNotes(MY_EDITOR_ENTRY);
     await open();
     await chooseAccess(OWNER.id, 'Remove');
     expect(people()).toContain('owner@example.com: Remove');
@@ -521,7 +535,7 @@ test('the owner shares with a team from the footer menu', async () => {
 test('a viewer who may only look sees the list and Close alone', async () => {
     isGuest = true;
     await open();
-    expect(dialog()?.textContent).toContain('Sharing is restricted by the owner.');
+    expect(dialog()?.textContent).toContain('You can view who has access.');
     expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).toBeNull();
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
 
@@ -540,7 +554,7 @@ test('a viewer who may only look sees the list and Close alone', async () => {
 // Chat's share summary opens Share for every member, and the server refuses a save from one who may not write.
 test('a member who may not write sees the list, a line that says so and Close alone', async () => {
     isEffectiveOwner = false;
-    canWrite = false;
+    sharedPath = sharedNotes({ ...MY_EDITOR_ENTRY, write: false });
     await open();
     expect(dialog()?.textContent).toContain('You can view who has access.');
     expect(dialog()?.textContent).not.toContain('Sharing is restricted by the owner.');
@@ -550,15 +564,54 @@ test('a member who may not write sees the list, a line that says so and Close al
 
 test('an editor edits the list, unless the owner restricted sharing', async () => {
     isEffectiveOwner = false;
+    sharedPath = sharedNotes(MY_EDITOR_ENTRY);
     await open();
     expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).not.toBeNull();
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'Save']);
     await unmount();
 
-    sharedPath = { ...notes, sharingRestricted: true };
+    sharedPath = { ...sharedNotes(MY_EDITOR_ENTRY), sharingRestricted: true };
     await open();
     expect(dialog()?.textContent).toContain('Sharing is restricted by the owner.');
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
+});
+
+// The server refuses their save, so the dialog offers none: they may change the content, not who has access.
+test('someone who edits only through the signed-in link, by-name viewer or not, sees the list and Close alone', async () => {
+    isEffectiveOwner = false;
+    for (const entry of [undefined, { ...MY_EDITOR_ENTRY, write: false }]) {
+        sharedPath = { ...sharedNotes(entry), visibility: 'public-write' };
+        await open();
+        await settle();
+        expect(dialog()?.textContent).toContain('You can view who has access.');
+        expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).toBeNull();
+        expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
+        await unmount();
+    }
+});
+
+test('an editor by name, through a team or through a folder above edits the list, as the owner does', async () => {
+    // A team id in the shape the server hands out, as the server matches only those.
+    const teamId = 'abcdef0123456789abcdef0123456789';
+    myTeams = [{ id: teamId, name: 'Design' }];
+    const byTeam = { id: teamOwnerId(teamId), read: true, write: true };
+    const above = { ...sharedNotes(MY_EDITOR_ENTRY), id: 'projects', name: 'Projects' };
+    const below = { ...sharedNotes(), visibility: 'public-write' } as const;
+    for (const [path, chain] of [
+        [notes, []],
+        [{ ...sharedNotes(MY_EDITOR_ENTRY), visibility: 'public-write' }, []],
+        [{ ...sharedNotes(byTeam), visibility: 'public-write' }, []],
+        [below, [above, below]],
+    ] as const) {
+        isEffectiveOwner = path === notes;
+        sharedPath = path;
+        breadcrumb = [...chain];
+        await open();
+        await settle();
+        expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).not.toBeNull();
+        expect(button('Save')).toBeDefined();
+        await unmount();
+    }
 });
 
 // Who may edit and who may only look see the same name for the general access, with the role it gives beside it.
