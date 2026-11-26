@@ -233,7 +233,7 @@ A press on empty space closes nothing, except on the calendar grid, where the gr
 
 **Tools while a detail is open.** The detail takes the right slot; a right tool yields while it is open, as comments replace properties today. A left tool (the rail, the Docs outline) stays. Slides refits its slide as the column grows into a thread (928 → 784 at 1440); Vector's canvas narrows from the right.
 
-**Revealing an anchor.** A thread opened from the list or the activity reveals its anchor. In the prototype Vector panned about 800px to do it. The build pans only when the anchor would sit under the column, and then by the least distance that clears it.
+**Revealing an anchor.** A thread opened from the list or the activity reveals its anchor. Vector centers the anchor's shape in the canvas left of the column, once the column has its thread width, at the current zoom (owner, 26 November 2026). It pans even when the shape is already in view, and a shape larger than that area still gets its center at the area's center. The anchor's own click, its comment mark or the hover card, doesn't move the canvas. Slides goes to the anchor's slide.
 
 **Focus.** A thread opened by a click focuses its composer. A landing or a reload doesn't, so the reply box doesn't look focused on a page the user hasn't touched. While the focus is in the column, the editor's typing, its keymaps and the app's shortcuts beside the detail stand down: `useFocusInDetail()` joins `useDialogOpen()` in their `enabled`. The app shortcuts are calendar's view keys (`useCalendarShortcuts`, enabled from `CalendarToolbar`) and the Yjs undo keys (`useYjsUndoHotkeys`, from Stickies' board and the canvas' `useCanvasKeyboard`), so ⌘Z in a reply box doesn't undo the board or the slide. The command palette's ⌘K (`usePaletteShortcuts`) and Print (`GlobalHotkeys` in `eigen-app.tsx`) stay on everywhere, as they do over a dialog. Mail's shortcuts (`useMailShortcuts`) act on the open message, so they stay on in Mail's detail.
 
@@ -352,6 +352,7 @@ After the prototype's second round (owner, 25 November 2026):
 12. **Docs' overlay, precisely.** The column may lie over the page's right margin, never its text, which `panelClearWidth` guarantees; "the page doesn't move" means that.
 13. **An opened event has no block** (owner, 25 November 2026). In a calendar the color only says which calendar an event is on, where a card's or comment's color is one a person picked to mean something. So an opened event, in the event dialog, the edit and create dialogs and the .ics preview, shows its title as a plain `text-xl font-medium` heading, its time rows, the meta line and the captioned sections, with no colored or muted box. Its color stays on the grid's tiles.
 14. **The comments and activity list is `small`, the same as properties** (owner, 26 November 2026): in every app the list is 256 like the properties panel it takes turns with, so the right slot keeps its width when you switch; a thread still grows to `large`. This replaces the `medium` list of decisions 3 and 4.
+15. **Going to a comment in Vector centers its shape** (owner, 26 November 2026), in the canvas left of the column, at the current zoom; the anchor's own click doesn't move the canvas.
 
 ## 8. Risks
 

@@ -46,8 +46,10 @@ const subscribeSync = (listener: () => void) => {
 // A canvas that loaded, with no server behind it.
 mock.module('@workspace/lib/collab', () => ({
     ...realCollab,
-    useCollabDoc: () => {
+    useCollabDoc: (options: Parameters<typeof realCollab.useCollabDoc>[0]) => {
         const docRef = useRef(doc);
+        const onInit = useRef(options.onInit);
+        useEffect(() => onInit.current?.({ doc, provider, undoManager: null }), []);
         return {
             doc,
             docRef,
@@ -88,7 +90,7 @@ afterAll(() => {
 
 const { commentKeys } = await import('@workspace/lib/chat');
 const { driveKeys, MediaResolverProvider } = await import('@workspace/lib/drive');
-const { VECTOR_STYLE_DEFAULTS } = await import('@workspace/lib/vector');
+const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
 const { CanvasDocumentShell, useCanvasCommentHost, useCanvasDoc } = await import('../../../components/vector');
 const { eigenDocEditorValidateSearch } = await import('../../../components/drive/eigendoc-config');
 const { LayoutContext } = await import('../../../components/layout/app/layout-context');
@@ -113,6 +115,7 @@ beforeEach(() => {
     card.set('description', '');
     card.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('card-1', card);
+    reveal.mockClear();
     thread.chatName = undefined;
     thread.autoFocus = undefined;
     mounts = 0;
@@ -136,6 +139,8 @@ function Editor() {
 }
 
 let openCard: (cardId: string) => void = () => {};
+// The host's reveal, which Vector turns into a centering pan: the element and the room the column grows into.
+const reveal = mock((_elementId: string, _growPx: number) => {});
 let toggleComments: () => void = () => {};
 
 // Rows null leave the comment index unanswered, as on a landing before it loads. A browser history runs the router's
@@ -171,7 +176,7 @@ async function openCanvas(
             panel,
             chat,
             doc: canvas,
-            onReveal: () => {},
+            onReveal: (el, growPx) => reveal(el.id, growPx),
         });
         openCard = comments.openCard;
         toggleComments = comments.column.toggleComments;
@@ -292,6 +297,21 @@ test('a click on an anchor opens its thread at 320 straight away and writes ?cha
     expect(columnWidth()).toBe('320px');
     expect(thread.chatName).toBe('thread-1.eigenchat');
     expect(button('Comments')).toBeDefined();
+});
+
+test("a list row reveals its anchor with the room the thread grows into, and the anchor's own click reveals nothing", async () => {
+    const [key] = generateNKeysBetween(null, null, 1);
+    const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
+    writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box');
+    await openCanvas(['/', '/?panel=comments']);
+    await click(listRow());
+    expect(reveal.mock.calls).toEqual([['box', 64]]);
+    await click(button('Comments'));
+    reveal.mockClear();
+    await act(async () => openCard('card-1'));
+    await settle();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(reveal).not.toHaveBeenCalled();
 });
 
 test('"‹ Comments" goes back to the list by replace, with its scroll kept', async () => {

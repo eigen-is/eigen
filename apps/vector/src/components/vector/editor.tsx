@@ -74,21 +74,12 @@ export function VectorEditor({
 
     const canvasRef = useRef<CanvasHandle | null>(null);
 
-    // A ⌘F match's reveal selects the element and brings it to the center. The infinite canvas has no slide to go to
-    // first, but the element may sit anywhere.
+    // A ⌘F match's or a comment's reveal selects the element and centers it at the current zoom. A comment centers it
+    // left of the room the comments column grows into as its thread opens.
     const revealElement = useCallback(
-        (el: VectorElement) => {
+        (el: VectorElement, growPx?: number) => {
             setSelectedIds([el.id]);
-            canvasRef.current?.centerOn(el);
-        },
-        [setSelectedIds],
-    );
-    // A comment's element moves only as far as it must to clear the comments column, which grows over the canvas's
-    // right edge as a thread opens.
-    const revealCommentElement = useCallback(
-        (el: VectorElement, growPx: number) => {
-            setSelectedIds([el.id]);
-            canvasRef.current?.panIntoView(el, growPx);
+            canvasRef.current?.centerOn(el, growPx);
         },
         [setSelectedIds],
     );
@@ -102,7 +93,7 @@ export function VectorEditor({
         panel,
         chat,
         doc,
-        onReveal: revealCommentElement,
+        onReveal: revealElement,
     });
     const addComment = canWrite && chatFolderId ? comments.addCommentTo : undefined;
 

@@ -157,19 +157,16 @@ describe('useViewport on the infinite canvas', () => {
         h.unmount();
     });
 
-    // The opening view puts the scene origin at the container center, 800 by 500, so a box's screen x is 800 more.
-    test('panIntoView leaves a box alone that is clear of the inset', () => {
+    test('centerOn with a right inset centers the point in the room left of it, even one already in view', () => {
         const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
-        act(() => h.state.panIntoView({ x: 100, y: 0, width: 100, height: 100, angle: 0 }, 80));
-        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 800, scrollY: 500 });
-        h.unmount();
-    });
+        // The room is 1536 wide, so its center is at 768, where the origin sat at 800.
+        act(() => h.state.centerOn(0, 0, 64));
+        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 768, scrollY: 500 });
 
-    test('panIntoView moves a box under the inset by the least distance that clears it', () => {
-        const h = mount({ mode: 'infinite' }, { width: 1600, height: 1000 });
-        // Its right edge at 1550, past the 1520 the inset leaves and the 24px margin before it.
-        act(() => h.state.panIntoView({ x: 650, y: 0, width: 100, height: 100, angle: 0 }, 80));
-        expect(h.state.viewportRef.current).toEqual({ zoom: 1, scrollX: 746, scrollY: 500 });
+        h.wheel({ deltaY: -200, ctrlKey: true, clientX: 800, clientY: 500 });
+        const { zoom } = h.state.viewportRef.current;
+        act(() => h.state.centerOn(300, -200, 64));
+        expect(h.state.viewportRef.current).toEqual({ zoom, scrollX: 768 / zoom - 300, scrollY: 500 / zoom + 200 });
         h.unmount();
     });
 });

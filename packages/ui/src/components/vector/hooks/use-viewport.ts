@@ -12,6 +12,7 @@ import {
     groupTransform,
     sceneTransform,
 } from '@workspace/lib/vector';
+import type { CSSProperties, RefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const MIN_ZOOM = 0.1;
@@ -22,18 +23,6 @@ const COMMIT_DELAY_MS = 120;
 
 const same = (a: CanvasViewport, b: CanvasViewport) =>
     a.zoom === b.zoom && a.scrollX === b.scrollX && a.scrollY === b.scrollY;
-
-// A revealed box keeps this much room from the container's edge, so its corner mark and handles show too.
-const REVEAL_MARGIN_PX = 24;
-
-// How far a span of screen px at `start` must move to sit inside [margin, end - margin], 0 when it already does. A
-// span too long for the room keeps its start in view.
-const shortfall = (start: number, size: number, end: number) => {
-    const low = REVEAL_MARGIN_PX - start;
-    if (low > 0) return low;
-    const high = end - REVEAL_MARGIN_PX - (start + size);
-    return high < 0 ? Math.max(high, low) : 0;
-};
 
 // Zoom to `nextZoom`, keeping the scene point under the container-relative (px, py) fixed.
 const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): CanvasViewport => ({
@@ -51,9 +40,27 @@ type UseViewportOptions = {
     resetKey?: string;
 };
 
-export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseViewportOptions = {}) {
-    const containerRef = useRef<HTMLDivElement>(null);
+type Viewport = {
+    containerRef: RefObject<HTMLDivElement | null>;
     // The three nodes whose position is the viewport.
+    sceneRef: RefObject<HTMLDivElement | null>;
+    overlayRef: RefObject<SVGGElement | null>;
+    chromeRef: RefObject<HTMLDivElement | null>;
+    // For handlers that must be exact mid-gesture; renders read `zoom` and `boxToStyle`.
+    viewportRef: RefObject<CanvasViewport>;
+    clientToScene: (clientX: number, clientY: number) => { x: number; y: number };
+    screenDeltaToScene: (dxPx: number, dyPx: number) => { dx: number; dy: number };
+    boxToStyle: (box: Box) => CSSProperties;
+    panBy: (dxPx: number, dyPx: number) => void;
+    pinch: (scale: number, px: number, py: number, panDxPx: number, panDyPx: number) => void;
+    resetZoom: () => void;
+    centerOn: (x: number, y: number, rightInsetPx?: number) => void;
+    frozenRef: RefObject<boolean>;
+    zoom: number;
+};
+
+export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseViewportOptions = {}): Viewport {
+    const containerRef = useRef<HTMLDivElement>(null);
     const sceneRef = useRef<HTMLDivElement>(null);
     const overlayRef = useRef<SVGGElement>(null);
     const chromeRef = useRef<HTMLDivElement>(null);
@@ -196,7 +203,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     // A scene box's unrotated place in container px, at the committed viewport the chrome layer is laid out at. The
     // chrome adds its own rotate().
     const boxToStyle = useCallback(
-        (box: Box): React.CSSProperties => ({
+        (box: Box): CSSProperties => ({
             left: (box.x + scrollX) * zoom,
             top: (box.y + scrollY) * zoom,
             width: box.width * zoom,
@@ -237,28 +244,14 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         set(settle(zoomAt(viewportRef.current, 1, width / 2, height / 2)));
     }, [fitFrame, containerExtent, settle, set]);
 
-    // A bounded page settles back to its fit, and an unmeasured container is left to the opening view.
+    // Centers a scene point in the container short of `rightInsetPx` at the right, such as the room a column is about
+    // to grow into. A bounded page settles back to its fit, and an unmeasured container is left to the opening view.
     const centerOn = useCallback(
-        (x: number, y: number) => {
+        (x: number, y: number, rightInsetPx = 0) => {
             const { width, height } = containerExtent();
             if (width === 0 || height === 0) return;
             const { zoom } = viewportRef.current;
-            set(settle({ zoom, scrollX: width / 2 / zoom - x, scrollY: height / 2 / zoom - y }));
-        },
-        [containerExtent, settle, set],
-    );
-
-    // Pans the least distance that brings a scene box into view, short of `rightInsetPx` at the right, such as room a
-    // column is about to grow into. A box already in view stays put.
-    const panIntoView = useCallback(
-        (box: Box, rightInsetPx: number) => {
-            const { width, height } = containerExtent();
-            if (width === 0 || height === 0) return;
-            const v = viewportRef.current;
-            const dx = shortfall((box.x + v.scrollX) * v.zoom, box.width * v.zoom, width - rightInsetPx);
-            const dy = shortfall((box.y + v.scrollY) * v.zoom, box.height * v.zoom, height);
-            if (dx === 0 && dy === 0) return;
-            set(settle({ ...v, scrollX: v.scrollX + dx / v.zoom, scrollY: v.scrollY + dy / v.zoom }));
+            set(settle({ zoom, scrollX: (width - rightInsetPx) / 2 / zoom - x, scrollY: height / 2 / zoom - y }));
         },
         [containerExtent, settle, set],
     );
@@ -295,7 +288,6 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         sceneRef,
         overlayRef,
         chromeRef,
-        // For handlers that must be exact mid-gesture; renders read `zoom` and `boxToStyle`.
         viewportRef,
         clientToScene,
         screenDeltaToScene,
@@ -304,7 +296,6 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         pinch,
         resetZoom,
         centerOn,
-        panIntoView,
         frozenRef,
         zoom,
     };

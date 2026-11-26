@@ -151,14 +151,14 @@ type Gesture = { pointerId: number } & (
 );
 
 // What the canvas offers its host, such as the toolbar's Insert and Edit rows, which need the live viewport or act on
-// the selection as the object menu's rows do, and a reveal for ⌘F or a comment card, which pans at the current zoom.
+// the selection as the object menu's rows do, and a reveal for ⌘F or a comment card, which centers at the current zoom.
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
     insertChart: (type: ChartType) => void;
-    centerOn: (el: VectorElement) => void;
-    // A comment's reveal: the least pan that shows the element, short of the room a column beside it grows into.
-    panIntoView: (el: VectorElement, rightInsetPx: number) => void;
+    // Centers the element at the current zoom, short of `rightInsetPx` at the right, such as the room a comments column
+    // grows into as its thread opens.
+    centerOn: (el: VectorElement, rightInsetPx?: number) => void;
     // Every element the canvas shows, on its background, as the SVG the browser draws, such as for File › Download.
     downloadDrawing: () => void;
     cut: () => void;
@@ -297,7 +297,6 @@ export function CanvasEditor({
         pinch,
         resetZoom,
         centerOn,
-        panIntoView,
         frozenRef,
         zoom,
     } = useViewport({
@@ -872,11 +871,10 @@ export function CanvasEditor({
         insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
         insertDrivePaths,
         insertChart,
-        centerOn: (el) => {
+        centerOn: (el, rightInsetPx) => {
             const box = elementBox(el);
-            centerOn(box.x + box.width / 2, box.y + box.height / 2);
+            centerOn(box.x + box.width / 2, box.y + box.height / 2, rightInsetPx);
         },
-        panIntoView: (el, rightInsetPx) => panIntoView(elementBox(el), rightInsetPx),
         downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
         cut: onMenuCut,
         copy: onMenuCopy,

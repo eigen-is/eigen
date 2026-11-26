@@ -23,8 +23,7 @@ const seen: {
     docArgs?: unknown[];
 } = {};
 const layout = { isMobile: false };
-const centerOn = mock((_el: VectorElement) => {});
-const panIntoView = mock((_el: VectorElement, _rightInsetPx: number) => {});
+const centerOn = mock((_el: VectorElement, _rightInsetPx?: number) => {});
 const updateMeta = mock((_meta: { background: string | null }) => {});
 // One object per hook, so the editor's memos and effects see stable values.
 const doc = {
@@ -92,7 +91,7 @@ mock.module('@workspace/ui/components/vector', () => ({
     },
     CanvasEditor: (props: Props & { canvasRef: { current: unknown } }) => {
         seen.canvas = props;
-        props.canvasRef.current = { centerOn, panIntoView };
+        props.canvasRef.current = { centerOn };
         return null;
     },
     CanvasPropertiesPanel: (props: Props & { emptySection: ReactNode }) => {
@@ -133,7 +132,6 @@ afterEach(() => unmount());
 beforeEach(() => {
     layout.isMobile = false;
     centerOn.mockClear();
-    panIntoView.mockClear();
     updateMeta.mockClear();
 });
 
@@ -220,18 +218,17 @@ test('a ⌘F reveal selects the element and centers the canvas on it', async () 
     await act(async () => reveal(element));
     expect(seen.canvas?.selectedIds).toEqual(['shape-7']);
     expect(seen.toolbar?.selectedIds).toEqual(['shape-7']);
-    expect(centerOn).toHaveBeenCalledWith(element);
+    expect(centerOn).toHaveBeenCalledWith(element, undefined);
 });
 
-test("a comment's reveal selects the element and pans it only clear of the column", async () => {
+test("a comment's reveal selects the element and centers it left of the column's thread width", async () => {
     await renderEditor({});
     const reveal = seen.comments?.onReveal;
     if (typeof reveal !== 'function') throw new Error('the comments host gets no reveal');
     const element = { id: 'shape-7' };
     await act(async () => reveal(element, 80));
     expect(seen.canvas?.selectedIds).toEqual(['shape-7']);
-    expect(panIntoView).toHaveBeenCalledWith(element, 80);
-    expect(centerOn).not.toHaveBeenCalled();
+    expect(centerOn).toHaveBeenCalledWith(element, 80);
 });
 
 test("the empty selection's Background sets the scene's color, and None clears it", async () => {
