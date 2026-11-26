@@ -4,17 +4,12 @@
 // visitor without a login.
 
 import { useWatchToggle } from '@workspace/lib/drive';
+import type { DrivePathRef } from '@workspace/lib/types/drive';
 import { Bell, BellRing } from 'lucide-react';
 import { DropdownMenuItem } from '../../dropdown-menu';
 import { TooltipButton } from './tooltip-button';
 
-type WatchToggleButtonProps = {
-    ownerId: string;
-    mountId: string;
-    pathId: string;
-};
-
-export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+export function WatchToggleButton({ ownerId, mountId, pathId }: DrivePathRef) {
     const watch = useWatchToggle(ownerId, mountId, pathId);
     if (!watch) return null;
     const { direct, label, isPending, toggle } = watch;
@@ -29,7 +24,7 @@ export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButto
     );
 }
 
-export function WatchMenuItem({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+export function WatchMenuItem({ ownerId, mountId, pathId }: DrivePathRef) {
     const watch = useWatchToggle(ownerId, mountId, pathId);
     if (!watch) return null;
     const { direct, label, isPending, toggle } = watch;

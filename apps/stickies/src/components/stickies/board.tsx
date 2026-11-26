@@ -6,7 +6,12 @@ import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortabl
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    matchesCommentFilter,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -153,7 +158,7 @@ export function StickiesBoard({
         (card: CommentCard) => matchesCommentFilter(card, entryOf(card), commentFilter.filter, currentUserEmail),
         [entryOf, commentFilter.filter, currentUserEmail],
     );
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    const { activityPanelOpen, toggleActivity, closePanels } = useDocumentPanels(isMobile);
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const boardScrollRef = useRef<HTMLDivElement>(null);
@@ -297,9 +302,7 @@ export function StickiesBoard({
                                     filter={commentFilter}
                                     members={members}
                                     currentUserEmail={currentUserEmail}
-                                    onToggleActivityPanel={
-                                        user && !isMobile ? () => setActivityPanelOpen((v) => !v) : undefined
-                                    }
+                                    onToggleActivityPanel={isMobile ? undefined : toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                 />
                             }
@@ -425,7 +428,7 @@ export function StickiesBoard({
                                 {!isMobile && activityPanelOpen && (
                                     <PanelColumn
                                         activePanel="activity"
-                                        onClose={() => setActivityPanelOpen(false)}
+                                        onClose={closePanels}
                                         path={path}
                                         cards={cards}
                                         entries={allComments}

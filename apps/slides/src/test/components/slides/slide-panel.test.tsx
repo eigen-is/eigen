@@ -7,17 +7,20 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { useContextMenu } = await import('@workspace/ui/components/context-menu');
 const { SlidePanel } = await import('../../../components/slides/slide-panel');
 
 const deck = (size: SlideSize): VectorFrame[] =>
     ['f1', 'f2'].map((id, i) => ({ id, index: `a${i}`, name: '', ...SLIDE_SIZES[size], background: '' }));
 
-// The editor owns the drag id; this harness owns it the same way, so the overlay mounts on a real drag.
+// The editor owns the drag id and the slide menu, which a reader doesn't get; this harness owns them the same way, so
+// the overlay mounts on a real drag.
 function Rail({ frames, canEdit = true }: { frames: VectorFrame[]; canEdit?: boolean }) {
     const [dragActiveId, setDragActiveId] = useState<string | null>(null);
+    const slideMenu = useContextMenu<string>();
     return createElement(SlidePanel, {
         frames,
-        canEdit,
+        slideMenu: canEdit ? slideMenu : undefined,
         elements: [],
         activeFrameId: 'f1',
         onSelectFrame: () => {},

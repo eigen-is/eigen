@@ -1,5 +1,6 @@
 // The read-only marker an open document shows in its share cluster where the Share button would be, for someone who
-// may not write. It says why: a viewer was set to Viewer, and a visitor with a public link has no role at all.
+// may not write. A viewer is told why, being set to Viewer; a visitor with a public link has no role, so is told only
+// that they can view.
 
 import { useAuth } from '@workspace/lib/auth';
 import { Eye } from 'lucide-react';

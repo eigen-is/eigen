@@ -1,9 +1,10 @@
 // The bar across the top of every app: the app switcher and the app's logo on the left, the command palette
 // in the middle, and the notification bell and the account menu on the right. The account menu links to
 // Space's pages, picks the theme and logs out; a guest gets a shorter one. A visitor who is signed out gets the
-// logo, the open document's name and a quiet login icon instead, which goes to the demo on a demo server.
+// logo, the open document's name and a quiet login icon instead, which comes back to the page after the login, or
+// goes to the demo on a demo server.
 
-import { useRouter } from '@tanstack/react-router';
+import { useLocation, useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
 import {
     getAdminAppUrl,
@@ -44,6 +45,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
 import { UserAvatar } from '../../user/user-avatar';
 import { UserItem } from '../../user/user-item';
+import { loginLocation } from '../pages/auth-route';
 import { AboutDialog } from './about-dialog';
 import { AppLogo } from './app-logo';
 import { CommandPaletteTrigger } from './command-palette/command-palette-trigger';
@@ -91,7 +93,7 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
                                         active={isActive}
                                         className={cn(
                                             'px-3 py-3 border rounded-md flex flex-col items-center gap-1.5 w-full text-sm',
-                                            isActive ? 'bg-muted font-medium' : '',
+                                            isActive && 'bg-muted font-medium',
                                         )}
                                     >
                                         <Icon className="size-4.5" style={{ color: app.color }} />
@@ -216,9 +218,12 @@ function AccountMenu({ rootRoute, isGuest }: TopbarProps & { isGuest: boolean })
     );
 }
 
+// Space's login page, since a site page such as the index app's has no /login of its own.
 function LoginButton() {
     const { data: config } = usePublicConfig();
+    const location = useLocation();
     const demoMode = config?.demoMode ?? false;
+    const loginUrl = getSpaceAppUrl(`login?${new URLSearchParams(loginLocation(location).search)}`);
 
     const label = demoMode ? 'Enter demo' : 'Log in';
 
@@ -231,7 +236,7 @@ function LoginButton() {
                     asChild
                     className="h-8 w-8 text-[var(--topbar-icon)] hover:bg-[var(--topbar-icon-hover-bg)] hover:text-[var(--topbar-icon-hover-fg)]"
                 >
-                    <a href={demoMode ? getDemoEnterUrl() : getSpaceAppUrl()} aria-label={label}>
+                    <a href={demoMode ? getDemoEnterUrl() : loginUrl} aria-label={label}>
                         <LogIn className="h-4 w-4" />
                     </a>
                 </Button>

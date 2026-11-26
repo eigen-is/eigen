@@ -18,7 +18,7 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
     return {
         beforeLoad: ({ context, location }: { context: RouterAppContext; location: { publicHref: string } }) => {
             const { user } = context.auth;
-            if (!user) throw loginRedirect(location);
+            if (!user) throw redirect(loginLocation(location));
             if (redirectGuests && user.role === 'guest') {
                 window.location.href = getDriveAppUrl();
             }
@@ -42,16 +42,14 @@ export async function guardLinkRoute(
               () => false,
           )
         : false;
-    if (!canRead) throw loginRedirect(location);
+    if (!canRead) throw redirect(loginLocation(location));
 }
 
-function loginRedirect(location: { publicHref: string }) {
+// The login page with the page at `location` as the way back, where a guard, a denial or the top bar sends a visitor.
+export function loginLocation(location: { publicHref: string }) {
     // Widened like login-route's `to`: this file compiles in every app's Register,
     // including apps without a /login route of their own (the index app).
     const loginPath: string = '/login';
-    return redirect({
-        to: loginPath,
-        // publicHref keeps the app's basepath, which `href` drops.
-        search: { redirect: new URL(location.publicHref, window.location.origin).href },
-    });
+    // publicHref keeps the app's basepath, which `href` drops.
+    return { to: loginPath, search: { redirect: new URL(location.publicHref, window.location.origin).href } };
 }

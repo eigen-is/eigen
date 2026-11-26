@@ -646,9 +646,8 @@ export function CanvasEditor({
         [selectedIds, buildSnapTargets, viewportRef],
     );
 
-    // Mounting is the ready signal (the doc has synced); this tab's own uploads start later. Only a tab that may edit
-    // sweeps, since the server drops a reader's delete. Each id is checked again at removal, since another tab may have
-    // finished it, and the delete is untracked so a sweep is never undoable.
+    // The editor mounts once the doc has synced, so only a reader is held back: the server drops a reader's delete. An
+    // id is checked again at removal, as another tab may have finished it, and the untracked delete can't be undone.
     useZombieMediaSweep({
         ready: canEdit,
         scan: () =>

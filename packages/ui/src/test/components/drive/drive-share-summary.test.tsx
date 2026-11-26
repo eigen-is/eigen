@@ -143,3 +143,14 @@ test('the lock on a shared link says who the link lets in, as the Share dialog d
         link: 'Anyone with the link',
     });
 });
+
+test('the icon of a shared link stands clear of the people, so it reads whole', async () => {
+    for (const visibility of ['public-read', 'link'] as const) {
+        const { container } = await renderSummary({ visibility });
+        // The icon, then the two people.
+        const [, first, second] = container.querySelectorAll('[data-slot="tooltip-trigger"]');
+        expect(first?.className).not.toContain('-ml-');
+        expect(second?.className).toContain('-ml-4');
+        await unmount();
+    }
+});

@@ -1,10 +1,9 @@
 // A fake API for the editors' route tests. It answers a visitor, someone without a login, only on the routes a public
-// link opens, as the API's linkAuth lists them, and 401s the rest; a signed-in user gets every route. The document it
-// holds is public or private, and every request is recorded, so a test can say that a visitor asked for nothing more.
-// The collab socket never opens: open() marks the editor's providers connected and synced, once a test has seeded
-// their doc.
+// link opens, as the API's linkAuth lists them, and 401s the rest; a signed-in user gets every route. Every request is
+// recorded, so a test can say that a visitor asked for nothing more. The collab socket never opens: open() marks the
+// editor's providers connected and synced. editorVisitorTests are the tests every editor's route runs on it.
 
-import { afterAll, afterEach, beforeEach } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
 import type { AnyRoute } from '@tanstack/react-router';
 import type * as Auth from '@workspace/lib/auth';
 import type * as Collab from '@workspace/lib/collab';
@@ -54,7 +53,7 @@ export function withSession(auth: typeof Auth): typeof Auth {
 }
 
 // The editor's own providers, kept so open() can mark them synced and a test can read the awareness they would send.
-export const providers = new Set<WebsocketProvider>();
+const providers = new Set<WebsocketProvider>();
 
 // The collab module with every provider an editor opens kept in `providers`.
 export function withProviders(collab: typeof Collab): typeof Collab {
@@ -171,6 +170,65 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
         outsideTheLink: () => requested.filter((pathname) => !isVisitorRoute(pathname)),
         permissionReads: () => requested.filter((pathname) => pathname.endsWith('/permissions')),
     };
+}
+
+const READ_ONLY = "You can only read this document because you're set to Viewer";
+// A visitor has no role, so the marker doesn't name one.
+const VISITOR_READ_ONLY = 'You can view this document';
+
+// What an editor's route does for a visitor, a writer and a guest: read-only with no share, no activity and only the
+// routes on the link's list asked, or a login with the way back for a document the link does not open.
+export function editorVisitorTests({
+    server,
+    routeTree,
+    urlOf,
+    noun,
+}: {
+    server: ReturnType<typeof visitorServer>;
+    routeTree: AnyRoute;
+    urlOf: (pathId: string) => string;
+    noun: string;
+}) {
+    const open = (url: string) => server.open(routeTree, url);
+
+    test(`a visitor reads a public ${noun}, with its name in the bar, and asks only for what the link opens`, async () => {
+        const router = await open(urlOf('pub'));
+        expect(router.state.location.pathname).toBe(urlOf('pub'));
+        expect(labelled(VISITOR_READ_ONLY)).not.toBeNull();
+        expect(labelled(READ_ONLY)).toBeNull();
+        expect(document.querySelector('header')?.textContent).toContain('Holiday');
+        expect(labelled('Log in')).not.toBeNull();
+        expect(labelled('Share')).toBeNull();
+        expect(labelled('Activity')).toBeNull();
+        expect(server.outsideTheLink()).toEqual([]);
+        // No presence: with no local state y-websocket sends no awareness, and a cursor set later does nothing.
+        expect([...providers].map((provider) => provider.awareness.getLocalState())).toEqual([null]);
+        // The guard's read, and none from a share dialog.
+        expect(server.permissionReads()).toEqual([`/drive/${OWNER}/default/path/pub/permissions`]);
+    });
+
+    test(`a visitor lands on login, with the way back, for a ${noun} the link does not open`, async () => {
+        const router = await open(urlOf('secret'));
+        expect(router.state.location.pathname).toBe('/login');
+        expect(router.state.location.search).toEqual({ redirect: `http://localhost:3000${urlOf('secret')}` });
+    });
+
+    test(`a signed-in writer's ${noun} is editable, offers Share and reads the comment index`, async () => {
+        session.user = { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' };
+        await open(urlOf('pub'));
+        expect(labelled('Share')).not.toBeNull();
+        expect(labelled('Activity')).not.toBeNull();
+        expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
+        expect([...providers].every((provider) => provider.awareness.getLocalState() !== null)).toBe(true);
+    });
+
+    test(`a guest's ${noun} still reads the comment index and the members`, async () => {
+        session.user = { id: 'guest', email: 'guest@test.eigen.is', name: 'Guest', role: 'guest' };
+        await open(urlOf('pub'));
+        expect(labelled(READ_ONLY)).not.toBeNull();
+        expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
+        expect(server.requested).toContain(`/drive/${OWNER}/default/path/pub/effective-members`);
+    });
 }
 
 // A socket that stays connecting, so y-websocket sends nothing and never reconnects.

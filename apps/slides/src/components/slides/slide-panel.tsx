@@ -31,12 +31,11 @@ type SlidePanelProps = {
     // The whole scene's, sliced once per render, so each thumbnail's memo sees a list that changes only with its slide.
     elements: VectorElement[];
     activeFrameId: string;
-    canEdit: boolean;
     onSelectFrame: (frameId: string) => void;
     onDragStart: (event: DragStartEvent) => void;
     onDragEnd: (event: DragEndEvent) => void;
     dragActiveId: string | null;
-    // The editor's slide menu; absent for a read-only viewer, so no trigger arms.
+    // The editor's slide menu, absent for a reader, who neither opens it nor drags a slide.
     slideMenu?: ReturnType<typeof useContextMenu<string>>;
     matchedFrameIds?: ReadonlySet<string>;
 };
@@ -45,7 +44,6 @@ export function SlidePanel({
     frames,
     elements,
     activeFrameId,
-    canEdit,
     onSelectFrame,
     onDragStart,
     onDragEnd,
@@ -73,7 +71,7 @@ export function SlidePanel({
                     <SortableContext
                         items={frames.map((frame) => frame.id)}
                         strategy={verticalListSortingStrategy}
-                        disabled={!canEdit}
+                        disabled={!slideMenu}
                     >
                         {frames.map((frame, index) => (
                             <SortableSlide key={frame.id} frameId={frame.id} longPressBind={slideLongPress.bind}>
@@ -147,7 +145,7 @@ export function SlideStrip({ frames, elements, activeFrameId, onSelectFrame, mat
 }
 
 // One pass over the scene per render, not one per slide.
-function useElementsByFrame(frames: VectorFrame[], elements: VectorElement[]) {
+function useElementsByFrame(frames: readonly VectorFrame[], elements: readonly VectorElement[]) {
     return useMemo(() => {
         const byFrame = new Map<string, VectorElement[]>();
         for (const frame of frames) byFrame.set(frame.id, []);

@@ -73,13 +73,12 @@ export type DriveTableProps = DriveViewProps & {
     hideModified?: boolean;
     hideOwner?: boolean;
     hideShared?: boolean;
-    hideShareClick?: boolean;
     hideHeader?: boolean;
     // Drops the ⋮ column and its grid track at every pointer type, for a picker such as DriveBrowser,
     // whose rows have no actions.
     hideActions?: boolean;
     date?: DriveListDate;
-    ancestorBreadcrumb?: DrivePath[];
+    ancestorBreadcrumb?: readonly DrivePath[];
     sort?: DriveSortControl;
 };
 
@@ -121,7 +120,6 @@ export function DriveTable({
     hideModified = false,
     hideOwner = false,
     hideShared = false,
-    hideShareClick = false,
     hideHeader = false,
     hideActions = false,
     date,
@@ -237,9 +235,11 @@ export function DriveTable({
             <div ref={listRef} style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                     const item = items[virtualRow.index];
-                    // Only where Share runs, so a visitor, or a viewer of a read-only folder, gets no button that does
-                    // nothing.
-                    const offersShare = actions?.actionsFor([item]).some((action) => action.id === 'share') ?? false;
+                    // Only where Share runs, so a visitor, a viewer of a read-only folder or a picker gets no button
+                    // that does nothing.
+                    const onShareClick = actions?.actionsFor([item]).some((action) => action.id === 'share')
+                        ? (path: DrivePath) => actions.run('share', [path])
+                        : undefined;
                     return (
                         <div
                             key={item.id}
@@ -263,11 +263,10 @@ export function DriveTable({
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
-                                onShareClick={actions && ((path) => actions.run('share', [path]))}
+                                onShareClick={onShareClick}
                                 hideOwner={hideOwner}
                                 hideShared={hideShared}
                                 hideModified={hideModified}
-                                hideShareClick={hideShareClick || !offersShare}
                                 hideActions={hideActions}
                                 getItemDate={date?.of}
                                 ancestorBreadcrumb={ancestorBreadcrumb}

@@ -1,14 +1,13 @@
-// A visitor is someone without a login who opened a public link. The doc route renders for them over the real route
-// tree and editor, against a server that answers only the routes a public link opens: read-only, with no share, no
-// activity and only the routes on that list asked. A private doc sends them to log in with the way back, and a
-// signed-in user's and a guest's editor still read the comment index the visitor never asks for. The visitor's
-// comments pane, ?chat= landing and Print work from the document alone.
+// A visitor is someone without a login who opened a public link. The doc route runs the editors' visitor tests over the
+// real route tree and editor, and its editor is read-only to a visitor. The visitor's comments pane, ?chat= landing and
+// Print work from the document alone.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import { unmountAllRoots } from '@workspace/ui/test/render-in-document';
 import {
+    editorVisitorTests,
     labelled,
     OWNER,
-    providers,
     session,
     visitorServer,
     withProviders,
@@ -47,43 +46,22 @@ function commented(doc: Y.Doc) {
 const URL_OF = (pathId: string) => `/doc/${OWNER}/default/${pathId}`;
 const editable = () => document.querySelector('.ProseMirror:not(.page-band)')?.getAttribute('contenteditable');
 
-test('a visitor reads a public doc, with its name in the bar, and asks only for what the link opens', async () => {
-    const router = await open(URL_OF('pub'));
-    expect(router.state.location.pathname).toBe(URL_OF('pub'));
-    expect(editable()).toBe('false');
-    expect(document.querySelector('header')?.textContent).toContain('Holiday');
-    expect(labelled('Log in')).not.toBeNull();
-    expect(labelled('Share')).toBeNull();
-    expect(labelled('Activity')).toBeNull();
-    expect(server.outsideTheLink()).toEqual([]);
-    // No presence: with no local state y-websocket sends no awareness, and a cursor set later does nothing.
-    expect([...providers].map((provider) => provider.awareness.getLocalState())).toEqual([null]);
-    // The guard's read, and none from a share dialog.
-    expect(server.permissionReads()).toEqual([`/drive/${OWNER}/default/path/pub/permissions`]);
-});
+editorVisitorTests({ server, routeTree, urlOf: URL_OF, noun: 'doc' });
 
-test('a visitor lands on login, with the way back, for a doc the link does not open', async () => {
-    const router = await open(URL_OF('secret'));
-    expect(router.state.location.pathname).toBe('/login');
-    expect(router.state.location.search).toEqual({ redirect: `http://localhost:3000${URL_OF('secret')}` });
-});
-
-test("a signed-in writer's doc is editable, offers Share and reads the comment index", async () => {
-    session.user = { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' };
-    await open(URL_OF('pub'));
-    expect(editable()).toBe('true');
-    expect(labelled('Share')).not.toBeNull();
-    expect(labelled('Activity')).not.toBeNull();
-    expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
-    expect([...providers].every((provider) => provider.awareness.getLocalState() !== null)).toBe(true);
-});
-
-test("a guest's doc still reads the comment index and the members", async () => {
-    session.user = { id: 'guest', email: 'guest@test.eigen.is', name: 'Guest', role: 'guest' };
-    await open(URL_OF('pub'));
-    expect(editable()).toBe('false');
-    expect(server.requested).toContain(`/collab/${OWNER}/default/pub/comments`);
-    expect(server.requested).toContain(`/drive/${OWNER}/default/path/pub/effective-members`);
+test('the editor itself is read-only to a visitor and a guest, and editable to a writer', async () => {
+    const users = [
+        null,
+        { id: 'guest', email: 'guest@test.eigen.is', name: 'Guest', role: 'guest' },
+        { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' },
+    ];
+    const states: (string | null | undefined)[] = [];
+    for (const user of users) {
+        session.user = user;
+        await open(URL_OF('pub'));
+        states.push(editable());
+        await unmountAllRoots();
+    }
+    expect(states).toEqual(['false', 'false', 'true']);
 });
 
 test('a visitor opens the comments and reads a stored card, asking for nothing the link does not open', async () => {

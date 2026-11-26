@@ -1,8 +1,7 @@
 // The read-only view of who can open a Drive item: the people with access, each with their role, and the link's
-// general access, which is restricted, open to anyone signed in, or open to anyone at all. A long list collapses under
-// a header that counts the roles. It shows where someone may look but not edit, such as an item's details pane or the
-// Share dialog of a viewer. The general access line and its words are shared with the Share dialog's form and the
-// share summary, so all say the same thing.
+// general access. A long list collapses under a header that counts the roles. It shows where someone may look but not
+// edit, such as an item's details pane. GENERAL_ACCESS and GeneralAccess name and draw the general access wherever it
+// shows, such as in the Share dialog's form, so every place says the same thing.
 
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -17,7 +16,7 @@ import { TooltipButton } from '../layout/toolbar';
 import { CollapsibleUserList } from '../user/collapsible-user-list';
 import { UserItem } from '../user/user-item';
 
-const SIGNED_IN = { label: 'Anyone signed in with the link', description: 'Anyone who signs in', icon: Unlock };
+const SIGNED_IN = { label: 'Anyone signed in with the link', description: 'They sign in to open it', icon: Unlock };
 
 // What each general access is called, by the value stored: a signed-in link also stores whether it lets people edit.
 export const GENERAL_ACCESS: Record<DriveVisibility, { label: string; description: string; icon: LucideIcon }> = {
@@ -87,19 +86,18 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
 
 type GeneralAccessProps = {
     visibility: DriveVisibility;
-    // The Share dialog's form puts its picker where the name is, and may say more under it.
+    // A control in place of the name, and words in place of the short line under it.
     choice?: ReactNode;
     description?: ReactNode;
     // What the link lets someone do, on the right: as text, or the picker that changes it.
     children?: ReactNode;
 };
 
-// The link's general access, which the read-only list and the Share dialog's form both draw.
 export function GeneralAccess({ visibility, choice, description, children }: GeneralAccessProps) {
     const { label, description: shortDescription, icon: Icon } = GENERAL_ACCESS[visibility];
     return (
         <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center">
+            <div className="flex items-start">
                 <AvatarIcon className="w-8 h-8 shrink-0">
                     <Icon />
                 </AvatarIcon>

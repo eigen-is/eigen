@@ -416,7 +416,6 @@ export function SlideEditor({
                     frames={doc.frames}
                     elements={doc.elements}
                     activeFrameId={frameId}
-                    canEdit={canEdit}
                     onSelectFrame={setFrameId}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}

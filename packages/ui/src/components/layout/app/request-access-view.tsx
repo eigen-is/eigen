@@ -1,7 +1,9 @@
 // The page a person sees on a link to a file, folder or chat they may not open: who owns it, and a form that asks the
 // owner for access with an optional message. Drive, Chat and the document editors show it when the server says no.
-// Cmd+Enter sends from the message box. A guest can't ask, so a guest is told to ask the owner to share instead.
+// Cmd+Enter sends from the message box. A guest can't ask, so a guest is told to ask the owner to share instead, and a
+// visitor without a login, such as one whose public link just closed, goes to log in as the route guard sends one.
 
+import { useRouter } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useRequestAccess } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
@@ -12,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { useDialogPending } from '../../../hooks/use-dialog-pending';
 import { FormShell } from '../../form-shell';
 import { UserAvatar } from '../../user/user-avatar';
+import { loginLocation } from '../pages/auth-route';
 import { useLayout } from './layout-context';
 
 type RequestAccessViewProps = {
@@ -29,11 +32,20 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
     const [message, setMessage] = useState('');
     const [showMessage, setShowMessage] = useState(false);
     const { pending, run } = useDialogPending();
+    const router = useRouter();
+    const signedOut = !auth.user;
 
     useEffect(() => {
         setSidebarHidden(true);
         return () => setSidebarHidden(false);
     }, [setSidebarHidden]);
+
+    // Once, from the page as it is now: the location changes while the login page loads.
+    useEffect(() => {
+        if (signedOut) router.navigate({ ...loginLocation(router.state.location), replace: true });
+    }, [signedOut, router]);
+
+    if (!auth.user) return null;
 
     return (
         <div className="flex flex-col items-center justify-center h-full w-full gap-6 p-8 text-center">
@@ -87,7 +99,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
                 </FormShell>
             )}
 
-            {auth.user?.email && <p className="text-xs text-muted-foreground">Signed in as {auth.user.email}</p>}
+            <p className="text-xs text-muted-foreground">Signed in as {auth.user.email}</p>
         </div>
     );
 }

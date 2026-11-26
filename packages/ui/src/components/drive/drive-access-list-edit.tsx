@@ -1,9 +1,8 @@
 // The editable half of the Share dialog: add people or a team, change or remove each one's access, set the link's
-// general access and, for the owner, whether editors may share. It is the dialog's form, and mounts with it, so each
-// opening starts from the item as it is. Save adds a person still typed in the field first, then sends only what
-// changed, so a dialog opened a while ago can't undo what another sharer added since; with nothing changed it closes.
-// Adding a person set to Remove, yourself included, takes the Remove back. Anyone with the link is offered where the
-// server takes it, and always on an item that has it, so it can be closed.
+// general access and, for the owner, whether editors may share. It mounts with the dialog, so each opening starts from
+// the item as it is. Save first adds a person still typed in the field, then sends only what changed, so an old dialog
+// can't undo what another sharer added since. Anyone with the link is offered where the server takes it, and always on
+// an item that has it, so it can be closed.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -42,8 +41,7 @@ import { GENERAL_ACCESS, GeneralAccess } from './drive-access-list';
 
 const GENERAL_ACCESS_CHOICES: readonly DriveVisibility[] = ['private', 'public-read', 'link'];
 
-const PUBLIC_LINK_NOTE =
-    "Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access.";
+const PUBLIC_LINK_NOTE = 'Anyone on the internet with the link can view';
 const PUBLIC_LINKS_OFF_NOTE = 'Public links are turned off on this server, so this link opens nothing.';
 
 export type DriveAccessListEditProps = {
@@ -316,7 +314,6 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                     }
                     description={visibility === 'link' ? linkNote : undefined}
                 >
-                    {visibility === 'link' && <span className="text-xs text-muted-foreground shrink-0">Can view</span>}
                     {(visibility === 'public-read' || visibility === 'public-write') && (
                         <Select
                             value={visibility === 'public-write' ? 'editor' : 'viewer'}
