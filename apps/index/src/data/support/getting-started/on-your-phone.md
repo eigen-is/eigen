@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
@@ -43,7 +43,7 @@ A selected image or chart opens no panel on a phone. You can still drag it, and 
 
 ## Boards on a phone
 
-A board's columns are as wide as the screen, so you see one at a time and swipe sideways to reach the next. The **Activity** panel is a computer-only view, so it is not available on a phone. Comments on a card still are.
+A board's columns are as wide as the screen, so you see one at a time and swipe sideways to reach the next. **Activity**, in the **⋮** menu, fills the screen, and **‹** takes you back to the board.
 
 ## Controls fold into menus
 

@@ -13,7 +13,7 @@ Four things surprise people:
 - Text and color are collaborative Yjs state, but status and assignee are written by the server, which records the activity row and sends the notification ([A comment lives in three stores](#a-comment-lives-in-three-stores)).
 - A delete strips the anchor and keeps the card, so whatever brings the anchor back, such as an undo or a version restore, brings the whole comment back ([A delete strips the anchor and keeps the card](#a-delete-strips-the-anchor-and-keeps-the-card)).
 - A link to a deleted comment still opens it, as "This comment was deleted" with nothing that acts ([A deleted comment shows as deleted wherever it is reached](#a-deleted-comment-shows-as-deleted-wherever-it-is-reached)).
-- On a phone the column or the pane hides the editor instead of unmounting it ([The pane hides the editor, never unmounts it](#the-pane-hides-the-editor-never-unmounts-it)).
+- On a phone the column hides the editor instead of unmounting it ([On a phone the column hides the editor, never unmounts it](#on-a-phone-the-column-hides-the-editor-never-unmounts-it)).
 
 ## A comment lives in three stores
 
@@ -146,16 +146,16 @@ In Docs the column lies over the page in the right slot the properties panels us
 
 In Sheets the column sits in the workbook's right slot, under the menu bar and beside the formula bar, the grid and the tabs, where it takes the image and chart panel's place while it is open ([SHEETS.md](SHEETS.md)). The grid measures its canvas again as the slot opens, closes and grows into a thread. On a phone `PhoneDetail` hides the workbook, which stays mounted.
 
-Stickies still shows the pane and the card dialog, with `useCommentChatParam`; [PROPOSAL_DETAIL_COLUMN.md](proposals/PROPOSAL_DETAIL_COLUMN.md) moves its activity to the column.
+Stickies keeps its card dialog, so it doesn't use `CommentsColumn`, which would draw a thread in the column. Its board draws the activity itself, a `small` `DetailColumn` at `?panel=activity` under the board's toolbar, opened and closed through `useDetailHistory`, and an activity row opens the card in the board's dialog through `useCommentChatParam`, with the column left open behind it ([STICKIES.md](STICKIES.md#the-board-reuses-the-comment-ui)).
 
-## The pane hides the editor, never unmounts it
+## On a phone the column hides the editor, never unmounts it
 
-`PanelColumn` is Stickies' activity pane: one `Column` with id `panel` whose toolbar carries the title and the close control. A list row, in the pane or the comments column, is a `CommentCardTile`, as the hover card and a board's drag overlay are, and shows the card's title. A host may add a prefix (`titlePrefixes`), which sheets uses for another sheet's name, as the only location left in the row. A card on several sheets counts as being on its first cell in tab order, so the prefix names where a click goes, even when the card is also on the open sheet. A title seeded from an anchor, such as `Cell B2`, stays as written when the anchor moves. `SortableCard` in stickies maps a card onto `CardTile` itself, because it takes flat props it can memoize. Mount the pane outside any `<ColumnLayout mobileColumn="…">`. A `Column` whose id does not match hides itself, so a wrapped pane never shows, silently.
+A row of the comments list is a `CommentCardTile`, as the hover card and a board's drag overlay are, and shows the card's title. A host may add a prefix (`titlePrefixes`), which sheets uses for another sheet's name, as the only location left in the row. A card on several sheets counts as being on its first cell in tab order, so the prefix names where a click goes, even when the card is also on the open sheet. A title seeded from an anchor, such as `Cell B2`, stays as written when the anchor moves. `SortableCard` in stickies maps a card onto `CardTile` itself, because it takes flat props it can memoize.
 
-Below the breakpoint the pane, or the comments column, takes the whole screen. Docs hides the editor with a `hidden` wrapper instead of unmounting it, and sheets and the canvas through `PhoneDetail`, so node views, thumbnails, scroll position, selection and undo history survive a pane visit. Two things follow:
+Below the breakpoint the comments column, or a board's activity column, takes the whole screen. Docs hides the editor with a `hidden` wrapper instead of unmounting it, and sheets, the canvas and the board through `PhoneDetail`, so node views, thumbnails, scroll position, selection and undo history survive a visit to the column. Two things follow:
 
 - Anything that measures the editor skips a 0×0 box, since `display: none` measures zero. Docs' resize observer and figure view, the sheet engine and the canvas viewport all do.
-- The find bar floats inside the hidden wrapper. Each host passes the column's `onSearchOpenChange` to `DocSearchProvider`, which closes the column when a search opens on mobile (⌘F, a palette hit).
+- The find bar floats inside the hidden wrapper. Each host passes the column's `onSearchOpenChange` to `DocSearchProvider`, and the board its own close of the activity, so a search that opens on mobile (⌘F, a palette hit) closes the column.
 
 On mobile the column skips its reveal: scrolling to a mark, a cell or an element would move a view nobody can see. On desktop each host reveals as its column says ([In Docs, Sheets, Slides and Vector, comments open in a column the URL names](#in-docs-sheets-slides-and-vector-comments-open-in-a-column-the-url-names)).
 

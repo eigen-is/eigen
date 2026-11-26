@@ -7,7 +7,7 @@ tags: [drive, activity, history, collaboration, docs]
 related: [drive/watch-for-changes, drive/file-versions]
 crossSections: [docs]
 order: 130
-updated: 2026-11-24
+updated: 2026-11-26
 ---
 
 Eigen keeps a record of what happens to your files: who created one, who edited it, who changed the sharing, and who left a comment. You can read that record in Drive, or in more detail inside an editor.
@@ -53,7 +53,7 @@ Docs, Sheets, Slides, Stickies, and Vector have a fuller view of the same record
 
 The panel opens beside the document and lists up to 50 entries, newest first. Lines that refer to a comment or a card open it in the document when you click them. If nothing has happened yet, the panel says **No activity yet**.
 
-Click **Activity** again to close the panel.
+Click **Activity** again, or **Close** (the X) at the panel's top right, to close it. On a phone the panel fills the screen, and **‹** takes you back.
 
 <div class="eigen-callout">
 
