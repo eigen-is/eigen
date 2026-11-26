@@ -34,7 +34,7 @@ Under **General access**, a file starts as **Restricted**. Only the people you'v
 
 To share more widely, pick another choice from the dropdown under **General access**:
 
-- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open it. Choose **Can view** or **Can edit** beside it.
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open it. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the file or folder, but not who has access. They also can't move it to another folder or email the people it's shared with. Only the owner and people added by name, or through a team, can do those things.
 - **Anyone with the link**: anyone who has the link can view it, with no account and no sign-in. [Share with a public link](/support/drive/share-with-a-public-link) explains what they see.
 
 Use the **Copy link** button to copy the link, then click **Save** and send the link to whoever you like.

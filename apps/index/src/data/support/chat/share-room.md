@@ -31,7 +31,7 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a room starts as **Restricted**: only people you have added can open it.
 
-To let anyone on your Eigen server join, choose **Anyone signed in with the link** from the dropdown under **General access**, then choose **Can view** or **Can edit** beside it, and click **Save**. Copy the link using the copy-link icon next to **People with access** and send it to whoever you like.
+To let anyone on your Eigen server join, choose **Anyone signed in with the link** from the dropdown under **General access**, then choose **Can view** or **Can edit** beside it, and click **Save**. Copy the link using the copy-link icon next to **People with access** and send it to whoever you like. With **Can edit**, people who join through the link can post, but they can't change who has access. Only the owner and people added by name, or through a team, can do that.
 
 <div class="eigen-callout">
 

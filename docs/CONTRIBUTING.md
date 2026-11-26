@@ -193,6 +193,23 @@ that the bytes are still the ones it wrote before deleting them.
 
 One change per commit: a title that needs "and" is two commits. No AI co-author trailers.
 
+## Dependency patches
+
+A few packages carry a small fix of our own until a release has it. Each one is a `bun patch`: a diff in `patches/`, listed under `patchedDependencies` in the root `package.json`, which `bun install` applies. The Docker images copy `patches/` before they install, and CI installs from the checkout, so both apply them too.
+
+A new patch is a package change, so it needs the owner's yes first ([AGENTS.md](../AGENTS.md)). To make one, run `bun patch <package>`, edit the files under `node_modules/<package>`, and run `bun patch --commit node_modules/<package>`, which writes the diff and the `package.json` entry. Mark each changed hunk with a `Patched (Eigen, patches/)` comment that says why, as the existing patches do.
+
+**A version bump drops a patch without a word.** The entry is keyed `name@version`, so after an upgrade it no longer matches and the package installs unpatched. So every patch has a test that fails without it:
+
+| Patch | Guard |
+|---|---|
+| `elysia@1.4.30` | `apps/api/src/test/collab/collab-ws-text-frames.test.ts`: every text frame reaches the handler as the string it is. So a `.ws` route with an object `body` schema fails it on every text frame, and parses the JSON in its own `parse` hook |
+| `@formulajs/formulajs@2.9.3` | `packages/sheet/src/test/engine/formulajs-flatten.test.ts`: flattening 200,000 rows stays under a second |
+| `ical.js@2.2.1` | `apps/api/src/test/ical/ical-js-parameters.test.ts` and `ical-js-timezones.test.ts`: their CPU-time bounds |
+| `numfmt@4.1.3` | `packages/formula/src/test/format/number-display.test.ts`: the weekdays before day 0 |
+
+On an upgrade, check whether the release carries the fix. If it does, delete the patch and its entry. If it doesn't, make the patch again against the new version.
+
 ## License
 
 Contributions are licensed under [MIT](../LICENSE.txt), like the rest of the project.
