@@ -101,7 +101,8 @@ export function TimeGrid({
         if (!scroller) return;
         const current = new Date();
         const todayInView = days.some((day) => toLocalDateString(day) === toLocalDateString(current));
-        scroller.scrollTop = (todayInView ? current.getHours() - 1 : SCROLL_TO_HOUR) * HOUR_HEIGHT;
+        // A quarter hour above the hour, since its label is centered on the line and the scroller's edge would cut it.
+        scroller.scrollTop = ((todayInView ? current.getHours() - 1 : SCROLL_TO_HOUR) - 0.25) * HOUR_HEIGHT;
     }, [days]);
 
     const allDayEvents = shownEvents.filter(inAllDayLane);

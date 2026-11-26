@@ -698,6 +698,16 @@ test('a week is seven day columns, each date linking to its day view', async () 
     ]);
 });
 
+test('a week opens a quarter hour above 07:00, or above the hour before now on this week, so that hour shows its label whole', async () => {
+    const scroller = () => document.querySelector<HTMLElement>('.overflow-y-auto.flex-1');
+    await open('/view/week/2026-10-14');
+    expect(scroller()?.scrollTop).toBe(6.75 * 48);
+    await unmount();
+    setSystemTime(new Date(2026, 9, 14, 11, 20));
+    await open('/view/week/2026-10-14');
+    expect(scroller()?.scrollTop).toBe(9.75 * 48);
+});
+
 test('a day is one column and 3 days are three', async () => {
     const day = await open('/view/day/2026-10-13');
     expect(dayLinks(day.container).map(([href]) => href)).toEqual(['/view/day/2026-10-13']);
