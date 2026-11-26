@@ -81,6 +81,7 @@ export function CanvasDocumentShell({
                     <div className="flex-1 min-w-0 h-full">
                         <DocSearchProvider
                             controller={searchController}
+                            commentSearch={comments.commentSearch}
                             initialSearchTerm={initialSearchTerm}
                             onOpenChange={column.onSearchOpenChange}
                             barClassName="top-14"

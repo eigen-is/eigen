@@ -3,7 +3,8 @@
 // kept. The toolbar's toggle pushes, close goes back on that push, and X and Esc close the whole column from a thread
 // too. A ?chat= landing opens at once at 400 and loads; one that names nothing lands on the list, a deleted one opens
 // as deleted. The column eases between the list and a thread, each laid out at its own width. The editor beside it
-// never remounts, on a desktop or a phone, and the find bar keeps clear of the column.
+// never remounts, on a desktop or a phone, and the find bar keeps clear of the column. The palette's In comments hit
+// opens its thread the way a list row does.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -96,6 +97,10 @@ const { CanvasDocumentShell, useCanvasCommentHost, useCanvasDoc } = await import
 const { eigenDocEditorValidateSearch } = await import('../../../components/drive/eigendoc-config');
 const { LayoutContext } = await import('../../../components/layout/app/layout-context');
 const { PreviewProvider } = await import('../../../components/preview-provider');
+const { CommandPaletteProvider } = await import(
+    '../../../components/layout/app/command-palette/command-palette-provider'
+);
+const { useOptionalCommandPalette } = await import('@workspace/lib/command-palette');
 
 const path = drivePath({
     id: 'v1',
@@ -143,6 +148,12 @@ let openCard: (cardId: string) => void = () => {};
 // The host's reveal, which Vector turns into a centering pan: the element and the room the column grows into.
 const reveal = mock((_elementId: string, _growPx: number) => {});
 let toggleComments: () => void = () => {};
+// What the canvas published to the command palette.
+let palette: ReturnType<typeof useOptionalCommandPalette> = null;
+function PaletteProbe() {
+    palette = useOptionalCommandPalette();
+    return null;
+}
 
 // Rows null leave the comment index unanswered, as on a landing before it loads. A browser history runs the router's
 // blockers on back, which a memory history skips.
@@ -236,9 +247,10 @@ async function openCanvas(
                     mediaFolderId: null,
                     chatFolderId: 'chats',
                     children: createElement(
-                        PreviewProvider,
+                        CommandPaletteProvider,
                         null,
-                        createElement(router.RouterProvider, { router: memory }),
+                        createElement(PaletteProbe),
+                        createElement(PreviewProvider, null, createElement(router.RouterProvider, { router: memory })),
                     ),
                 }),
             ),
@@ -326,6 +338,21 @@ test('a ?chat= landing reveals its anchor once the shape has loaded, with the co
     await act(async () => writeElementInDoc(doc, { ...box, x: 10 }, key, VECTOR_STYLE_DEFAULTS, 'box'));
     await settle();
     expect(reveal).toHaveBeenCalledTimes(1);
+});
+
+test('a palette hit in comments opens its thread from a closed column, writes ?chat= and reveals its anchor once', async () => {
+    const [key] = generateNKeysBetween(null, null, 1);
+    const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
+    writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box');
+    await openCanvas(['/']);
+    expect(palette?.docCommentSearch?.docKey).toBe('owner:mount:v1');
+    await act(async () => palette?.docCommentSearch?.reveal('thread-1.eigenchat'));
+    await settle();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(historyIndex()).toBe(1);
+    expect(columnWidth()).toBe('400px');
+    expect(thread.chatName).toBe('thread-1.eigenchat');
+    expect(reveal.mock.calls).toEqual([['box', 144]]);
 });
 
 test('"‹ Comments" goes back to the list by replace, with its scroll kept', async () => {

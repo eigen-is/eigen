@@ -1,12 +1,15 @@
 // The comments and activity host a canvas app mounts, such as Vector or Slides: the card read, the comments column with
 // its lifecycle, which the route keeps in the URL, the hover card's state, and the bookkeeping that ties a card to the
-// element it was raised on. Apps differ in how a reveal moves the view, for example by going to the element's slide
-// first, so that step comes in as `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
+// element it was raised on, and the command palette's search in comments, whose hit opens like a list row. Apps differ
+// in how a reveal moves the view, for example by going to the element's slide first, so that step comes in as
+// `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import { useCommentCards, useCommentFilter, useCommentHover } from '@workspace/lib/comments';
+import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CardAttachmentDraft, CardFormPatch, CommentHover, DocumentPanel } from '@workspace/lib/types/comments';
+import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { EffectiveMember } from '@workspace/lib/types/drive-access';
 import type { VectorElement } from '@workspace/lib/vector';
@@ -55,6 +58,7 @@ export type CanvasCommentHost = {
     onCommentHover: CommentHover['report'];
     columnProps: ComponentProps<typeof CommentsColumn>;
     hoverCardProps: Omit<ComponentProps<typeof CommentHoverCard>, 'side'>;
+    commentSearch: DocCommentSearch;
 };
 
 export function useCanvasCommentHost({
@@ -93,6 +97,7 @@ export function useCanvasCommentHost({
     });
     const { allComments, cards: lifecycleCards, createCard, assignComment, members, assignedCount } = lifecycle;
 
+    const commentSearchHalf = useDocCommentSearchHalf(ownerId, path.mountId, path.id);
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const hover = useCommentHover();
@@ -167,5 +172,7 @@ export function useCanvasCommentHost({
             isCardDeleted: lifecycle.isCardDeleted,
             onOpenCard: lifecycle.setOpenCardId,
         },
+        // A new object each render, which the palette's publisher stabilizes, so a hit sees the current cards.
+        commentSearch: { ...commentSearchHalf, reveal: column.openChat },
     };
 }

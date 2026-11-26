@@ -29,6 +29,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Event colors in Calendar** — in light mode, events are lighter, the same shade as a Stickies card of that color
 - **Event details in Calendar** — open in a panel beside the grid instead of over it, with a ring around the event. The panel stays open when you reload or change week, a copied link opens it, and back closes it
 - **Comments in Slides and Vector** — open in a column beside the slide or drawing, which widens for a thread, with **Comments** at its top back to the list. A link or a reload keeps it open, and in every editor a reload no longer reopens a comment you closed
+- **Searching comments in Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its slide or shape
 - **Back buttons** — the back at the top left is a "‹" in every app on a phone, and Drive's text editor goes back with **‹ Files**
 - **Lists in Contacts and Admin** — the list beside an open contact, user or team is wider on a computer. On a tablet these lists, Admin's waitlist and Drive's details panel are narrower, leaving more room beside them
 - **Cards and events** — events in Calendar are square, with the same flat shadow as cards in Stickies and comments in Docs, Sheets, Slides and Vector. Opened, a card, comment or event shows its title on top, then its details under small headings
