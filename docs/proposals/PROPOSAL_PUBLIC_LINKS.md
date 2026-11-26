@@ -11,7 +11,7 @@ The whole design in one table:
 | # | Concern | The one place | What it does |
 |---|---|---|---|
 | 1 | The link is on | `visibility: 'link'` on the path | One column, so a path is exactly one of restricted, signed-in or link |
-| 2 | The switch | `sharing.publicLinks`, and never on a demo server | Passed into the rule and checked on save |
+| 2 | The switch | `sharing.publicLinks`, and never on a demo server | Checked once in `LinkDrive` and on save |
 | 3 | What a link opens | `canReadByLink` in `lib/drive/acl.ts` | The path and what is below it, by an allow-list of types, never a write |
 | 4 | What a visitor is handed | `LinkDrive` | A read-only wrapper: a few reads, trimmed |
 | 5 | Which routes listen | The `linkAuth` macro | Thirteen read routes and the socket: `user ? getSharedDrive : LinkDrive` |
@@ -57,12 +57,11 @@ So the secret is the path id. `Mount` makes every path id with `crypto.randomUUI
 
 ## What a link opens
 
-`canReadByLink(chain, enabled)` sits beside `canFromAncestors` in `acl.ts` and is the whole visitor rule. It is pure: the caller passes the switch in. It takes the path's breadcrumb and answers the index of the highest public path in the chain, or nothing:
+`canReadByLink(chain)` sits beside `canFromAncestors` in `acl.ts` and is the whole visitor rule for a chain. It is pure. The switch is not its business: `LinkDrive` checks it once, before it asks the rule. It takes the path's breadcrumb and answers the index of the highest public path in the chain, or nothing:
 
-1. `enabled` is true.
-2. No path in the chain is in the trash (`isTrashedChain`).
-3. Some path in the chain has `visibility: 'link'`. So a folder's link covers everything below it, a private subfolder included, and nothing beside or above it.
-4. The allow-list: from the public path down, every step is a folder, and the last may also be a file or a collab document (`isCollabType`). Past a collab document the chain may only go on into its `media/` folder and a file in it. Anything else is refused: a chat, a document's `data.db`, `comments.db`, comment threads and versions, and any path type added later.
+1. No path in the chain is in the trash (`isTrashedChain`).
+2. Some path in the chain has `visibility: 'link'`. So a folder's link covers everything below it, a private subfolder included, and nothing beside or above it.
+3. The allow-list: from the public path down, every step is a folder, and the last may also be a file or a collab document (`isCollabType`). Past a collab document the chain may only go on into its `media/` folder and a file in it. Anything else is refused: a chat, a document's `data.db`, `comments.db`, comment threads and versions, and any path type added later.
 
 There is no write variant: a visitor can't write because no code asks.
 
@@ -87,7 +86,7 @@ A visitor is not a `User`: a stand-in like `makeSyntheticUser` would flow into `
 | `auth: true`, unchanged | `user: User`, `session` | 401 |
 | `linkAuth: true`, new | `user: User \| null`, `session` or null | Goes on |
 
-A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it writes the one line `user ? await getSharedDrive(ownerId, user) : await getLinkDrive(ownerId)` (`lib/drive/get-drive.ts`) and can call only the methods all three drives have. The routes that report rights (4, 13 and the socket) branch on the user instead, because a member's `canRead` takes a `User`. There is no per-path choice between the two: a login decides.
+A route fails closed in two ways. A route nobody touched still says `auth: true`. And a `linkAuth` handler holds a `User | null`, which `getSharedDrive` does not take, so it calls `getReadDrive(ownerId, user)` (`lib/drive/get-drive.ts`), which hands a user a `SharedDrive` and a visitor a `LinkDrive`, and can call only the methods all three drives have. The routes that report rights (4, 13 and the socket) branch on the user instead, because a member's `canRead` takes a `User`. There is no per-path choice between the two: a login decides.
 
 For a request without a user the macro also sets two headers after the handler, on `set.headers` and on a returned `Response`: `X-Robots-Tag: noindex` and `Cache-Control: no-store`. Today previews and thumbnails answer `private, max-age=86400`, `serveFile` answers `private, no-cache`, and the JSON routes set nothing.
 
@@ -126,7 +125,7 @@ A socket that opens with a user is untouched, a signed-in reader of a public doc
 | What happened | The next tick |
 |---|---|
 | Another General access is saved | No path in the chain is `'link'`: close 4403 |
-| Public links are turned off | The rule's `enabled` is false: close 4403 |
+| Public links are turned off | `LinkDrive` reads the switch: close 4403 |
 | The path or a folder above it is trashed | `isTrashedChain`: close 4403. The trash itself closes the document first ([SOFT-DELETE.md](../SOFT-DELETE.md)) |
 | The path is moved out of a public folder | Its chain no longer holds the folder: close 4403 |
 
@@ -215,7 +214,7 @@ No sweep and no cleanup: a link is one value in one row.
 
 ## The work
 
-Files and folders first, then documents. **The setting is the gate.** Unit 1 adds `sharing.publicLinks` with the default off and no way to save it, so until unit 6 `Drive.updateACLDelta` refuses `'link'` and the rule's `enabled` is false: no link exists and no route answers without a login, whatever has merged. The route schema can't be the gate, because `_visibilitySchemaMatchesType` in `routes/drive-sharing.ts` holds it equal to `DriveVisibility`, so it gains `'link'` with the type in unit 1. Tests live in `<workspace>/src/test/`, written red first, and turn the setting on in the store.
+Files and folders first, then documents. **The setting is the gate.** Unit 1 adds `sharing.publicLinks` with the default off and no way to save it, so until unit 6 `Drive.updateACLDelta` refuses `'link'` and `LinkDrive` refuses every path: no link exists and no route answers without a login, whatever has merged. The route schema can't be the gate, because `_visibilitySchemaMatchesType` in `routes/drive-sharing.ts` holds it equal to `DriveVisibility`, so it gains `'link'` with the type in unit 1. Tests live in `<workspace>/src/test/`, written red first, and turn the setting on in the store.
 
 | # | Unit | Files | Size | Risk seam | Tests |
 |---|---|---|---|---|---|
