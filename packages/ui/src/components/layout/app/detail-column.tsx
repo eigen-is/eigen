@@ -65,7 +65,7 @@ export function DetailColumn({ width, title, onBack, actions, onClose, fill, chi
                                 {title && <ToolbarTitle>{title}</ToolbarTitle>}
                             </>
                         )}
-                        <div className="ml-auto flex items-center gap-1">
+                        <div className="flex flex-1 items-center justify-end gap-1">
                             {actions}
                             {!isMobile && (
                                 <TooltipButton icon={X} tooltipText="Close" className="ml-2" onClick={onClose} />
