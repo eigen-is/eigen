@@ -88,7 +88,7 @@ A create and an overwrite both stream the body to a temp file while hashing it, 
 
 `getetag` is the file's SHA-256, quoted (RFC 7232 §2.1). It is content-derived because Finder re-downloads in a loop when a validator changes without the content changing. A row with no hash falls back to an id, mtime and size triple. `computeEtag` lives in `lib/core/http.ts` and the REST routes use it too, so one file has one validator on both paths.
 
-GET honors `If-Match` before `If-None-Match` (RFC 7232 §6), through the same `matchesIfMatch` and `matchesIfNoneMatch` the REST file routes and CalDAV and CardDAV use. Byte ranges, open-ended and suffix ones included, go through the shared `rangeResponse`. Every body carries `X-Content-Type-Options: nosniff`, plus a sandbox CSP for html, xhtml and svg, as REST `serveFile` does: a disguised upload opened in a browser must not run script with the viewer's session.
+GET honors `If-Match` before `If-None-Match` (RFC 7232 §6), through the same `matchesIfMatch` and `matchesIfNoneMatch` the REST file routes and CalDAV and CardDAV use. Byte ranges, open-ended and suffix ones included, go through the shared `rangeResponse`. Every body carries the headers `servedFileHeaders` gives an inline file, as REST `serveFile` does: `nosniff`, and the sandbox CSP for every type that is not inert ([PREVIEWS.md](PREVIEWS.md#a-stored-file-goes-out-inline-without-a-sandbox-only-when-its-type-is-inert)). A file opened in a browser must not run script with the viewer's session.
 
 ## Properties are derived and dead ones persist
 
