@@ -1,15 +1,17 @@
 // A small summary of who can open a Drive item, for a place such as a Drive row's Shared column or a chat's toolbar.
-// It shows a lock when anyone signed in with the link may open the item, then the first few people's avatars and a
-// count of the rest. An item nobody else has shows an add-person icon on hover, where the caller asks for one. When
-// the caller passes onClick, the summary is a button that opens Share, so the keyboard reaches it. A caller whose
-// keyboard reaches Share another way, such as a list row's menu key, takes the button out of the Tab order.
+// It shows the general access's icon when anyone signed in, or anyone at all, may open the item by its link, then the
+// first few people's avatars and a count of the rest. An item nobody else has shows an add-person icon on hover, where
+// the caller asks for one. When the caller passes onClick, the summary is a button that opens Share, so the keyboard
+// reaches it. A caller whose keyboard reaches Share another way, such as a list row's menu key, takes the button out
+// of the Tab order.
 
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { UserAvatar } from '@workspace/ui/components/user/user-avatar';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
-import { Unlock, UserRoundPlus } from 'lucide-react';
+import { UserRoundPlus } from 'lucide-react';
+import { GENERAL_ACCESS } from './drive-access-list';
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
@@ -30,6 +32,7 @@ export function DriveShareSummary({
     const { allEntries } = useDriveAccess(path, undefined, ancestorBreadcrumb);
 
     const isPublic = path.visibility !== 'private';
+    const { label, icon: AccessIcon } = GENERAL_ACCESS[path.visibility];
     const isShared = allEntries.length > 1 || isPublic;
     const avatarCount = isPublic ? 3 : 4;
 
@@ -41,10 +44,10 @@ export function DriveShareSummary({
                 <Tooltip delayDuration={300}>
                     <TooltipTrigger asChild>
                         <span className="h-6 w-6 rounded-full flex items-center justify-center bg-muted">
-                            <Unlock className="h-3 w-3 text-primary" />
+                            <AccessIcon className="h-3 w-3 text-primary" />
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Anyone signed in with the link</TooltipContent>
+                    <TooltipContent>{label}</TooltipContent>
                 </Tooltip>
             )}
             {allEntries.slice(0, avatarCount).map((access, index) => (
