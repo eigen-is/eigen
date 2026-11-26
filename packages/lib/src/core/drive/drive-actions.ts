@@ -29,7 +29,14 @@ const byName = ({ capabilities }: DriveActionSubject, item: DrivePath) => capabi
 
 // A row with a plural label is one a multi-selection offers too; the others act on a single item.
 const DRIVE_ACTIONS: readonly DriveAction[] = [
-    { id: 'open', label: 'Open', icon: ArrowRight, group: 'open', applies: (s) => one(s) && isOpenable(s.items[0]) },
+    {
+        id: 'open',
+        label: 'Open',
+        icon: ArrowRight,
+        group: 'open',
+        applies: (s) => one(s) && isOpenable(s.items[0]),
+        visitorAllowed: true,
+    },
     {
         id: 'open-new-tab',
         label: 'Open in new tab',

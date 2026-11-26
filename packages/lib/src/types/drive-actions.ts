@@ -47,4 +47,6 @@ export type DriveAction = {
     guestDenied?: true;
     // The row reaches the hosted mailbox, so a server without hosted mail hides it.
     mailOnly?: true;
+    // A visitor without a login may use the row; every other row needs one.
+    visitorAllowed?: true;
 };
