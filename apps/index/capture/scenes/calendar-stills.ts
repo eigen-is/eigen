@@ -22,11 +22,11 @@ export const calendarStillToday = {
     run: async ({ pages: [page], stack }) => {
         await openView(page, stack, 'Week');
         await page.getByText('Weekly production meeting').first().waitFor();
-        // The week opens an hour before the current time, so an evening take would show the night. From half past eight
-        // the window holds the morning's dentist and the crew's production meeting at 17:00, and no hour label is cut.
+        // The week opens an hour before the current time, so an evening take would show the night. From a quarter past
+        // eight the window holds the morning's first blocks whole and the crew's production meeting at 17:00.
         await page.getByText('08:00', { exact: true }).evaluate((label) => {
             const scroller = label.closest('.overflow-y-auto');
-            if (scroller && label instanceof HTMLElement) scroller.scrollTop = label.offsetTop + 24;
+            if (scroller && label instanceof HTMLElement) scroller.scrollTop = label.offsetTop + 12;
         });
         await Bun.sleep(1500);
     },
