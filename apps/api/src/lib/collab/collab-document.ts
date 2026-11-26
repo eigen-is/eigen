@@ -1,8 +1,8 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
-// its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
-// Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
-// opens each document once and closes it a while after the last socket leaves or after an open that no socket joins,
-// holding its Home while it waits. Before that close, a workbook saves a version and folds the head of its op log.
+// its data.db, saves every edit back to it, and relays edits and cursors between its sockets, where a visitor without
+// a login gets only the edits. Server-side writers, such as an import or a version restore, edit the same Y.Doc, so
+// every editor sees them. Drive opens each document once and closes it a while after the last socket leaves or after
+// an open no socket joins, holding its Home meanwhile. Before that close, a workbook saves a version and folds its log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -57,7 +57,7 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 export class CollabDocument {
     private readonly awareness: awarenessProtocol.Awareness;
-    private readonly connections = new Map<ServerWebSocket<unknown>, User>();
+    private readonly connections = new Map<ServerWebSocket<unknown>, User | null>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
     private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
@@ -93,6 +93,7 @@ export class CollabDocument {
             this.broadcastMessage(
                 conn,
                 encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeUpdate(encoder, update)),
+                true,
             );
             const user = conn && this.connections.get(conn);
             if (user) this.recordEditThrottled(user);
@@ -107,7 +108,8 @@ export class CollabDocument {
             ) => {
                 const changedClients = added.concat(updated, removed);
                 if (changedClients.length === 0) return;
-                this.broadcastMessage(isConnection(origin) ? origin : null, this.encodeAwareness(changedClients));
+                const message = this.encodeAwareness(changedClients);
+                this.broadcastMessage(isConnection(origin) ? origin : null, message, false);
             },
         );
 
@@ -184,14 +186,14 @@ export class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(user: User, conn: ServerWebSocket<unknown>): void {
+    public subscribe(user: User | null, conn: ServerWebSocket<unknown>): void {
         // A mount sweep can close a document while a socket still waits for it to load. That socket
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
         this.releaseLingerHold();
         this.connections.set(conn, user);
-        this.sendSyncStep1(conn);
+        this.sendSyncStep1(user, conn);
     }
 
     public unsubscribe(conn: ServerWebSocket<unknown>): void {
@@ -210,19 +212,19 @@ export class CollabDocument {
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            // A reader still gets the handshake. Only a step 2 or an update changes the document.
-            const syncType = decoding.peekUint8(decoder);
-            if (
-                !canWrite &&
-                (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate)
-            ) {
-                return;
+            // A type has more than one varuint spelling, so it is read once, and that read decides both what a reader may
+            // send and how the frame is applied. A reader still gets the handshake; a step 2 is applied like an update.
+            const syncType = decoding.readVarUint(decoder);
+            if (syncType === syncProtocol.messageYjsSyncStep1) {
+                sendFrame(
+                    conn,
+                    encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
+                );
+            } else if (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate) {
+                if (canWrite) syncProtocol.readUpdate(decoder, this.doc, conn);
+            } else {
+                console.warn(`Unknown sync message type: ${syncType}`);
             }
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_SYNC);
-            syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn);
-            // Only a step 1 has a reply.
-            if (encoding.length(encoder) > 1) sendFrame(conn, encoding.toUint8Array(encoder));
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             const user = this.connections.get(conn);
@@ -366,23 +368,27 @@ export class CollabDocument {
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
     }
 
-    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
+    private sendSyncStep1(user: User | null, conn: ServerWebSocket<unknown>): void {
         try {
             sendFrame(
                 conn,
                 encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeSyncStep1(encoder, this.doc)),
             );
             const awarenessStates = this.awareness.getStates();
-            if (awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
+            if (user && awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
         } catch (err) {
             console.error('Error sending sync step 1:', err);
         }
     }
 
-    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
+    private broadcastMessage(
+        originConn: ServerWebSocket<unknown> | null,
+        message: Uint8Array,
+        toVisitors: boolean,
+    ): void {
         if (this.closed) return;
-        for (const conn of this.connections.keys()) {
-            if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
+        for (const [conn, user] of this.connections) {
+            if (conn !== originConn && conn.readyState === WebSocket.OPEN && (user || toVisitors)) {
                 try {
                     sendFrame(conn, message);
                 } catch (err) {
