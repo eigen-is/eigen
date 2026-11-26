@@ -188,7 +188,7 @@ export type ServerSettings = {
         upload: { enabled: boolean; s3: S3Config; keep: number };
     };
     sharing: {
-        // Whether a path may be opened by anyone with its link. A demo server never allows it.
+        // Whether a path may be opened by anyone with its link.
         publicLinks: boolean;
     };
 };

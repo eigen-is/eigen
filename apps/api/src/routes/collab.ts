@@ -50,8 +50,8 @@ type CollabSession = {
 // close, and it has no typed field for this route's state, so the state lives in this map.
 const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
 
-// A user may open a document in another owner's drive, and getSharedDrive's checks decide what they may do there. The
-// WebSocket server options are set on the root app, because Elysia reads `websocket` config only there.
+// A user may open a document in another owner's drive. The WebSocket server options are set on the root app, because
+// Elysia reads `websocket` config only there.
 export const collabRouter = new Elysia({
     name: 'collab',
 })

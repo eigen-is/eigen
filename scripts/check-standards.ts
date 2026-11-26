@@ -296,7 +296,7 @@ const METRICS: readonly Metric[] = [
             for (const chunk of text.split(new RegExp(`(?=${ROUTE_START.source})`)).slice(1)) {
                 const route = /['"](\/[^'"]*)['"]/.exec(chunk)?.[1];
                 // A route without `auth` or `linkAuth` in its own options, such as LMTP delivery, answers to no Home.
-                if (route === undefined || !/(?:auth|Auth):\s*true/.test(stripNoise(chunk))) continue;
+                if (route === undefined || !/\b(?:auth|linkAuth):\s*true/.test(stripNoise(chunk))) continue;
                 if (route.replace(TRANSPORT_PREFIX, '').split('/')[2] !== ':ownerId') hits++;
             }
             return hits;
