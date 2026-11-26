@@ -1,3 +1,8 @@
+// What a collab editor shows until its document has loaded: a spinner, a notice once storage is slow or retrying,
+// or an error once the document can't load, such as stored data that is gone or a state too large to show. The
+// states come from useCollabDoc, and CollabDocumentGate renders this.
+
+import type { CollabDoc } from '@workspace/lib/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useEffect, useState } from 'react';
 import { StorageGoneVersions } from '../toolbar/version-history-menu';
@@ -8,16 +13,18 @@ import { LoadingState } from './loading-state';
 // first stretch; past it, say what is taking so long instead of leaving the user guessing.
 const SLOW_NOTICE_MS = 10_000;
 
-type CollabLoadingStateProps = {
-    // From useCollabDoc — the WS closed with the storage-unavailable code and is retrying.
-    storageUnavailable: boolean;
-    // From useCollabDoc — the WS closed with the storage-gone code and stopped.
-    storageGone: boolean;
+type CollabLoadingStateProps = Pick<CollabDoc, 'storageUnavailable' | 'storageGone' | 'loadError'> & {
     path: DrivePath;
     canWrite: boolean;
 };
 
-export function CollabLoadingState({ storageUnavailable, storageGone, path, canWrite }: CollabLoadingStateProps) {
+export function CollabLoadingState({
+    storageUnavailable,
+    storageGone,
+    loadError,
+    path,
+    canWrite,
+}: CollabLoadingStateProps) {
     const [slow, setSlow] = useState(false);
 
     useEffect(() => {
@@ -38,6 +45,8 @@ export function CollabLoadingState({ storageUnavailable, storageGone, path, canW
             />
         );
     }
+
+    if (loadError) return <ErrorState message={loadError} />;
 
     const notice = storageUnavailable
         ? 'Storage is temporarily unavailable, retrying automatically'

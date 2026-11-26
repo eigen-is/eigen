@@ -156,6 +156,7 @@ export const CollaborativeEditor = ({
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId: path.ownerId,
@@ -164,7 +165,11 @@ export const CollaborativeEditor = ({
     });
 
     return (
-        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
+        <CollabDocumentGate
+            collab={{ loaded, storageUnavailable, storageGone, loadError }}
+            path={path}
+            canWrite={canWrite}
+        >
             {yDoc && (
                 <>
                     <UnsyncedEditsGuard active={unsyncedEdits} />

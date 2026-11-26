@@ -57,7 +57,14 @@ export function readBoard(doc: Y.Doc): BoardData {
 
 type UseBoardResult = Pick<
     CollabDoc,
-    'provider' | 'undoManager' | 'offline' | 'loaded' | 'storageUnavailable' | 'storageGone' | 'unsyncedEdits'
+    | 'provider'
+    | 'undoManager'
+    | 'offline'
+    | 'loaded'
+    | 'storageUnavailable'
+    | 'storageGone'
+    | 'loadError'
+    | 'unsyncedEdits'
 > & {
     board: BoardData;
     yjsDoc: Y.Doc | null;
@@ -176,6 +183,7 @@ export const useBoard = (
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId,
@@ -277,6 +285,7 @@ export const useBoard = (
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
