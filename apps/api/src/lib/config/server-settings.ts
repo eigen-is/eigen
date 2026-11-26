@@ -71,7 +71,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
     },
     backups: DEFAULT_BACKUPS,
     sharing: {
-        publicLinks: false,
+        publicLinks: true,
     },
 });
 
