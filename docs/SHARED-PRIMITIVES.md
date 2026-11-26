@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2468 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2470 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1197,7 +1197,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1307)
+## Utilities & constants (1309)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1497,7 +1497,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `svgToImageFile` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `applyCollabState` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
 | `boardCardIds` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
+| `encodeCollabState` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
 | `getIdArray` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getIdArrayRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getItemMapRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
