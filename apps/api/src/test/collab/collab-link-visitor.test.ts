@@ -156,6 +156,7 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     const awareness: AwarenessEntry[] = [];
     // When the server's last step 2, its answer to a step 1, arrived.
     let answeredAt = 0;
+    let pongs = 0;
 
     let upgraded = false;
     ws.onopen = () => {
@@ -167,6 +168,7 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
         ws.send(syncFrame((encoder) => syncProtocol.writeUpdate(encoder, update)));
     });
     ws.onmessage = ({ data }) => {
+        if (data === 'pong') pongs++;
         if (!(data instanceof ArrayBuffer)) return;
         const decoder = decoding.createDecoder(new Uint8Array(data));
         const messageType = decoding.readVarUint(decoder);
@@ -195,7 +197,7 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     const text = () => doc.getText('probe').toString();
     // Resolves once the server would answer this socket's next step 1.
     const paced = () => Bun.sleep(Math.max(0, answeredAt + SYNC_STEP_1_INTERVAL_MS + 10 - Date.now()));
-    return { ws, doc, closed, awareness, count, text, paced, upgraded: () => upgraded };
+    return { ws, doc, closed, awareness, count, text, paced, pongs: () => pongs, upgraded: () => upgraded };
 }
 
 type Client = ReturnType<typeof connect>;
@@ -329,6 +331,20 @@ describe('a socket without a login opens what a public link opens', () => {
             // Frames are answered in order, so after this round trip an answer to the big one would have arrived.
             await roundTrip(client);
             expect(client.count(STEP_2)).toBe(before + 1);
+            expect(client.ws.readyState).toBe(WebSocket.OPEN);
+        }
+    });
+
+    // Every other text frame is dropped unread, and Elysia hands it over unparsed (collab-ws-text-frames.test.ts).
+    test('ping gets its pong after a few MB of JSON in a text frame, for a member and a visitor', async () => {
+        const doc = await newPublicDoc();
+        const json = `[${'0,'.repeat(2 * 1024 * 1024)}0]`;
+        for (const user of [alice, null]) {
+            const client = await open(user, doc.id);
+            client.ws.send(json);
+            client.ws.send('ping');
+            await waitFor(() => client.pongs() === 1, 5_000);
+            await roundTrip(client);
             expect(client.ws.readyState).toBe(WebSocket.OPEN);
         }
     });
