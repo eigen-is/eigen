@@ -644,7 +644,7 @@ describe('the tick', () => {
         const { mountId, docId } = await newDoc(idle);
         const socket = await openSocket(idle, idle.id, mountId, docId);
         const home = await getHome(idle.id);
-        const canRead = spyOn(home.drive, 'canRead');
+        const canRead = spyOn(home.drive, 'isLiveReader');
         const requests = spyOn(home, 'touch');
         try {
             await tick();
@@ -664,7 +664,7 @@ describe('the tick', () => {
         const { mountId, docId } = await docNaming(owner, sharee);
         const socket = await openSocket(sharee, owner.id, mountId, docId);
         await (await getHome(owner.id)).drive.updateACLDelta(mountId, docId, { remove: [sharee.email] });
-        const canRead = spyOn(Drive.prototype, 'canRead').mockImplementationOnce(() => {
+        const canRead = spyOn(Drive.prototype, 'isLiveReader').mockImplementationOnce(() => {
             throw new Error('a mount that fails');
         });
         const errors = spyOn(console, 'error').mockImplementation(() => {});

@@ -1,6 +1,7 @@
 // The way a route gets at a drive. The owner gets their own Drive. Anyone else who is signed in gets a
 // SharedDrive, which checks their access before every call. A visitor without a login gets a LinkDrive,
-// which reads only what a public link opens. What a caller may do with a path, signed in or not, is answered here too.
+// which reads only what a public link opens. What a caller may do with a path, signed in or not, is answered here too,
+// and whether they sync it over the collab socket.
 
 import type { DrivePathPermissions } from '@workspace/lib/types/drive-access';
 import { getHome } from '../home';
@@ -50,4 +51,15 @@ export async function readPermissions(
         drive.canWrite(mountId, pathId, user),
     ]);
     return { canRead, canWrite };
+}
+
+// A visitor is never live: only someone signed in opens the collab socket.
+export async function isLiveReader(
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    user: User | null,
+): Promise<boolean> {
+    if (!user) return false;
+    return (await getSharedDrive(ownerId, user)).isLiveReader(mountId, pathId, user);
 }

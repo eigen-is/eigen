@@ -1,8 +1,8 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
-// its data.db, saves every edit back to it, and relays edits and cursors between its sockets, where a visitor without
-// a login gets only the edits. Server-side writers, such as an import or a version restore, edit the same Y.Doc, so
-// every editor sees them. Drive opens each document once and closes it a while after the last socket leaves or after
-// an open no socket joins, holding its Home meanwhile. Before that close, a workbook saves a version and folds its log.
+// its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
+// Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
+// opens each document once and closes it a while after the last socket leaves or after an open that no socket joins,
+// holding its Home while it waits. Before that close, a workbook saves a version and folds the head of its op log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -42,12 +42,6 @@ const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 // A step 1 is a state vector, a few bytes per client id that ever edited, so 1 MiB is over a hundred thousand
 // editors. Decoding and answering a larger, forged one would hold the event loop.
 export const MAX_SYNC_STEP_1_BYTES = 1024 * 1024;
-// An answer to a step 1 can be the whole document, encoded and deflated on the event loop. Each answer charges this
-// many times its own time to the document, which pays it off in real time, so answers take at most a tenth of the loop.
-const SYNC_STEP_1_COST_FACTOR = 10;
-// The work a document may owe before it drops a step 1 unread, enough for a few editors who open a large document at
-// once. y-websocket sends its step 1 again every 5 s, so a dropped one is asked again.
-const SYNC_STEP_1_BURST_MS = 250;
 
 // Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
@@ -66,13 +60,11 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 export class CollabDocument {
     private readonly awareness: awarenessProtocol.Awareness;
-    private readonly connections = new Map<ServerWebSocket<unknown>, User | null>();
+    private readonly connections = new Map<ServerWebSocket<unknown>, User>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
     private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
-    // The performance.now() time until which the document is paying off its step 1 answers.
-    private syncStep1PaidUntil = 0;
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
     // The hold on the Home while the document lingers. Edits over a socket are no requests, so the Home's idle time
@@ -104,7 +96,6 @@ export class CollabDocument {
             this.broadcastMessage(
                 conn,
                 encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeUpdate(encoder, update)),
-                true,
             );
             const user = conn && this.connections.get(conn);
             if (user) this.recordEditThrottled(user);
@@ -119,8 +110,7 @@ export class CollabDocument {
             ) => {
                 const changedClients = added.concat(updated, removed);
                 if (changedClients.length === 0) return;
-                const message = this.encodeAwareness(changedClients);
-                this.broadcastMessage(isConnection(origin) ? origin : null, message, false);
+                this.broadcastMessage(isConnection(origin) ? origin : null, this.encodeAwareness(changedClients));
             },
         );
 
@@ -197,14 +187,14 @@ export class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(user: User | null, conn: ServerWebSocket<unknown>): void {
+    public subscribe(user: User, conn: ServerWebSocket<unknown>): void {
         // A mount sweep can close a document while a socket still waits for it to load. That socket
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
         this.releaseLingerHold();
         this.connections.set(conn, user);
-        this.greetMember(conn);
+        this.sendSyncStep1(conn);
     }
 
     public unsubscribe(conn: ServerWebSocket<unknown>): void {
@@ -228,14 +218,10 @@ export class CollabDocument {
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
                 if (message.byteLength > MAX_SYNC_STEP_1_BYTES) return;
-                const start = performance.now();
-                if (this.syncStep1PaidUntil - start > SYNC_STEP_1_BURST_MS * SYNC_STEP_1_COST_FACTOR) return;
                 sendFrame(
                     conn,
                     encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
                 );
-                const spent = performance.now() - start;
-                this.syncStep1PaidUntil = Math.max(this.syncStep1PaidUntil, start) + spent * SYNC_STEP_1_COST_FACTOR;
             } else if (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate) {
                 if (canWrite) syncProtocol.readUpdate(decoder, this.doc, conn);
             } else {
@@ -387,10 +373,7 @@ export class CollabDocument {
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
     }
 
-    // The server's sync step 1 and the cursors. A visitor's answer to the step 1 would be its whole state, which a
-    // reader's socket drops unread, so a visitor gets neither and syncs from its own step 1.
-    private greetMember(conn: ServerWebSocket<unknown>): void {
-        if (!this.connections.get(conn)) return;
+    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
         try {
             sendFrame(
                 conn,
@@ -403,14 +386,10 @@ export class CollabDocument {
         }
     }
 
-    private broadcastMessage(
-        originConn: ServerWebSocket<unknown> | null,
-        message: Uint8Array,
-        toVisitors: boolean,
-    ): void {
+    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
         if (this.closed) return;
-        for (const [conn, user] of this.connections) {
-            if (conn !== originConn && conn.readyState === WebSocket.OPEN && (user || toVisitors)) {
+        for (const conn of this.connections.keys()) {
+            if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
                 try {
                     sendFrame(conn, message);
                 } catch (err) {

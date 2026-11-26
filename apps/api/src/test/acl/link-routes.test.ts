@@ -50,10 +50,8 @@ const LINK_ROUTES = [
     { route: '/drive/:ownerId/:mountId/thumb/:fileName', reads: 'image', bytes: true },
     { route: '/drive/:ownerId/:mountId/path/:pathId/permissions', reads: 'text', bytes: false },
     { route: '/collab/:ownerId/:mountId/:pathId/info', reads: 'doc', bytes: false },
+    { route: '/collab/:ownerId/:mountId/:pathId/state', reads: 'doc', bytes: true },
 ] as const;
-
-// The collab socket answers without a login too. No request here can open one, so its own test file covers it.
-const LINK_SOCKET = '/ws/collab/:ownerId/:mountId/:pathId';
 
 type Reads = (typeof LINK_ROUTES)[number]['reads'];
 
@@ -65,7 +63,13 @@ async function expectRefused(route: string, res: Response): Promise<void> {
     if (route === PERMISSIONS_ROUTE) {
         expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false });
     } else if (route === INFO_ROUTE) {
-        expect(await assertJson(res)).toEqual({ canRead: false, canWrite: false, path: null, folderContents: null });
+        expect(await assertJson(res)).toEqual({
+            canRead: false,
+            canWrite: false,
+            live: false,
+            path: null,
+            folderContents: null,
+        });
     } else {
         expect(res.status).toBe(403);
     }
@@ -497,7 +501,7 @@ describe('files and folders without a login', () => {
                     if (route !== undefined && /linkAuth:\s*true/.test(chunk)) linkAuth.push(route);
                 }
             }
-            expect(linkAuth.sort()).toEqual([...LINK_ROUTES.map(({ route }) => route), LINK_SOCKET].sort());
+            expect(linkAuth.sort()).toEqual(LINK_ROUTES.map(({ route }) => route).sort());
         });
     });
 

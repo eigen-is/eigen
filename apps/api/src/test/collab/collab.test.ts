@@ -105,7 +105,13 @@ describe('Collab', () => {
                 new Request(`http://localhost/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`),
             );
             expect(res.status).toBe(200);
-            expect(await res.json()).toEqual({ canRead: false, canWrite: false, path: null, folderContents: null });
+            expect(await res.json()).toEqual({
+                canRead: false,
+                canWrite: false,
+                live: false,
+                path: null,
+                folderContents: null,
+            });
         });
 
         test('info endpoint denies access without read permission', async () => {
