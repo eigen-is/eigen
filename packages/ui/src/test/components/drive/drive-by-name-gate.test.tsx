@@ -1,6 +1,6 @@
-// Drive's folder browser offers Move to, and dragging onto a folder, only to someone who holds write on the folder by
-// name: its owner, or an entry on it or a folder above it, by email or team. Someone who edits only through "Anyone
-// signed in can edit" still edits, renames and uploads there, but is never offered a move.
+// Drive's folder browser offers Move to, dragging onto a folder and Email collaborators only to someone who holds write
+// on the folder by name: its owner, or an entry on it or a folder above it, by email or team. Someone who edits only
+// through "Anyone signed in can edit" still edits, renames and uploads there, but is offered neither.
 import { afterAll, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -50,17 +50,27 @@ beforeEach(() => {
     breadcrumb = [];
 });
 
-const doc = drivePath({ id: 'doc', name: 'Plan.eigendoc', type: 'doc', mimeType: DRIVE_MIME_DOC, parentId: 'open' });
+// A document others can open, so it has collaborators to mail.
+const doc = drivePath({
+    id: 'doc',
+    name: 'Plan.eigendoc',
+    type: 'doc',
+    mimeType: DRIVE_MIME_DOC,
+    parentId: 'open',
+    visibility: 'public-write',
+});
+const BY_NAME = ['move-to', 'email-collaborators'];
 // A folder in Alice's drive, with the entries and visibility a test gives it.
 const folder = (p: Partial<DrivePath> = {}): DrivePath =>
     drivePath({ id: 'open', name: 'Open', type: 'folder', mimeType: DRIVE_MIME_FOLDER, ownerId: 'alice-1', ...p });
 
-// The rows the browser offers on a document in the folder, once the folders above it have loaded.
+// Which of the by-name rows the browser offers on a document in the folder, once the folders above it have loaded.
 async function rowsIn(open: DrivePath): Promise<string[]> {
     const seen: { rows: string[] } = { rows: [] };
     function Harness() {
         const capabilities = browseCapabilities(true, useCanWriteByName(open));
         seen.rows = useDriveActionsFor(capabilities)([doc]).map((action) => action.id);
+        expect(seen.rows).toContain('rename');
         return null;
     }
     const root = createRoot(document.createElement('div'));
@@ -70,28 +80,26 @@ async function rowsIn(open: DrivePath): Promise<string[]> {
     });
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     await act(async () => root.unmount());
-    return seen.rows;
+    return seen.rows.filter((id) => BY_NAME.includes(id));
 }
 
-test('someone who edits only through the signed-in link renames, but is not offered Move to', async () => {
-    const rows = await rowsIn(folder({ visibility: 'public-write' }));
-    expect(rows).toContain('rename');
-    expect(rows).not.toContain('move-to');
+test('someone who edits only through the signed-in link renames and uploads, but is not offered the rows', async () => {
+    expect(await rowsIn(folder({ visibility: 'public-write' }))).toEqual([]);
     expect(browseCapabilities(true, false).canUpload).toBe(true);
 });
 
-test('the owner and an editor by name, through a team or through a folder above are offered Move to', async () => {
+test('the owner and an editor by name, through a team or through a folder above are offered the rows', async () => {
     const editor = { id: ME.email, read: true, write: true };
-    expect(await rowsIn(folder({ ownerId: ME.id }))).toContain('move-to');
-    expect(await rowsIn(folder({ visibility: 'public-write', acl: [editor] }))).toContain('move-to');
+    expect(await rowsIn(folder({ ownerId: ME.id }))).toEqual(BY_NAME);
+    expect(await rowsIn(folder({ visibility: 'public-write', acl: [editor] }))).toEqual(BY_NAME);
     const byTeam = { id: teamOwnerId(TEAM_ID), read: true, write: true };
-    expect(await rowsIn(folder({ visibility: 'public-write', acl: [byTeam] }))).toContain('move-to');
+    expect(await rowsIn(folder({ visibility: 'public-write', acl: [byTeam] }))).toEqual(BY_NAME);
     const open = folder({ visibility: 'public-write' });
     breadcrumb = [folder({ id: 'projects', name: 'Projects', acl: [editor] }), open];
-    expect(await rowsIn(open)).toContain('move-to');
+    expect(await rowsIn(open)).toEqual(BY_NAME);
 });
 
-test('a reader by name of a folder anyone signed in can edit is not offered Move to', async () => {
+test('a reader by name of a folder anyone signed in can edit is not offered the rows', async () => {
     const reader = { id: ME.email, read: true, write: false };
-    expect(await rowsIn(folder({ visibility: 'public-write', acl: [reader] }))).not.toContain('move-to');
+    expect(await rowsIn(folder({ visibility: 'public-write', acl: [reader] }))).toEqual([]);
 });

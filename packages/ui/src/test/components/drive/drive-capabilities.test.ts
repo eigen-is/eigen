@@ -10,8 +10,12 @@ describe('browseCapabilities', () => {
         expect(browseCapabilities(true, true)).toBe(DRIVE_CAPABILITIES.browse);
     });
 
-    test('a viewer who writes only through the signed-in link edits, renames and uploads, but never moves', () => {
-        expect(browseCapabilities(true, false)).toEqual({ ...DRIVE_CAPABILITIES.browse, canMove: false });
+    test('a viewer who writes only through the signed-in link edits, renames and uploads, but never moves or shares', () => {
+        expect(browseCapabilities(true, false)).toEqual({
+            ...DRIVE_CAPABILITIES.browse,
+            canMove: false,
+            canShare: false,
+        });
     });
 
     test('a viewer who cannot write is offered nothing that writes', () => {

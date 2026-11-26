@@ -117,8 +117,8 @@ export class SharedDrive {
         return path.sharingRestricted && !this.isEffectiveOwner(path.ownerId, memberships);
     }
 
-    // "Anyone signed in can edit" lets everyone change the content, never hand it on or take it somewhere else.
-    // Those need write held by name, as an owner or through an ACL entry on the path or a folder above it.
+    // "Anyone signed in can edit" lets everyone change the content, never hand it on, take it somewhere else or mail
+    // the people who have it. Those need write held by name, as an owner or through an ACL entry on the path or above.
     private async requireWriteByName(
         mountId: string,
         pathId: string,
@@ -441,6 +441,8 @@ export class SharedDrive {
         return { canShare, recipients };
     }
 
+    // A mail to everyone the path is shared with is for those who may manage its sharing. The owner's restriction
+    // limits who changes access, not who writes to the people who have it.
     public async emailCollaborators(
         mountId: string,
         pathId: string,
@@ -448,7 +450,8 @@ export class SharedDrive {
         message: string,
         sendCopyToSelf: boolean,
     ): Promise<{ sent: number }> {
-        await this.requireWrite(mountId, pathId);
+        const memberships = await getMemberships(this.user.id);
+        await this.requireWriteByName(mountId, pathId, memberships, 'No permission to email collaborators');
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
     }
 

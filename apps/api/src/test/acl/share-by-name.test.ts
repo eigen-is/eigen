@@ -1,8 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveAccessCheckResult } from '@workspace/lib/types/drive-access';
 import { getServerConfig } from '../../lib/config/server-config';
+import * as mailer from '../../lib/mailer/mailer';
 import {
     addMember,
     app,
@@ -21,9 +22,9 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const READER = { id: 'reader-by-name@example.com', read: true, write: false };
 const OTHER = { id: 'other-by-name@example.com', read: true, write: false };
 
-// Write that comes only from "Anyone signed in can edit" lets a person change the content, never who has access or
-// where the item lives.
-describe('changing sharing and moving need write held by name', () => {
+// Write that comes only from "Anyone signed in can edit" lets a person change the content, never who has access,
+// where the item lives or who hears about it.
+describe('changing sharing, moving and mailing collaborators need write held by name', () => {
     let ctx: TestCtx;
     let mountId: string;
     let rootId: string;
@@ -46,6 +47,14 @@ describe('changing sharing and moving need write held by name', () => {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ targetParentId }),
+        });
+    }
+
+    function emailCollaborators(token: string, pathId: string, message: string): Promise<Response> {
+        return authedRequest(token, `/drive/${ctx.alice.user.id}/${mountId}/path/${pathId}/email-collaborators`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, sendCopyToSelf: false }),
         });
     }
 
@@ -204,6 +213,17 @@ describe('changing sharing and moving need write held by name', () => {
             );
             expect(visit.status).toBe(403);
         });
+
+        test('cannot mail the people the item is shared with', async () => {
+            const sendMail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            try {
+                const open = await openFolder('Mail Refused');
+                expect((await emailCollaborators(ctx.bob.user.sessionToken, open.id, 'from bob')).status).toBe(403);
+                expect(sendMail.mock.calls.some(([mail]) => mail.text?.includes('from bob'))).toBe(false);
+            } finally {
+                sendMail.mockRestore();
+            }
+        });
     });
 
     describe('an editor by name, through a team, through a folder above, and the owner', () => {
@@ -245,6 +265,17 @@ describe('changing sharing and moving need write held by name', () => {
                 });
                 expect((await move(token, item.id, target.id)).status).toBe(200);
                 expect((await stored(item.id)).parentId).toBe(target.id);
+            }
+        });
+
+        test('may mail the people the item is shared with', async () => {
+            const sendMail = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            try {
+                for (const [token, path] of await sharers('Mails')) {
+                    expect((await emailCollaborators(token, path.id, 'from a sharer')).status).toBe(200);
+                }
+            } finally {
+                sendMail.mockRestore();
             }
         });
 
