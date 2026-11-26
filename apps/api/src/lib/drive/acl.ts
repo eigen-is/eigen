@@ -15,11 +15,14 @@ import {
 import type { DriveACL, DriveACLDelta, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { arePublicLinksEnabled } from '../config/server-settings';
 import { ApiError } from '../core';
 import type { Memberships, User } from '../user';
 
+// While public links are off a link is private to everyone. Its value stays, so turning them on opens it again.
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
-    return visibility === 'public-read' || visibility === 'public-write' || visibility === 'link';
+    if (visibility === 'link') return arePublicLinksEnabled();
+    return visibility === 'public-read' || visibility === 'public-write';
 }
 
 // Whether the path, or a folder above it, is in the trash. A path in the trash is the owner's alone until
