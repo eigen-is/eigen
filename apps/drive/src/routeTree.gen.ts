@@ -17,8 +17,8 @@ import { Route as AuthTrashRouteImport } from './routes/_auth.trash'
 import { Route as AuthWatchedRouteImport } from './routes/_auth.watched'
 import { Route as SharedToRouteImport } from './routes/shared.$to'
 import { Route as AuthMimeMimeTypeRouteImport } from './routes/_auth.mime.$mimeType'
+import { Route as EditOwnerIdMountIdPathIdRouteImport } from './routes/edit.$ownerId.$mountId.$pathId'
 import { Route as FsOwnerIdMountIdPathIdRouteImport } from './routes/fs.$ownerId.$mountId.$pathId'
-import { Route as AuthEditOwnerIdMountIdPathIdRouteImport } from './routes/_auth.edit.$ownerId.$mountId.$pathId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -59,17 +59,17 @@ const AuthMimeMimeTypeRoute = AuthMimeMimeTypeRouteImport.update({
   path: '/mime/$mimeType',
   getParentRoute: () => AuthRoute,
 } as any)
+const EditOwnerIdMountIdPathIdRoute =
+  EditOwnerIdMountIdPathIdRouteImport.update({
+    id: '/edit/$ownerId/$mountId/$pathId',
+    path: '/edit/$ownerId/$mountId/$pathId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const FsOwnerIdMountIdPathIdRoute = FsOwnerIdMountIdPathIdRouteImport.update({
   id: '/fs/$ownerId/$mountId/$pathId',
   path: '/fs/$ownerId/$mountId/$pathId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthEditOwnerIdMountIdPathIdRoute =
-  AuthEditOwnerIdMountIdPathIdRouteImport.update({
-    id: '/edit/$ownerId/$mountId/$pathId',
-    path: '/edit/$ownerId/$mountId/$pathId',
-    getParentRoute: () => AuthRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -79,8 +79,8 @@ export interface FileRoutesByFullPath {
   '/watched': typeof AuthWatchedRoute
   '/shared/$to': typeof SharedToRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/edit/$ownerId/$mountId/$pathId': typeof EditOwnerIdMountIdPathIdRoute
   '/fs/$ownerId/$mountId/$pathId': typeof FsOwnerIdMountIdPathIdRoute
-  '/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -90,8 +90,8 @@ export interface FileRoutesByTo {
   '/watched': typeof AuthWatchedRoute
   '/shared/$to': typeof SharedToRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/edit/$ownerId/$mountId/$pathId': typeof EditOwnerIdMountIdPathIdRoute
   '/fs/$ownerId/$mountId/$pathId': typeof FsOwnerIdMountIdPathIdRoute
-  '/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -103,8 +103,8 @@ export interface FileRoutesById {
   '/_auth/watched': typeof AuthWatchedRoute
   '/shared/$to': typeof SharedToRoute
   '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/edit/$ownerId/$mountId/$pathId': typeof EditOwnerIdMountIdPathIdRoute
   '/fs/$ownerId/$mountId/$pathId': typeof FsOwnerIdMountIdPathIdRoute
-  '/_auth/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -116,8 +116,8 @@ export interface FileRouteTypes {
     | '/watched'
     | '/shared/$to'
     | '/mime/$mimeType'
-    | '/fs/$ownerId/$mountId/$pathId'
     | '/edit/$ownerId/$mountId/$pathId'
+    | '/fs/$ownerId/$mountId/$pathId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -127,8 +127,8 @@ export interface FileRouteTypes {
     | '/watched'
     | '/shared/$to'
     | '/mime/$mimeType'
-    | '/fs/$ownerId/$mountId/$pathId'
     | '/edit/$ownerId/$mountId/$pathId'
+    | '/fs/$ownerId/$mountId/$pathId'
   id:
     | '__root__'
     | '/'
@@ -139,8 +139,8 @@ export interface FileRouteTypes {
     | '/_auth/watched'
     | '/shared/$to'
     | '/_auth/mime/$mimeType'
+    | '/edit/$ownerId/$mountId/$pathId'
     | '/fs/$ownerId/$mountId/$pathId'
-    | '/_auth/edit/$ownerId/$mountId/$pathId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -148,6 +148,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
   SharedToRoute: typeof SharedToRoute
+  EditOwnerIdMountIdPathIdRoute: typeof EditOwnerIdMountIdPathIdRoute
   FsOwnerIdMountIdPathIdRoute: typeof FsOwnerIdMountIdPathIdRoute
 }
 
@@ -209,19 +210,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMimeMimeTypeRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/edit/$ownerId/$mountId/$pathId': {
+      id: '/edit/$ownerId/$mountId/$pathId'
+      path: '/edit/$ownerId/$mountId/$pathId'
+      fullPath: '/edit/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof EditOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/fs/$ownerId/$mountId/$pathId': {
       id: '/fs/$ownerId/$mountId/$pathId'
       path: '/fs/$ownerId/$mountId/$pathId'
       fullPath: '/fs/$ownerId/$mountId/$pathId'
       preLoaderRoute: typeof FsOwnerIdMountIdPathIdRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_auth/edit/$ownerId/$mountId/$pathId': {
-      id: '/_auth/edit/$ownerId/$mountId/$pathId'
-      path: '/edit/$ownerId/$mountId/$pathId'
-      fullPath: '/edit/$ownerId/$mountId/$pathId'
-      preLoaderRoute: typeof AuthEditOwnerIdMountIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
     }
   }
 }
@@ -231,7 +232,6 @@ interface AuthRouteChildren {
   AuthTrashRoute: typeof AuthTrashRoute
   AuthWatchedRoute: typeof AuthWatchedRoute
   AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
-  AuthEditOwnerIdMountIdPathIdRoute: typeof AuthEditOwnerIdMountIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -239,7 +239,6 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthTrashRoute: AuthTrashRoute,
   AuthWatchedRoute: AuthWatchedRoute,
   AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
-  AuthEditOwnerIdMountIdPathIdRoute: AuthEditOwnerIdMountIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -249,6 +248,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
   SharedToRoute: SharedToRoute,
+  EditOwnerIdMountIdPathIdRoute: EditOwnerIdMountIdPathIdRoute,
   FsOwnerIdMountIdPathIdRoute: FsOwnerIdMountIdPathIdRoute,
 }
 export const routeTree = rootRouteImport

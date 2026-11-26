@@ -7,7 +7,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { usePathInfo, useSharedPaths, validateDriveSearch } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
@@ -38,25 +38,33 @@ function SharedRoute() {
         mid || DEFAULT_MOUNT_ID,
         pid,
     );
-
     const {
         data: sharedPaths = [],
         isLoading: isSharedLoading,
         error,
     } = useSharedPaths(ownerId, to === 'by-me' ? 'by-me' : 'with-me');
-    // A visitor has no shared lists: the page lists the one file their link names.
-    const folderContents = user ? sharedPaths : selectedPath ? [selectedPath] : [];
-    const isLoading = user ? isSharedLoading : isSelectedPathLoading;
 
-    // The with-me feed says nothing about the viewer's access to each row, so only the by-me side writes.
-    // Delete stays on both sides: on the with-me side it leaves the share.
-    const capabilities: DriveCapabilities = user
-        ? { ...DRIVE_CAPABILITIES.listing, canRename: to === 'by-me', canWrite: to === 'by-me' }
-        : DRIVE_CAPABILITIES.readOnly;
+    // A visitor has no shared lists: the page lists the one file their link names, with no list to go back to.
+    const page = user
+        ? {
+              folderContents: sharedPaths,
+              isLoading: isSharedLoading,
+              // The with-me feed says nothing about the viewer's access to each row, so only the by-me side writes.
+              capabilities: { ...DRIVE_CAPABILITIES.listing, canRename: to === 'by-me', canWrite: to === 'by-me' },
+              title: to === 'by-me' ? 'Shared by me' : 'Shared with me',
+              onBackToList: () => navigate({ to: Route.fullPath, params: { to } }),
+          }
+        : {
+              folderContents: selectedPath ? [selectedPath] : [],
+              isLoading: isSelectedPathLoading,
+              capabilities: DRIVE_CAPABILITIES.readOnly,
+              title: selectedPath ? stripEigenExtension(selectedPath.name) : undefined,
+              onBackToList: undefined,
+          };
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
-        items: folderContents,
-        capabilities,
+        items: page.folderContents,
+        capabilities: page.capabilities,
         onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
@@ -70,25 +78,16 @@ function SharedRoute() {
             }),
     });
 
-    // A visitor's page is the one file, with no list to go back to.
-    const handleBackToList = () => {
-        if (user) navigate({ to: Route.fullPath, params: { to } });
-    };
-
     return (
         <DriveLayout
+            {...page}
             pid={pid}
             selectedPath={selectedPath}
             ownerId={uid || ownerId}
             mountId={mid || DEFAULT_MOUNT_ID}
-            folderContents={folderContents}
-            isLoading={isLoading}
             error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
-            capabilities={capabilities}
-            title={!user ? selectedPath?.name : to === 'by-me' ? 'Shared by me' : 'Shared with me'}
             onQuickLook={onQuickLook}
         />
     );
