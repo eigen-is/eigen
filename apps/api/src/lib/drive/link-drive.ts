@@ -54,7 +54,7 @@ export class LinkDrive {
         const crumbs = await this.breadCrumb(mountId, pathId);
         const children = await this.drive.getFolderContents(mountId, pathId);
         return children
-            .filter((child) => canReadByLink([...crumbs, child], arePublicLinksEnabled()) !== null)
+            .filter((child) => canReadByLink([...crumbs, child]) !== null)
             .map((child) => trimmed(child, false));
     }
 
@@ -63,10 +63,11 @@ export class LinkDrive {
         return this.drive.getCollabDocument(mountId, pathId);
     }
 
-    // The chain from the public path down, or null where the link rule refuses the path.
+    // The chain from the public path down, or null while public links are off or where the link rule refuses the path.
     private async publicChain(mountId: string, pathId: string): Promise<DrivePath[] | null> {
+        if (!arePublicLinksEnabled()) return null;
         const chain = await this.drive.breadCrumb(mountId, pathId);
-        const publicPath = canReadByLink(chain, arePublicLinksEnabled());
+        const publicPath = canReadByLink(chain);
         return publicPath === null ? null : chain.slice(publicPath);
     }
 }

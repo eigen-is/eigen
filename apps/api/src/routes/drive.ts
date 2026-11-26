@@ -2,15 +2,15 @@
 // downloading, copying, renaming, moving and deleting, a document's versions and the trash. A route may
 // serve another owner's drive, such as a team drive or a path shared with the user, so it gets its drive
 // from getSharedDrive, which checks the access, and never compares ownerId with user.id itself. A few reads
-// also answer a visitor without a login, through getLinkDrive. Listings, sharing and file contents such as
-// previews have route files of their own beside this one.
+// also answer a visitor without a login. Listings, sharing and file contents such as previews have route
+// files of their own beside this one.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
-import { getLinkDrive, getSharedDrive } from '../lib/drive';
+import { getReadDrive, getSharedDrive } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
@@ -29,7 +29,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             return await drive.getFolderContents(params.mountId, params.pathId);
         },
         { linkAuth: true },
@@ -90,7 +90,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/download',
         async ({ params, request, user }): Promise<Response> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return serveFile(
                 mount,
@@ -170,7 +170,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/path/:pathId',
         async ({ params, user }): Promise<DrivePath | null> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             return await drive.getPath(params.mountId, params.pathId);
         },
         { linkAuth: true },
@@ -210,7 +210,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/path/:pathId/breadcrumb',
         async ({ params, user }): Promise<DrivePath[]> => {
-            const drive = user ? await getSharedDrive(params.ownerId, user) : await getLinkDrive(params.ownerId);
+            const drive = await getReadDrive(params.ownerId, user);
             return await drive.breadCrumb(params.mountId, params.pathId);
         },
         { linkAuth: true },
