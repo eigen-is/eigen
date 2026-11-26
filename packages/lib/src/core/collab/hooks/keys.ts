@@ -1,3 +1,6 @@
+// The query keys of a collab document: its access info and, for a reader who gets no socket, its stored state. The
+// invalidators refresh the info of one open document or of every one in a mount, such as after a share changes.
+
 import type { QueryClient } from '@tanstack/react-query';
 
 export const collabKeys = {

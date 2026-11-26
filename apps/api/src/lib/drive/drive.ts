@@ -851,9 +851,8 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Whether the user syncs the path over the collab socket: they read it by name, as an owner, a team member or
-    // someone an ACL names, or they may write it. Whoever reads only through a link or "Anyone signed in" loads the
-    // stored state over HTTP instead, so the socket's work stays with the people the document is shared with.
+    // Whether the user syncs the path over the collab socket: they read it by name or may write it. Whoever reads only
+    // through a link or "Anyone signed in" loads the stored state over HTTP, so the socket's work stays with members.
     public async isLiveReader(mountId: string, pathId: string, user: User): Promise<boolean> {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         const memberships = await getMemberships(user.id);

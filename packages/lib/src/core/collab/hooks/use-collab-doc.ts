@@ -151,9 +151,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         // Wires the provider's events to the hook's state, and returns what unwires them.
         function followSocket(socketCtx: CollabDocContext, socket: WebsocketProvider): () => void {
-            // Every reconnect names the epoch this doc loaded under, so a tab that outlived a whole-server restore
-            // reloads instead of merging back. The channel carries it too, so that tab can't hand its state to a
-            // reloaded one.
+            // Every reconnect names the epoch this doc loaded under, so a tab that outlived a restore reloads instead
+            // of merging back. The channel carries it too, so that tab can't hand its state to a reloaded one.
             socket.messageHandlers[COLLAB_EPOCH_MESSAGE] = (_encoder, decoder) => {
                 if (socket.params['epoch']) return;
                 const epoch = decoding.readVarString(decoder);
@@ -205,9 +204,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             let retryTimer: ReturnType<typeof setTimeout> | undefined;
             const handleConnectionClose = (event: CloseEvent | null) => {
                 if (event?.code === COLLAB_HOME_REPLACED_CLOSE || event?.code === COLLAB_ACCESS_LOST_CLOSE) {
-                    // A reconnect would sync this tab's copy back over a restore, or be refused with these edits after
-                    // a lost read. The unsynced edits go too, because the armed guard would prompt in front of the
-                    // reload.
+                    // A reconnect would sync this tab's copy back over a restore, or be refused after a lost read. The
+                    // unsynced edits go too, because the armed guard would prompt in front of the reload.
                     pendingUpdateRef.current = false;
                     setUnsyncedEdits(false);
                     socket.disconnect();
