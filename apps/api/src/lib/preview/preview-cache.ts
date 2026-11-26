@@ -77,12 +77,16 @@ async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<vo
     await writeCacheFile(failedMarker(cacheFile), '').catch(() => {});
 }
 
+// A path keeps one file of each kind, which is its extension, so a text preview and a collab state live side by side
+// while a format bump prunes the earlier format of its kind. A failed marker counts as the kind of its file.
 async function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
     const prefix = `${pathId}-`;
+    const kind = path.extname(keep);
     const files = await fs.promises.readdir(previewsDir);
     await Promise.all(
         files
             .filter((name) => name !== keep && name.startsWith(prefix))
+            .filter((name) => path.extname(name.replace(/\.failed$/, '')) === kind)
             .map((name) => fs.promises.unlink(path.join(previewsDir, name)).catch(() => {})),
     );
 }
