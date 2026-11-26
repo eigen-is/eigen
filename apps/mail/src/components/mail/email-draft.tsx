@@ -1,8 +1,7 @@
-// The mail composer: recipients, subject, body and attachments of one draft, and the send. Its state
-// and auto-save live in useDraft. Files come in from the disk, from Drive or from a forwarded message,
-// and each is staged on the server before a save embeds it. A send that lacks a recipient or any content says so
-// under the field. At send time it offers to share the Drive documents the mail links with recipients who cannot
-// open them yet.
+// The mail composer: recipients, subject, body and attachments of one draft, and the send. Its state and auto-save
+// live in useDraft. Files come in from the disk, from Drive or from a forwarded message, and each is staged on the
+// server before a save embeds it. A send that lacks a recipient or any content says so under the field. At send time
+// it offers to share the Drive documents the mail links with recipients who cannot open them yet.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { rethrowUntoasted } from '@workspace/lib/api-error';
@@ -80,8 +79,8 @@ type EmailDraftProps = {
     // has no saved draft, and its chip is part of the prefill, so they alone save no draft.
     forwardedParts?: FileSubject[];
     to?: string;
-    // Drive paths to attach when the composer opens, such as palette "Mail to…". They go through handleDriveAttach, once
-    // per compose session.
+    // Drive paths to attach when the composer opens, such as palette "Mail to…". They go through handleDriveAttach,
+    // once per compose session.
     initialDriveAttachments?: DrivePath[];
     signatureHtml?: string;
     sendDraft: (mail: NewDraft, grantAccessRefIds?: string[]) => Promise<unknown>;
@@ -276,8 +275,8 @@ export function EmailDraft({
         if (forwardedPartsSaved) reportForwardedPartsSaved();
     }, [forwardedPartsSaved]);
 
-    // Saves stop only at dispatch, which keeps the draft editable when the user backs out of "Share before sending?" or the
-    // send is rejected.
+    // Saves stop only at dispatch, which keeps the draft editable when the user backs out of "Share before sending?" or
+    // the send is rejected.
     const dispatchSend = (mail: NewDraft, grantAccessRefIds?: string[]) => {
         disableSaves();
         return sendDraft(mail, grantAccessRefIds).catch((error) => {
@@ -308,8 +307,8 @@ export function EmailDraft({
                 return;
             }
 
-            // A failed check (stale 404, network) leaves that reference out of the dialog, so the mail sends with whatever access
-            // already exists.
+            // A failed check (stale 404, network) leaves that reference out of the dialog, so the mail sends with
+            // whatever access already exists.
             const checks = await Promise.all(
                 refs.map((ref) =>
                     checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
@@ -334,8 +333,8 @@ export function EmailDraft({
                     notes.push(`You can't share ${stripEigenExtension(ref.name)}. Recipients can request access.`);
                     continue;
                 }
-                // The server grants only To and Cc, since a Bcc grant would show the Bcc to every reader. Any shareable reference with a
-                // needing Bcc recipient is flagged, so the exclusion note shows once the dialog opens.
+                // The server grants only To and Cc, since a Bcc grant would show the Bcc to every reader. A shareable
+                // reference a Bcc recipient needs is flagged, so the exclusion note shows once the dialog opens.
                 const needingToCc = needing.filter((r) => !bcc.has(r.email));
                 if (needing.length > needingToCc.length) hasShareableBcc = true;
                 if (needingToCc.length === 0) continue;
@@ -385,8 +384,8 @@ export function EmailDraft({
         await sendWithFreshDraft().catch(rethrowUntoasted);
     };
 
-    // A modifier combo fires even while an input or editor is focused, and the body editor's submitOnModEnter keeps HardBreak
-    // from firing first. A dialog over the draft, such as Share & send or a form, owns its own Cmd+Enter.
+    // A modifier combo fires even while an input or editor is focused, and the body editor's submitOnModEnter keeps
+    // HardBreak from firing first. A dialog over the draft, such as Share & send or a form, owns its own Cmd+Enter.
     const dialogOpen = useDialogOpen();
     useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending && !dialogOpen });
 
@@ -405,8 +404,8 @@ export function EmailDraft({
                     e.preventDefault();
                     handleSendEmail();
                 }}
-                // Enter would submit the form, which sends, with any modifier, and on a Mac Ctrl+Enter is not the send hotkey. Mod+Enter
-                // still sends, as the hotkey ignores defaultPrevented.
+                // Enter would submit the form, which sends, with any modifier, and on a Mac Ctrl+Enter is not the send
+                // hotkey. Mod+Enter still sends, as the hotkey ignores defaultPrevented.
                 onKeyDown={(e) => {
                     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
                     if (!(e.target instanceof HTMLInputElement)) return;

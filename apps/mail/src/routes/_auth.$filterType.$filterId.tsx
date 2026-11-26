@@ -176,7 +176,7 @@ function MailRoute() {
             void actions.moveEmailByIdOnly(id, action === 'archive' ? MAILBOX_ARCHIVE : MAILBOX_JUNK);
         }
         if (landId) openEmail(landId);
-        else actions.navigateToList();
+        else actions.closeDetail();
     };
 
     // False when the Trash confirm opened instead, so the cursor moves on only after a real delete.
@@ -201,7 +201,7 @@ function MailRoute() {
         shortcutsEnabled,
         openEmailId: mailId,
         onRowClick: openEmail,
-        navigateToList: actions.navigateToList,
+        closeDetail: actions.closeDetail,
         navigateToMailbox: (targetFilterId: string) =>
             navigate({ to: Route.fullPath, params: { filterType: 'box', filterId: targetFilterId }, search: {} }),
         onCompose: actions.openCompose,
@@ -327,7 +327,7 @@ function MailRoute() {
                     </Column>
                     {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
                     {showDetail && (
-                        <DetailColumn width="flex" actions={detailToolbar} onClose={actions.navigateToList} fill>
+                        <DetailColumn width="flex" actions={detailToolbar} onClose={actions.closeDetail} fill>
                             {isComposing ? (
                                 <EmailDraft
                                     // A compose session stays mounted across auto-save's URL update. An open

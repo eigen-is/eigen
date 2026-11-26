@@ -10,7 +10,7 @@ import { useRouter } from '@tanstack/react-router';
 // What a host passes on as its navigate's `state`: true keeps the entry's state, an updater writes the new entry's.
 export type DetailHistoryOptions = { replace: boolean; state: true | ((prev: HistoryState) => HistoryState) };
 
-type UseDetailHistoryReturn<T> = {
+export type DetailHistory<T> = {
     open: (next: T) => void;
     close: () => void;
 };
@@ -18,7 +18,7 @@ type UseDetailHistoryReturn<T> = {
 export function useDetailHistory<T>(
     isOpen: boolean,
     setValue: (next: T | undefined, options: DetailHistoryOptions) => void,
-): UseDetailHistoryReturn<T> {
+): DetailHistory<T> {
     const router = useRouter();
     return {
         open: (next) => {

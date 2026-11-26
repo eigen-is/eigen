@@ -21,8 +21,13 @@ const navigate = async (options: NavigateOptions) => {
 };
 // No entry here is a detail's own push, so a close replaces.
 const router = { history: { location: { state: {} } } };
-mock.module('@tanstack/react-router', () => ({ ...realRouter, useNavigate: () => navigate, useRouter: () => router }));
 const params = { filterType: 'mailbox', filterId: 'INBOX' };
+mock.module('@tanstack/react-router', () => ({
+    ...realRouter,
+    useNavigate: () => navigate,
+    useRouter: () => router,
+    useMatch: () => ({ params, search: {} }),
+}));
 mock.module('../../../../routes/_auth.$filterType.$filterId', () => ({
     ...realRoute,
     Route: { fullPath: realRoute.Route.fullPath, useParams: () => params, useSearch: () => ({}) },

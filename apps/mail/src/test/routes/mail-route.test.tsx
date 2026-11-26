@@ -1,7 +1,8 @@
 // A message opens beside the list as a detail column. A row opens it on a new history entry, another row replaces it,
 // and X or Esc closes it: back on the entry the row pushed, by replace on one a link opened, so back after a close
 // never reopens the message. Closing keeps the search's ?q=. A message opened from the composer leaves the compose
-// session's history state behind.
+// session's history state behind. Compose follows the same rule: from the list it pushes, over a message it replaces,
+// and an archive or a delete of the open message closes it the same way.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { Email } from '@workspace/lib/types/mail';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -39,6 +40,7 @@ const email = (id: string, subject: string): Email => ({
     text: 'Hello',
 });
 const EMAILS = [email('m1', 'Plans'), email('m2', 'Budget')];
+const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
@@ -61,6 +63,8 @@ mock.module('@workspace/lib/mail', () => ({
     useEmail: (id: string | undefined) => ({ data: EMAILS.find((e) => e.id === id), isPending: false }),
     useEmailById: () => async (id: string) => EMAILS.find((e) => e.id === id) ?? null,
     useMailboxes: () => ({ data: [], isLoading: false, error: null }),
+    useMoveEmail: () => mutation,
+    useDeleteEmail: () => mutation,
 }));
 mock.module('@workspace/lib/public', () => ({ ...realPublic, useMailEnabled: () => true }));
 mock.module('@workspace/lib/space', () => ({ ...realSpace, useSpaceSettings: () => ({ data: undefined }) }));
@@ -173,4 +177,45 @@ test('a message opened from the composer leaves the compose session behind', asy
     expect(page.state().prefillDraft).toBeUndefined();
     await settle(() => closeButton()?.click());
     expect(page.search()).toEqual({});
+});
+
+const button = (label: string) =>
+    [...document.querySelectorAll('button')].find(
+        (b) => b.textContent === label || b.getAttribute('aria-label') === label,
+    );
+
+test('Compose from the list opens on a new entry, and X goes back to the list keeping ?q=', async () => {
+    const page = await open('/box/inbox?q=plans');
+    await settle(() => button('Compose')?.click());
+    expect(page.search()).toEqual({ q: 'plans', mode: 'compose' });
+    expect(page.index()).toBe(1);
+    expect(page.state().composeSessionKey).toBeDefined();
+    await settle(() => closeButton()?.click());
+    expect(page.search()).toEqual({ q: 'plans' });
+    expect(page.index()).toBe(0);
+});
+
+test('Compose over an open message replaces it, so X goes back to the list and not to the message', async () => {
+    const page = await open('/box/inbox');
+    await clickRow(0);
+    await settle(() => button('Compose')?.click());
+    expect(page.search()).toEqual({ mode: 'compose' });
+    expect(page.index()).toBe(1);
+    await settle(() => closeButton()?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(0);
+});
+
+test('archiving or deleting the open message closes it by going back', async () => {
+    const page = await open('/box/inbox');
+    // The last row, so there is no next message to move on to.
+    await clickRow(1);
+    expect(page.index()).toBe(1);
+    await settle(() => button('Archive')?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(0);
+    await clickRow(1);
+    await settle(() => button('Delete')?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(0);
 });
