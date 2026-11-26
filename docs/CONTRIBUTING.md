@@ -203,7 +203,7 @@ A new patch is a package change, so it needs the owner's yes first ([AGENTS.md](
 
 | Patch | Guard |
 |---|---|
-| `elysia@1.4.30` | `apps/api/src/test/collab/collab-ws-text-frames.test.ts`: every text frame reaches the handler as the string it is |
+| `elysia@1.4.30` | `apps/api/src/test/collab/collab-ws-text-frames.test.ts`: every text frame reaches the handler as the string it is. So a `.ws` route with an object `body` schema fails it on every text frame, and parses the JSON in its own `parse` hook |
 | `@formulajs/formulajs@2.9.3` | `packages/sheet/src/test/engine/formulajs-flatten.test.ts`: flattening 200,000 rows stays under a second |
 | `ical.js@2.2.1` | `apps/api/src/test/ical/ical-js-parameters.test.ts` and `ical-js-timezones.test.ts`: their CPU-time bounds |
 | `numfmt@4.1.3` | `packages/formula/src/test/format/number-display.test.ts`: the weekdays before day 0 |
