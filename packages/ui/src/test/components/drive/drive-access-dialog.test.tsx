@@ -424,12 +424,13 @@ test('Anyone with the link is not offered while public links are off, nor on a c
     expect(await generalAccessChoices()).toEqual([RESTRICTED, SIGNED_IN]);
 });
 
-test('a stored link shows as it is while public links are off, and can be changed away', async () => {
+test('a stored link shows as it is while public links are off, says it opens nothing, and can be changed away', async () => {
     publicLinks = false;
     sharedPath = { ...notes, visibility: 'link' };
     await open();
     expect(generalAccess().textContent).toBe(ANYONE);
-    expect(dialog()?.textContent).toContain(PUBLIC_LINK_NOTE);
+    expect(dialog()?.textContent).toContain('Public links are turned off on this server, so this link opens nothing.');
+    expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
     await chooseGeneralAccess(RESTRICTED);
     await click(button('Save'));
     await settle();

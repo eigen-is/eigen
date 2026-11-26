@@ -44,6 +44,7 @@ const GENERAL_ACCESS_CHOICES: readonly DriveVisibility[] = ['private', 'public-r
 
 const PUBLIC_LINK_NOTE =
     "Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access.";
+const PUBLIC_LINKS_OFF_NOTE = 'Public links are turned off on this server, so this link opens nothing.';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
@@ -80,6 +81,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     const linkable = path.type === DRIVE_TYPE_FOLDER || path.type === DRIVE_TYPE_FILE || isCollabType(path.type);
     const offersLink = path.visibility === 'link' || (publicConfig?.publicLinks === true && linkable);
     const choices = GENERAL_ACCESS_CHOICES.filter((choice) => choice !== 'link' || offersLink);
+    const linkNote = publicConfig?.publicLinks === false ? PUBLIC_LINKS_OFF_NOTE : PUBLIC_LINK_NOTE;
 
     // A person set to Remove comes back with the access they had, your own entry included.
     const withPerson = (email: string): DirectAccessItem[] => {
@@ -314,7 +316,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                             </SelectContent>
                         </Select>
                     }
-                    description={visibility === 'link' ? PUBLIC_LINK_NOTE : undefined}
+                    description={visibility === 'link' ? linkNote : undefined}
                 >
                     {visibility === 'link' && <span className="text-xs text-muted-foreground shrink-0">Can view</span>}
                     {(visibility === 'public-read' || visibility === 'public-write') && (
