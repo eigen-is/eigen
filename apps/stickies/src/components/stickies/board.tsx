@@ -30,11 +30,11 @@ import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     CollabDocumentGate,
     ColumnLayout,
+    columnWidthPx,
     DetailColumn,
     Column as LayoutColumn,
     PhoneDetail,
     UnsyncedEditsGuard,
-    useColumnWidthPx,
     useLayout,
 } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
@@ -177,8 +177,6 @@ export function StickiesBoard({
             </div>
         </DetailColumn>
     ) : null;
-    // The find bar floats clear of the column. A phone's spans the screen.
-    const columnPx = useColumnWidthPx('small');
     const cardContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const boardScrollRef = useRef<HTMLDivElement>(null);
@@ -308,7 +306,7 @@ export function StickiesBoard({
                                 if (open && isMobile && activityOpen) activity.close();
                             }}
                             barClassName="top-14"
-                            rightInsetPx={activityOpen && !isMobile ? columnPx : undefined}
+                            rightInsetPx={activityOpen && !isMobile ? columnWidthPx('small') : undefined}
                         >
                             <LayoutColumn
                                 id="board"

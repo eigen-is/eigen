@@ -115,22 +115,20 @@ export function Toolbar({
                                 </Tooltip>
                             );
                         })}
-                        {filter.isActive && <FilterSummary filter={filter} onClear={() => filter.clear()} inline />}
+                        {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} inline />}
                     </div>
                 )
             }
             right={
-                <div className="flex items-center gap-1">
-                    <DocumentShareCluster
-                        canWrite={canWrite}
-                        offline={offline}
-                        storageUnavailable={storageUnavailable}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        onToggleActivity={onToggleActivity}
-                        activityOpen={activityOpen}
-                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                    />
-                </div>
+                <DocumentShareCluster
+                    canWrite={canWrite}
+                    offline={offline}
+                    storageUnavailable={storageUnavailable}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onToggleActivity={onToggleActivity}
+                    activityOpen={activityOpen}
+                    watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                />
             }
         />
     );
