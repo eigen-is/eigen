@@ -6,6 +6,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useTeams } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useState } from 'react';
 import { TeamDetail, TeamDetailToolbar } from '../components/admin/team-detail';
 import { AdminTeamsTable, AdminTeamsToolbar } from '../components/admin/teams-table';
@@ -33,6 +34,10 @@ function TeamsPage({ organizationId }: { organizationId: string }) {
     const [searchQuery, setSearchQuery] = useState('');
     const { data: teams = [], isLoading } = useTeams(organizationId);
 
+    const detail = useDetailHistory(teamId, (next, { replace, state }) =>
+        navigate({ to: '/teams', search: (prev) => ({ ...prev, teamId: next }), replace, state }),
+    );
+
     const team = teams.find((t) => t.id === teamId);
 
     if (isLoading) {
@@ -59,14 +64,9 @@ function TeamsPage({ organizationId }: { organizationId: string }) {
                 ))
             }
             detailToolbar={detailToolbar}
-            onBackToList={() => navigate({ to: '/teams', search: {} })}
+            onClose={detail.close}
         >
-            <AdminTeamsTable
-                teams={teams}
-                searchQuery={searchQuery}
-                activeTeamId={teamId}
-                onRowClick={(id) => navigate({ to: '/teams', search: { teamId: id } })}
-            />
+            <AdminTeamsTable teams={teams} searchQuery={searchQuery} activeTeamId={teamId} onRowClick={detail.open} />
         </ListDetailLayout>
     );
 }

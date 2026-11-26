@@ -21,6 +21,7 @@ import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
 import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
@@ -60,27 +61,21 @@ function ContactsRoute() {
     const deleteDialog = useDialogValue<Contact[]>();
     const deleteTargets = deleteDialog.value;
 
-    const handleBackToList = () => {
+    const detail = useDetailHistory(contactId, (next, { replace, state }) =>
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
-            search: {},
-        });
-    };
+            search: (prev) => ({ ...prev, contactId: next }),
+            replace,
+            state,
+        }),
+    );
 
     const handleConfirmDelete = async (targets: Contact[]) => {
         // allSettled, not all: one 412 mid-batch must not reject the whole run and
-        // skip the navigate, leaving the dialog stuck open.
+        // skip the close, leaving the dialog stuck open.
         await Promise.allSettled(targets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag })));
-        handleBackToList();
-    };
-
-    const handleRowClick = (id: string) => {
-        navigate({
-            to: Route.fullPath,
-            params: { filterType, filterId },
-            search: { contactId: id },
-        });
+        detail.close();
     };
 
     const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
@@ -144,13 +139,13 @@ function ContactsRoute() {
                     ))
                 }
                 detailToolbar={activeMember && <TeamMemberDetailToolbar member={activeMember} />}
-                onBackToList={handleBackToList}
+                onClose={detail.close}
             >
                 <TeamMemberList
                     members={activeTeam?.members || []}
                     activeMemberEmail={contactId}
                     searchQuery={searchQuery}
-                    onRowClick={handleRowClick}
+                    onRowClick={detail.open}
                 />
             </ListDetailLayout>
         );
@@ -174,7 +169,7 @@ function ContactsRoute() {
                     (contact ? <ContactDetail contact={contact} /> : <EmptyState message="Contact not found" />)
                 }
                 detailToolbar={detailToolbar}
-                onBackToList={handleBackToList}
+                onClose={detail.close}
             >
                 {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId} />}
                 <ContactsList
@@ -184,7 +179,7 @@ function ContactsRoute() {
                     sortBy={sortBy}
                     activeContactId={contactId}
                     labels={labels}
-                    onRowClick={handleRowClick}
+                    onRowClick={detail.open}
                     onEdit={(contact) => {
                         navigate({
                             to: '/edit/$filterType/$filterId',

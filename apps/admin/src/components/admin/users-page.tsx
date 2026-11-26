@@ -7,6 +7,7 @@ import { usePublicConfig } from '@workspace/lib/public';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { EmptyState, ListDetailLayout, LoadingState } from '@workspace/ui/components/layout/app';
+import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useState } from 'react';
 import { UserDetail, UserDetailToolbar } from './user-detail';
 import { AdminUsersTable, AdminUsersToolbar } from './users-table';
@@ -27,9 +28,9 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
     const to = guests ? '/guests' : '/users';
     const selected = users.find((u) => u.id === userId);
 
-    const handleBackToList = () => {
-        navigate({ to, search: {} });
-    };
+    const detail = useDetailHistory(userId, (next, { replace, state }) =>
+        navigate({ to, search: (prev) => ({ ...prev, userId: next }), replace, state }),
+    );
 
     if (isLoading || !config) {
         return <LoadingState />;
@@ -56,14 +57,14 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
                 ))
             }
             detailToolbar={detailToolbar}
-            onBackToList={handleBackToList}
+            onClose={detail.close}
         >
             <AdminUsersTable
                 users={users}
                 usage={usage}
                 searchQuery={searchQuery}
                 activeUserId={userId}
-                onRowClick={(id) => navigate({ to, search: { userId: id } })}
+                onRowClick={detail.open}
                 guests={guests}
             />
         </ListDetailLayout>

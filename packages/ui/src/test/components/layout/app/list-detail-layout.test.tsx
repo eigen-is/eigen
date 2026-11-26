@@ -1,20 +1,25 @@
 // A list page opens its detail only once something is selected. Without a selection the list takes the
 // whole width and there is no detail column at all; with one the list narrows to its fixed width beside
-// the detail, and a Close button in the detail's toolbar takes the page back to the list. On a phone only
-// one of the two shows, the list or the selected item's detail, and the back arrow replaces Close.
-import { expect, test } from 'bun:test';
+// the detail. The detail is a detail column: its X and Esc close it, and on a phone, where only one of the
+// two shows, its lone back closes it instead of the X.
+import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
 
-const { createElement } = await import('react');
+const { act, createElement } = await import('react');
 const { LayoutContext } = await import('../../../../components/layout/app/layout-context');
 const { ListDetailLayout } = await import('../../../../components/layout/app/list-detail-layout');
 
-type Shown = { text: string; columns: number; listWidth: string; listGrow: string; close: boolean };
+let unmount = async () => {};
+afterEach(() => unmount());
 
-async function render(selected: boolean, isMobile = false): Promise<Shown> {
+const onClose = mock(() => {});
+
+async function render(selected: boolean, isMobile = false) {
+    await unmount();
+    onClose.mockClear();
     const layout = {
         appName: '',
         setAppName: () => {},
@@ -33,23 +38,22 @@ async function render(selected: boolean, isMobile = false): Promise<Shown> {
         listToolbar: 'List toolbar',
         detail: selected ? 'The detail' : undefined,
         detailToolbar: selected ? 'Detail toolbar' : undefined,
-        onBackToList: () => {},
+        onClose,
         children: 'The list',
     });
-    const { container, unmount } = await renderInDocument(
-        createElement(LayoutContext.Provider, { value: layout }, page),
-    );
+    const rendered = await renderInDocument(createElement(LayoutContext.Provider, { value: layout }, page));
+    unmount = rendered.unmount;
+    const container = rendered.container;
     const layoutRow = container.firstElementChild;
     const list = layoutRow?.firstElementChild;
-    const shown = {
+    return {
         text: container.textContent ?? '',
         columns: layoutRow?.childElementCount ?? 0,
         listWidth: list instanceof HTMLElement ? list.style.width : '',
         listGrow: list instanceof HTMLElement ? list.style.flexGrow : '',
-        close: container.querySelector('button[aria-label="Close"]') !== null,
+        close: container.querySelector<HTMLButtonElement>('button[aria-label="Close"]'),
+        back: container.querySelector<HTMLButtonElement>('[data-slot="detail-column"] button[aria-label="Back"]'),
     };
-    await unmount();
-    return shown;
 }
 
 test('without a selection the list fills the width and there is no detail', async () => {
@@ -71,10 +75,26 @@ test('a selection opens the detail beside a list of fixed width', async () => {
     expect(listGrow).toBe('');
 });
 
-test('the detail closes from its toolbar on a desktop, and from the back arrow on a phone', async () => {
-    expect((await render(false)).close).toBe(false);
-    expect((await render(true)).close).toBe(true);
-    expect((await render(true, true)).close).toBe(false);
+test('on a desktop the X closes the detail', async () => {
+    expect((await render(false)).close).toBeNull();
+    const { close } = await render(true);
+    await act(async () => close?.click());
+    expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+test('Esc closes the detail', async () => {
+    await render(true);
+    await act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+test('on a phone the lone back closes the detail, and there is no X', async () => {
+    const { close, back } = await render(true, true);
+    expect(close).toBeNull();
+    await act(async () => back?.click());
+    expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 test('on a phone the list shows until a selection, then only the detail', async () => {
