@@ -41,6 +41,7 @@ import {
     KANBAN,
     MAILS,
     ORG_NAME,
+    PERSONAL_EVENTS,
     PERSONAS,
     PHOTOS,
     personaByRole,
@@ -472,21 +473,57 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             ).map((row) => row.name);
             expect(tryingMedia).toContain(tryingFigures[0].attrs?.['mediaName']);
 
-            // A persona's own calendar holds their shift, beside the team calendar's events.
+            // Every persona's own calendar holds their shifts and the whole personal pool, beside the team calendar.
+            type EventRow = { title: string; startTime: number; endTime: number; allDay: number; rrule: string | null };
+            const personaIds = new Map(
+                query<{ id: string; email: string }>(usersDb, 'SELECT id, email FROM user').map((row) => [
+                    row.email,
+                    row.id,
+                ]),
+            );
+            const homeOf = (key: string) => {
+                const id = personaIds.get(`${key}@${MAIL_DOMAIN}`);
+                if (!id) throw new Error(`${key} has no account`);
+                return join(root, 'home', id);
+            };
+            const personalEvents = (key: string) =>
+                query<EventRow>(
+                    join(homeOf(key), 'eigen.calendar', 'calendar.db'),
+                    'SELECT title, startTime, endTime, allDay, rrule FROM events',
+                );
+            for (const persona of PERSONAS) {
+                const titles = new Set(personalEvents(persona.key).map((row) => row.title));
+                const lines = [...SHIFTS.filter((shift) => shift.persona === persona.key), ...PERSONAL_EVENTS];
+                expect(lines.filter((line) => !titles.has(line.title)).map((line) => line.title)).toEqual([]);
+            }
             const financeKey = personaByRole('finance').key;
-            const financeShift = SHIFTS.find((shift) => shift.persona === financeKey);
-            if (!financeShift) throw new Error('the finance lead has no shift');
-            const finance = query<{ id: string }>(
-                usersDb,
-                `SELECT id FROM user WHERE email = '${financeKey}@${MAIL_DOMAIN}'`,
-            );
-            expect(finance.length).toBe(1);
-            const financeHome = join(root, 'home', finance[0].id);
+            const financeHome = homeOf(financeKey);
             const financeCalendarDb = join(financeHome, 'eigen.calendar', 'calendar.db');
-            const financeEvents = query<{ title: string }>(financeCalendarDb, 'SELECT title FROM events').map(
-                (row) => row.title,
-            );
-            expect(financeEvents).toContain(financeShift.title);
+            const financeEvents = personalEvents(financeKey);
+            const financeRow = (title: string) => {
+                const row = financeEvents.find((event) => event.title === title);
+                if (!row) throw new Error(`'${title}' missing from the finance lead's calendar`);
+                return row;
+            };
+            // A recurring line keeps its rule.
+            const recurring = PERSONAL_EVENTS.find((line) => line.rrule);
+            if (!recurring) throw new Error('the personal pool has no recurring line');
+            expect(financeRow(recurring.title).rrule).toBe(recurring.rrule ?? null);
+            // A one-day all-day line is UTC midnight on its weekday, with an exclusive end the next day.
+            const allDayLine = PERSONAL_EVENTS.find((line) => line.allDay);
+            if (!allDayLine) throw new Error('the personal pool has no all-day line');
+            const allDayRow = financeRow(allDayLine.title);
+            expect(allDayRow.allDay).toBe(1);
+            const allDayStart = new Date(allDayRow.startTime * 1000);
+            expect(allDayStart.getUTCHours()).toBe(0);
+            expect(allDayStart.getUTCDay()).toBe((((6 + allDayLine.daysFromFestival) % 7) + 7) % 7);
+            expect(allDayRow.endTime - allDayRow.startTime).toBe(86_400);
+            // A half-hour line starts at :30 local time and keeps its length in minutes.
+            const halfHour = PERSONAL_EVENTS.find((line) => !line.allDay && !line.rrule && line.startHour % 1 === 0.5);
+            if (!halfHour) throw new Error('the personal pool has no half-hour line');
+            const halfHourRow = financeRow(halfHour.title);
+            expect(new Date(halfHourRow.startTime * 1000).getMinutes()).toBe(30);
+            expect(halfHourRow.endTime - halfHourRow.startTime).toBe(halfHour.durationHours * 3600);
 
             // Budget sheet: built from BUDGET (demo/sheet-build.ts) and decoded through the shipped reader. The
             // formulas hold their computed values; the amounts carry data bars, the margin a red rule below zero and

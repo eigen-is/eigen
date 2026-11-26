@@ -48,6 +48,7 @@ import type {
     MailAttachment,
     SeededInvite,
     SeededMail,
+    SeededPersonalEvent,
     SeededTime,
     SeededVCardFile,
     VCardSpec,
@@ -69,6 +70,7 @@ import {
     MAILS,
     NOTES,
     ORG_NAME,
+    PERSONAL_EVENTS,
     PERSONAL_SHARES,
     PERSONAS,
     PHOTOS,
@@ -799,25 +801,27 @@ async function main(): Promise<void> {
     festivalSaturday.setDate(festivalSaturday.getDate() + 20);
     while (festivalSaturday.getDay() !== 6) festivalSaturday.setDate(festivalSaturday.getDate() + 1);
     festivalSaturday.setHours(0, 0, 0, 0);
-    // A timed slot of a seeded event, shift or invitation: its day walked from the festival Saturday, at local hours.
-    const timedSlot = (slot: { daysFromFestival: number; startHour: number; durationHours: number }) => {
-        const start = new Date(festivalSaturday);
-        start.setDate(start.getDate() + slot.daysFromFestival);
-        start.setHours(slot.startHour, 0, 0, 0);
+    // The slot of a seeded event, shift or invitation: its day walked from the festival Saturday, at local minutes.
+    // An all-day one is stored as UTC midnight with an exclusive end, as the create-event dialog stores it. The
+    // calendar groups them by UTC date, so local midnight would move it a day early.
+    const eventSlot = (slot: SeededPersonalEvent) => {
+        const day = new Date(festivalSaturday);
+        day.setDate(day.getDate() + slot.daysFromFestival);
+        if (slot.allDay) {
+            const start = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate()));
+            const end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + (slot.days ?? 1));
+            return { start, end };
+        }
+        const start = new Date(day);
+        start.setHours(0, slot.startHour * 60, 0, 0);
         const end = new Date(start);
-        end.setHours(end.getHours() + slot.durationHours);
+        end.setMinutes(end.getMinutes() + slot.durationHours * 60);
         return { start, end };
     };
     const resolvePersona = (ref: string) => PERSONAS.find((persona) => persona.role === ref) ?? personaByKey(ref);
     for (const event of EVENTS) {
-        let { start, end } = timedSlot(event);
-        if (event.allDay) {
-            // An all-day event is stored as UTC midnight with an exclusive end, as the create-event dialog stores
-            // it. The calendar groups them by UTC date, so local midnight would move the festival a day early.
-            start = new Date(Date.UTC(start.getFullYear(), start.getMonth(), start.getDate()));
-            end = new Date(start);
-            end.setUTCDate(end.getUTCDate() + 2); // the festival Saturday and Sunday
-        }
+        const { start, end } = eventSlot(event);
         const organizer = userForRole(event.organizer);
         const attendees: Attendee[] = event.attendees.map((ref) => {
             const persona = resolvePersona(ref);
@@ -845,20 +849,26 @@ async function main(): Promise<void> {
         });
     }
 
-    // --- Shifts: personal lines in each persona's own calendar, which their home makes on first open. ---
-    for (const shift of SHIFTS) {
-        const owner = lookup(userByKey, shift.persona);
+    // --- Personal calendars: a persona's shifts and the shared pool, in the calendar their home makes. ---
+    for (const persona of PERSONAS) {
+        const owner = lookup(userByKey, persona.key);
         const { calendar } = await getHome(owner.id);
         const personal = (await calendar.getCalendars()).find((candidate) => candidate.isDefault);
         if (!personal) throw new Error(`Default calendar missing for ${owner.email}`);
-        const { start, end } = timedSlot(shift);
-        await calendar.createEvent(personal.id, {
-            title: shift.title,
-            startTime: start,
-            endTime: end,
-            allDay: false,
-            createByUserId: owner.id,
-        });
+        const lines = [...SHIFTS.filter((shift) => shift.persona === persona.key), ...PERSONAL_EVENTS];
+        for (const line of lines) {
+            const { start, end } = eventSlot(line);
+            await calendar.createEvent(personal.id, {
+                title: line.title,
+                startTime: start,
+                endTime: end,
+                allDay: !!line.allDay,
+                description: line.description ?? null,
+                location: line.location ?? null,
+                rrule: line.rrule ?? null,
+                createByUserId: owner.id,
+            });
+        }
     }
 
     // --- Mail: raw RFC822 delivered into persona inboxes (indexed into mail.db on delivery). ---
@@ -892,7 +902,7 @@ async function main(): Promise<void> {
     };
     // An invitation as an outside calendar sends one: the shipped iMIP writer over the event its organizer holds.
     const inviteIcs = (invite: SeededInvite, organizer: { name: string; email: string }, attendee: User): string => {
-        const { start, end } = timedSlot(invite);
+        const { start, end } = eventSlot(invite);
         const event: CalendarEvent = {
             id: crypto.randomUUID(),
             calendarId: '',

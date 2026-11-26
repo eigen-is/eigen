@@ -1561,15 +1561,8 @@ export type MailAttachment = { filename: string } & (
 );
 
 // An iMIP invitation (METHOD:REQUEST) from the message's external sender to the thread's persona, written with the
-// shipped iCalendar writer. Its day is relative to the festival Saturday, as EVENTS are.
-export type SeededInvite = {
-    title: string;
-    daysFromFestival: number;
-    startHour: number;
-    durationHours: number;
-    location?: string;
-    description?: string;
-};
+// shipped iCalendar writer.
+export type SeededInvite = Omit<SeededPersonalEvent, 'allDay' | 'days' | 'rrule'>;
 
 export type SeededMail = {
     // 'inbox-thread' lands in one persona's inbox; 'all-hands' lands in every persona's inbox. Either
@@ -2000,19 +1993,23 @@ export const MAILS: SeededMail[] = [
     },
 ];
 
-// --- Calendar (team calendar; anchored to the festival Saturday, then worked backwards; cross-persona attendees) ---
+// --- Calendar: the team calendar's events, with crew attendees ---
 
-export type SeededEvent = {
+// One line in a calendar, a team event's, a shift's or a personal one's. Its day counts from the festival Saturday
+// (0 = festival day, negative = before it), resolved at seed time, so the festival always lands on a weekend.
+export type SeededPersonalEvent = {
     title: string;
-    // Days relative to the festival Saturday (0 = festival day, negative = before it). Resolved against
-    // the festival anchor computed at seed time, so the festival always lands on a weekend.
     daysFromFestival: number;
-    startHour: number;
+    startHour: number; // 9.5 is half past nine
     durationHours: number;
     allDay?: boolean;
+    days?: number; // an all-day event's length, 1 when unset
     rrule?: string;
     location?: string;
     description?: string;
+};
+
+export type SeededEvent = SeededPersonalEvent & {
     organizer: LeadRole;
     attendees: (LeadRole | string)[]; // role or persona key
     replies?: Record<string, Exclude<Attendee['status'], 'accepted'>>; // by persona key; every other guest accepted
@@ -2065,6 +2062,7 @@ export const EVENTS: SeededEvent[] = [
         startHour: 0,
         durationHours: 0,
         allDay: true,
+        days: 2,
         location: 'Hoeve Tuimelaar, Vlierzand',
         description: 'Doors Saturday and Sunday midday.',
         organizer: 'director',
@@ -2124,16 +2122,10 @@ export const EVENTS: SeededEvent[] = [
     },
 ];
 
-// --- Shifts: two personal lines per persona, such as a shift or an errand, in their own calendar rather than the
-// team's. Days are relative to the festival Saturday, as EVENTS are. ---
+// --- Personal calendars: each persona's own calendar holds their two SHIFTS, such as a shift or an errand, and the
+// whole PERSONAL_EVENTS pool. ---
 
-export type SeededShift = {
-    persona: string; // persona key
-    title: string;
-    daysFromFestival: number;
-    startHour: number;
-    durationHours: number;
-};
+export type SeededShift = SeededPersonalEvent & { persona: string }; // persona key
 
 export const SHIFTS: SeededShift[] = [
     { persona: 'anouk', title: 'Walk the field before doors', daysFromFestival: 0, startHour: 10, durationHours: 1 },
@@ -2188,6 +2180,259 @@ export const SHIFTS: SeededShift[] = [
     { persona: 'sem', title: 'Find the angle with Iris', daysFromFestival: -1, startHour: 14, durationHours: 1 },
     { persona: 'tessa', title: 'Sound assistant, main stage', daysFromFestival: 0, startHour: 13, durationHours: 7 },
     { persona: 'tessa', title: 'Coil the cables, main stage', daysFromFestival: 1, startHour: 23, durationHours: 1 },
+];
+
+// Every persona gets the whole pool, so no line names one of them; friends, family and outsiders are fine. It is
+// densest in the weeks a visitor lands on, about three and four weeks before the festival.
+export const PERSONAL_EVENTS: SeededPersonalEvent[] = [
+    {
+        title: 'Morning run',
+        daysFromFestival: -25,
+        startHour: 7,
+        durationHours: 0.75,
+        rrule: 'FREQ=WEEKLY;COUNT=8;BYDAY=TU,TH',
+        location: 'Park loop',
+    },
+    {
+        title: 'Swimming',
+        daysFromFestival: -28,
+        startHour: 9,
+        durationHours: 1,
+        rrule: 'FREQ=WEEKLY;COUNT=4',
+        location: 'Municipal pool',
+    },
+    {
+        title: 'Sunday football',
+        daysFromFestival: -27,
+        startHour: 10,
+        durationHours: 1.5,
+        rrule: 'FREQ=WEEKLY;COUNT=3',
+        location: 'Sports park, pitch 3',
+    },
+    {
+        title: 'Green bin out',
+        daysFromFestival: -26,
+        startHour: 7.5,
+        durationHours: 0.25,
+        rrule: 'FREQ=WEEKLY;COUNT=3',
+    },
+    {
+        title: 'Choir practice',
+        daysFromFestival: -24,
+        startHour: 20,
+        durationHours: 1.5,
+        rrule: 'FREQ=WEEKLY;COUNT=3',
+        location: 'Community centre',
+    },
+    {
+        title: 'Check the Vlierzand forecast',
+        daysFromFestival: -7,
+        startHour: 7.5,
+        durationHours: 0.25,
+        rrule: 'FREQ=DAILY;COUNT=10',
+        description: 'Wind first, then rain. Sunday is the one to watch.',
+    },
+    { title: "Farmers' market", daysFromFestival: -28, startHour: 11, durationHours: 1, location: 'Market square' },
+    {
+        title: "Birthday dinner at Lotte's",
+        daysFromFestival: -28,
+        startHour: 19,
+        durationHours: 3,
+        description: 'Bring the chocolate cake.',
+    },
+    { title: 'Call Mum', daysFromFestival: -27, startHour: 16, durationHours: 0.5 },
+    { title: 'Meal prep for the week', daysFromFestival: -27, startHour: 18, durationHours: 1 },
+    { title: 'Dentist', daysFromFestival: -26, startHour: 8.5, durationHours: 0.5, location: 'Dentist, Molenweg' },
+    {
+        title: 'Lunch with Esther',
+        daysFromFestival: -26,
+        startHour: 12.5,
+        durationHours: 1,
+        location: 'Café De Wissel',
+    },
+    { title: 'Groceries', daysFromFestival: -26, startHour: 18.5, durationHours: 0.5 },
+    {
+        title: 'Order new wellies',
+        daysFromFestival: -25,
+        startHour: 12.75,
+        durationHours: 0.25,
+        description: 'The old pair split at the heel last year.',
+    },
+    { title: 'Pub quiz', daysFromFestival: -25, startHour: 20, durationHours: 2, location: 'De Gouden Karper' },
+    { title: "Mum's birthday", daysFromFestival: -24, startHour: 0, durationHours: 0, allDay: true },
+    {
+        title: 'Bike in for a service',
+        daysFromFestival: -24,
+        startHour: 8.25,
+        durationHours: 0.25,
+        location: 'Fietsenmaker Van Dam',
+    },
+    { title: 'Lunch walk', daysFromFestival: -24, startHour: 12.5, durationHours: 0.5 },
+    {
+        title: 'Pick up the bike',
+        daysFromFestival: -23,
+        startHour: 17.5,
+        durationHours: 0.5,
+        location: 'Fietsenmaker Van Dam',
+    },
+    { title: 'Cinema with Bas', daysFromFestival: -23, startHour: 21, durationHours: 2.25, location: 'Filmhuis' },
+    { title: 'Haircut', daysFromFestival: -22, startHour: 12.25, durationHours: 0.5 },
+    { title: 'Friday drinks', daysFromFestival: -22, startHour: 17.5, durationHours: 2, location: "Café 't Hoekje" },
+    {
+        title: 'Hunt for a rain poncho',
+        daysFromFestival: -21,
+        startHour: 11,
+        durationHours: 1.5,
+        location: 'Flea market, Veemarkt',
+    },
+    { title: "Jesse's housewarming", daysFromFestival: -21, startHour: 20, durationHours: 3 },
+    { title: "Lunch at my parents'", daysFromFestival: -20, startHour: 13, durationHours: 3 },
+    { title: "Rewatch last year's aftermovie", daysFromFestival: -20, startHour: 21, durationHours: 0.5 },
+    {
+        title: 'GP appointment',
+        daysFromFestival: -19,
+        startHour: 8.75,
+        durationHours: 0.25,
+        location: 'Huisartsenpraktijk De Linde',
+    },
+    { title: 'Yoga', daysFromFestival: -19, startHour: 19.5, durationHours: 1, location: 'Studio Adem' },
+    {
+        title: 'Collect the wellies',
+        daysFromFestival: -18,
+        startHour: 12.5,
+        durationHours: 0.5,
+        location: 'Parcel point, Spar',
+    },
+    { title: 'Dinner with the neighbours', daysFromFestival: -18, startHour: 19, durationHours: 2 },
+    {
+        title: 'Car to the garage',
+        daysFromFestival: -17,
+        startHour: 8,
+        durationHours: 0.25,
+        location: 'Garage Hofstede',
+        description: 'APK, and ask about the rattle.',
+    },
+    { title: 'Book a van for build week', daysFromFestival: -17, startHour: 12.5, durationHours: 0.25 },
+    { title: 'Pick up the car', daysFromFestival: -16, startHour: 18, durationHours: 0.5, location: 'Garage Hofstede' },
+    { title: 'Breakfast with Oma', daysFromFestival: -15, startHour: 8, durationHours: 1 },
+    {
+        title: 'Gig at Het Pakhuis',
+        daysFromFestival: -15,
+        startHour: 20.5,
+        durationHours: 2.5,
+        location: 'Het Pakhuis',
+        description: 'Doors at 20:00. Earplugs.',
+    },
+    {
+        title: 'Head torch and gas canister',
+        daysFromFestival: -14,
+        startHour: 11,
+        durationHours: 1,
+        location: 'Outdoor shop, city centre',
+    },
+    {
+        title: "Ilse's birthday dinner",
+        daysFromFestival: -14,
+        startHour: 19,
+        durationHours: 3,
+        location: 'Restaurant De Vork',
+    },
+    { title: 'Brunch with Ilse and Bas', daysFromFestival: -13, startHour: 12, durationHours: 1.5 },
+    {
+        title: 'Wash the camping gear',
+        daysFromFestival: -13,
+        startHour: 16,
+        durationHours: 1,
+        description: 'Tent out on the balcony to dry.',
+    },
+    { title: 'Physio', daysFromFestival: -12, startHour: 8, durationHours: 0.75, location: 'Physio Oost' },
+    { title: "Dinner at Bas's", daysFromFestival: -11, startHour: 19, durationHours: 2 },
+    {
+        title: 'Pick up radios from the hire shop',
+        daysFromFestival: -10,
+        startHour: 12.5,
+        durationHours: 1,
+        location: 'Radio hire, Industrieweg',
+    },
+    {
+        title: 'Write the packing list',
+        daysFromFestival: -9,
+        startHour: 21,
+        durationHours: 0.5,
+        description: 'Wellies, poncho, head torch, earplugs, the good socks.',
+    },
+    { title: 'Day off', daysFromFestival: -8, startHour: 0, durationHours: 0, allDay: true },
+    { title: 'Laundry, the warm and waterproof lot', daysFromFestival: -8, startHour: 10, durationHours: 1 },
+    {
+        title: 'Buy a cool box and ice packs',
+        daysFromFestival: -7,
+        startHour: 11,
+        durationHours: 1,
+        location: 'Hardware store',
+    },
+    { title: "Neighbours' barbecue", daysFromFestival: -7, startHour: 18, durationHours: 3 },
+    {
+        title: 'Pack the van',
+        daysFromFestival: -6,
+        startHour: 14,
+        durationHours: 2,
+        description: 'Tent, wellies, head torch, the good cool box.',
+    },
+    { title: 'Call Oma', daysFromFestival: -6, startHour: 19, durationHours: 0.5 },
+    { title: 'Groceries for build week', daysFromFestival: -5, startHour: 18.5, durationHours: 0.75 },
+    {
+        title: 'Spare key to the neighbours',
+        daysFromFestival: -5,
+        startHour: 21,
+        durationHours: 0.25,
+        description: 'And ask them to water the tomatoes.',
+    },
+    { title: 'Pharmacy: plasters, sun cream, earplugs', daysFromFestival: -4, startHour: 12.5, durationHours: 0.5 },
+    { title: 'Tent and sleeping bag in the car', daysFromFestival: -4, startHour: 21, durationHours: 0.5 },
+    {
+        title: 'Coffee on the way',
+        daysFromFestival: -3,
+        startHour: 7,
+        durationHours: 0.5,
+        location: 'Tankstation De Kruising',
+    },
+    {
+        title: 'Chips in Vlierzand',
+        daysFromFestival: -3,
+        startHour: 19.5,
+        durationHours: 1,
+        location: 'Snackbar De Duin, Vlierzand',
+    },
+    {
+        title: 'Breakfast at the bakery',
+        daysFromFestival: -1,
+        startHour: 8,
+        durationHours: 0.75,
+        location: 'Bakkerij Duinzicht, Vlierzand',
+    },
+    { title: 'Earplugs and a spare charger in the bag', daysFromFestival: 0, startHour: 8, durationHours: 0.25 },
+    { title: 'Sunrise on the dune path', daysFromFestival: 1, startHour: 6, durationHours: 0.75 },
+    { title: 'Train home', daysFromFestival: 2, startHour: 16.5, durationHours: 1.5, location: 'Vlierzand station' },
+    { title: 'Sleep in after strike', daysFromFestival: 3, startHour: 8, durationHours: 3 },
+    { title: 'Laundry, everything muddy', daysFromFestival: 3, startHour: 14, durationHours: 1 },
+    { title: 'Recovery day', daysFromFestival: 4, startHour: 0, durationHours: 0, allDay: true },
+    { title: 'Massage', daysFromFestival: 4, startHour: 11, durationHours: 1, location: 'Studio Adem' },
+    { title: 'First run since the festival', daysFromFestival: 5, startHour: 7, durationHours: 0.75 },
+    {
+        title: 'Drinks with everyone who missed it',
+        daysFromFestival: 6,
+        startHour: 20,
+        durationHours: 2,
+        location: "Café 't Hoekje",
+    },
+    { title: "Nephew's birthday party", daysFromFestival: 7, startHour: 14, durationHours: 3 },
+    {
+        title: 'Dentist follow-up',
+        daysFromFestival: 9,
+        startHour: 8.5,
+        durationHours: 0.5,
+        location: 'Dentist, Molenweg',
+    },
 ];
 
 // --- Contacts (external ecosystem, added to a few leads' address books) ---
