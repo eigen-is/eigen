@@ -1,5 +1,5 @@
 import type { Mock } from 'bun:test';
-import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -7,7 +7,7 @@ import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { MAX_SYNC_STEP_1_BYTES, SYNC_STEP_1_INTERVAL_MS } from '../../lib/collab/collab-document';
+import { MAX_SYNC_STEP_1_BYTES } from '../../lib/collab/collab-document';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/shared-schema';
@@ -37,9 +37,6 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 const STEP_1 = syncProtocol.messageYjsSyncStep1;
 const STEP_2 = syncProtocol.messageYjsSyncStep2;
-
-// Each round trip waits out the server's step 1 interval, so a test with a few of them outlasts the default.
-setDefaultTimeout(30_000);
 
 const ACCESS_LOST = { code: COLLAB_ACCESS_LOST_CLOSE, reason: COLLAB_ACCESS_LOST_REASON };
 const NO_INFO = { canRead: false, canWrite: false, path: null, folderContents: null };
@@ -112,6 +109,23 @@ async function newPublicDoc(): Promise<DrivePath> {
     return doc;
 }
 
+// The monotonic clock the server's step 1 budget reads: each call moves it a fixed step, and a jump moves it on. Timers
+// still run on the real one.
+function steppedClock(stepMs: number) {
+    let now = performance.now();
+    const spy = spyOn(performance, 'now').mockImplementation(() => {
+        now += stepMs;
+        return now;
+    });
+    return {
+        calls: () => spy.mock.calls.length,
+        jump: (ms: number) => {
+            now += ms;
+        },
+        restore: () => spy.mockRestore(),
+    };
+}
+
 // A copy on a plain ArrayBuffer, which is what WebSocket.send takes.
 function frameOf(encoder: encoding.Encoder): Uint8Array<ArrayBuffer> {
     return new Uint8Array(encoding.toUint8Array(encoder));
@@ -122,6 +136,11 @@ function syncFrame(write: (encoder: encoding.Encoder) => void): Uint8Array<Array
     encoding.writeVarUint(encoder, MESSAGE_SYNC);
     write(encoder);
     return frameOf(encoder);
+}
+
+// What a client that holds nothing sends, so the answer is the whole document.
+function emptyStep1(): Uint8Array<ArrayBuffer> {
+    return syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, new Y.Doc()));
 }
 
 type AwarenessEntry = { clientId: number; state: unknown };
@@ -155,9 +174,6 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     const syncFrames: number[] = [];
     const awareness: AwarenessEntry[] = [];
     let heartbeats = 0;
-    // When the server's last step 2, its answer to a step 1, arrived.
-    let answeredAt = 0;
-    let pongs = 0;
 
     let upgraded = false;
     ws.onopen = () => {
@@ -169,7 +185,6 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
         ws.send(syncFrame((encoder) => syncProtocol.writeUpdate(encoder, update)));
     });
     ws.onmessage = ({ data }) => {
-        if (data === 'pong') pongs++;
         if (!(data instanceof ArrayBuffer)) return;
         const decoder = decoding.createDecoder(new Uint8Array(data));
         const messageType = decoding.readVarUint(decoder);
@@ -178,7 +193,6 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
             encoding.writeVarUint(reply, MESSAGE_SYNC);
             const kind = syncProtocol.readSyncMessage(decoder, reply, doc, ws);
             syncFrames.push(kind);
-            if (kind === STEP_2) answeredAt = Date.now();
             if (encoding.length(reply) > 1) ws.send(frameOf(reply));
         } else if (messageType === MESSAGE_AWARENESS) {
             const entries = decoding.createDecoder(decoding.readVarUint8Array(decoder));
@@ -197,20 +211,7 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     });
     const count = (kind: number) => syncFrames.filter((frame) => frame === kind).length;
     const text = () => doc.getText('probe').toString();
-    // Resolves once the server would answer this socket's next step 1.
-    const paced = () => Bun.sleep(Math.max(0, answeredAt + SYNC_STEP_1_INTERVAL_MS + 10 - Date.now()));
-    return {
-        ws,
-        doc,
-        closed,
-        awareness,
-        count,
-        text,
-        paced,
-        pongs: () => pongs,
-        heartbeats: () => heartbeats,
-        upgraded: () => upgraded,
-    };
+    return { ws, doc, closed, awareness, count, text, heartbeats: () => heartbeats, upgraded: () => upgraded };
 }
 
 type Client = ReturnType<typeof connect>;
@@ -225,9 +226,7 @@ async function open(user: TestUser | null, pathId: string, doc?: Y.Doc): Promise
 
 // The server handles one socket's frames in order and sends in order, so once this step 1 is answered the server has
 // handled every frame the client sent before it, and the client has every frame the server sent it before the answer.
-// The server answers a socket's step 1 at most once per interval, so it waits that out first.
 async function roundTrip(client: Client): Promise<void> {
-    await client.paced();
     const before = client.count(STEP_2);
     client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, client.doc)));
     await waitFor(() => client.count(STEP_2) > before, 5_000);
@@ -291,32 +290,34 @@ describe('a socket without a login opens what a public link opens', () => {
         expect(visitor.text()).toBe('inside');
     });
 
-    // An answer to an empty state vector is the whole document, so a burst would hold the event loop.
-    test('a burst of step 1 frames gets one answer, the next after the interval another, for a member and a visitor', async () => {
-        const doc = await newPublicDoc();
+    // An answer to an empty state vector is the whole document, so a document spends only a share of the event loop on
+    // them. At 100 ms a clock call, an answer adds 1 s of debt and moves the clock 200 ms, so the fourth answer passes
+    // the 2.5 s allowance and the six frames after it are dropped. The count of clock calls says all ten were handled.
+    test('ten step 1 frames on two sockets get four answers, a later one is answered, another document is not held', async () => {
         for (const user of [alice, null]) {
-            const client = await open(user, doc.id);
-            await client.paced();
-            const before = client.count(STEP_2);
-            for (let i = 0; i < 50; i++) {
-                client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, new Y.Doc())));
-            }
-            await waitFor(() => client.count(STEP_2) === before + 1, 5_000);
-            await roundTrip(client);
-            expect(client.count(STEP_2)).toBe(before + 2);
-            expect(client.ws.readyState).toBe(WebSocket.OPEN);
-        }
-    });
+            const doc = await newPublicDoc();
+            const other = await newPublicDoc();
+            const clients = [await open(user, doc.id), await open(user, doc.id)];
+            const answers = () => clients[0].count(STEP_2) + clients[1].count(STEP_2);
+            const before = answers();
+            const clock = steppedClock(100);
+            try {
+                for (let i = 0; i < 5; i++) {
+                    for (const client of clients) client.ws.send(emptyStep1());
+                }
+                await waitFor(() => clock.calls() === 4 * 2 + 6, 5_000);
+                await waitFor(() => answers() === before + 4, 5_000);
 
-    test("another socket's first step 1 is answered at once", async () => {
-        const doc = await newPublicDoc();
-        for (const user of [alice, null]) {
-            const first = await open(user, doc.id);
-            const start = Date.now();
-            const second = await open(user, doc.id);
-            expect(Date.now() - start).toBeLessThan(SYNC_STEP_1_INTERVAL_MS);
-            expect(second.count(STEP_2)).toBe(1);
-            await roundTrip(first);
+                const stranger = await open(user, other.id);
+                expect(stranger.count(STEP_2)).toBe(1);
+
+                clock.jump(10_000);
+                for (const client of clients) await roundTrip(client);
+                expect(answers()).toBe(before + 6);
+                for (const client of clients) expect(client.ws.readyState).toBe(WebSocket.OPEN);
+            } finally {
+                clock.restore();
+            }
         }
     });
 
@@ -338,26 +339,11 @@ describe('a socket without a login opens what a public link opens', () => {
 
         for (const user of [alice, null]) {
             const client = await open(user, doc.id);
-            await client.paced();
             const before = client.count(STEP_2);
             client.ws.send(huge);
             // Frames are answered in order, so after this round trip an answer to the big one would have arrived.
             await roundTrip(client);
             expect(client.count(STEP_2)).toBe(before + 1);
-            expect(client.ws.readyState).toBe(WebSocket.OPEN);
-        }
-    });
-
-    // Every other text frame is dropped unread, and Elysia hands it over unparsed (collab-ws-text-frames.test.ts).
-    test('ping gets its pong after a few MB of JSON in a text frame, for a member and a visitor', async () => {
-        const doc = await newPublicDoc();
-        const json = `[${'0,'.repeat(2 * 1024 * 1024)}0]`;
-        for (const user of [alice, null]) {
-            const client = await open(user, doc.id);
-            client.ws.send(json);
-            client.ws.send('ping');
-            await waitFor(() => client.pongs() === 1, 5_000);
-            await roundTrip(client);
             expect(client.ws.readyState).toBe(WebSocket.OPEN);
         }
     });

@@ -42,9 +42,12 @@ const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 // A step 1 is a state vector, a few bytes per client id that ever edited, so 1 MiB is over a hundred thousand
 // editors. Decoding and answering a larger, forged one would hold the event loop.
 export const MAX_SYNC_STEP_1_BYTES = 1024 * 1024;
-// An answer to a step 1 can be the whole document. y-websocket resends one every 5 s, and on a quiet document that
-// answer keeps it from closing the socket, so a connection is answered at most this often and the rest are dropped.
-export const SYNC_STEP_1_INTERVAL_MS = 2_000;
+// An answer to a step 1 can be the whole document, encoded and deflated on the event loop. Each answer charges this
+// many times its own time to the document, which pays it off in real time, so answers take at most a tenth of the loop.
+const SYNC_STEP_1_COST_FACTOR = 10;
+// The work a document may owe before it drops a step 1 unread, enough for a few editors who open a large document at
+// once. y-websocket sends its step 1 again every 5 s, so a dropped one is asked again.
+const SYNC_STEP_1_BURST_MS = 250;
 
 // Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
@@ -68,7 +71,8 @@ export class CollabDocument {
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
     private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
-    private readonly syncStep1AnsweredAt = new Map<ServerWebSocket<unknown>, number>();
+    // The performance.now() time until which the document is paying off its step 1 answers.
+    private syncStep1PaidUntil = 0;
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
     // The hold on the Home while the document lingers. Edits over a socket are no requests, so the Home's idle time
@@ -224,13 +228,14 @@ export class CollabDocument {
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
                 if (message.byteLength > MAX_SYNC_STEP_1_BYTES) return;
-                const now = Date.now();
-                if (now - (this.syncStep1AnsweredAt.get(conn) ?? 0) < SYNC_STEP_1_INTERVAL_MS) return;
-                this.syncStep1AnsweredAt.set(conn, now);
+                const start = performance.now();
+                if (this.syncStep1PaidUntil - start > SYNC_STEP_1_BURST_MS * SYNC_STEP_1_COST_FACTOR) return;
                 sendFrame(
                     conn,
                     encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
                 );
+                const spent = performance.now() - start;
+                this.syncStep1PaidUntil = Math.max(this.syncStep1PaidUntil, start) + spent * SYNC_STEP_1_COST_FACTOR;
             } else if (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate) {
                 if (canWrite) syncProtocol.readUpdate(decoder, this.doc, conn);
             } else {
@@ -305,7 +310,6 @@ export class CollabDocument {
             if (clientIds.size > 0) awarenessProtocol.removeAwarenessStates(this.awareness, [...clientIds], null);
         }
         this.connectionClientIds.delete(conn);
-        this.syncStep1AnsweredAt.delete(conn);
     }
 
     private scheduleClose(): void {
