@@ -30,7 +30,7 @@ To comment on an equation, click it and press the shortcut. The **Title** starts
 
 ## Open the comments column
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you. The comments column opens on the right, over the page's margin, in place of any formatting panel. Click **Comments** again, the X at the top of the column, or press Esc to close it.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you. The comments column opens on the right, over the page's margin, in place of any formatting panel. Click **Comments** again or the X at the top of the column to close it. Esc closes it too, when you aren't typing in the document or a reply.
 
 The column lists every comment anchored to the document, each by its title. Click a comment to select its text in the document and open its thread. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
 
@@ -50,7 +50,7 @@ Click the filter button (the funnel icon) at the top of the column to narrow the
 
 ## Reply to a comment
 
-Click a comment in the list, or its highlighted text in the document, to open the thread. Clicking the highlighted text leaves your cursor where you clicked, so you can keep typing. Type your reply in the **Reply...** box at the bottom and press Enter to send.
+Click a comment in the list, or its highlighted text in the document, to open the thread. The **Reply...** box at the bottom is ready for you to type: write your reply and press Enter to send.
 
 To @mention someone, type `@` followed by their name.
 

@@ -28,7 +28,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **New events in Calendar** — start an hour long, as in Google Calendar, from **Create event** and the **c** key too
 - **Event colors in Calendar** — in light mode, events are lighter, the same shade as a Stickies card of that color
 - **Event details in Calendar** — open in a panel beside the grid instead of over it, with a ring around the event. The panel stays open when you reload or change week, a copied link opens it, and back closes it
-- **Comments in Docs, Sheets, Slides and Vector** — open in a column beside the page, grid, slide or drawing, which widens for a thread, with **Comments** at its top back to the list. A link or a reload keeps it open, and in every editor a reload no longer reopens a comment you closed. In Docs the column lies over the page's margin, and clicking a comment's highlighted text opens it without moving your cursor. In Sheets the column and the image and chart panel open under the toolbar, so its formatting buttons stay in view. **Activity** in Stickies opens in a column the same way, on a phone too
+- **Comments in Docs, Sheets, Slides and Vector** — open in a column beside the page, grid, slide or drawing, which widens for a thread, with **Comments** at its top back to the list. A link or a reload keeps it open
+- **Closed comments stay closed** — in every editor, a reload doesn't reopen a comment you closed
+- **Comments in Docs** — the column lies over the page's margin. Clicking a comment's highlighted text opens its thread with the reply box ready to type in
+- **Panels in Sheets** — the comments column and the image and chart panel open under the toolbar, so its formatting buttons stay in view
+- **Activity in Stickies** — opens in a column at the right, on a phone too
 - **Searching comments in Sheets, Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its cell, slide or shape
 - **Back buttons** — the back at the top left is a "‹" in every app on a phone, and Drive's text editor goes back with **‹ Files**
 - **Calendar's toolbar** — the previous and next arrows sit at the right, beside the view choice (the ⋮ menu on a phone), away from the back at the top left
