@@ -28,14 +28,14 @@ import {
     useLayout,
 } from '@workspace/ui/components/layout/app';
 import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
-import { useEffect, useEffectEvent, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
-import { isSameOccurrence, occurrenceKey } from '../components/calendar-utils';
+import { occurrenceKey } from '../components/calendar-utils';
 import type { NewEventTimes } from '../components/create-event-dialog';
 import { CreateEventDialog } from '../components/create-event-dialog';
 import { EventDetail } from '../components/event-detail';
-import type { EventKey, EventSave } from '../components/hooks/use-event-detail-state';
-import { eventKey, keyAfterSave, useEventDetailState } from '../components/hooks/use-event-detail-state';
+import type { EventKey } from '../components/hooks/use-event-detail-state';
+import { eventKey, useEventDetailState } from '../components/hooks/use-event-detail-state';
 import { MonthView } from '../components/month-view';
 import { ScheduleView } from '../components/schedule-view';
 import { TimeGrid } from '../components/time-grid';
@@ -62,8 +62,6 @@ function CalendarView() {
 
     // What New event opens at while it is open: a clicked day, a picked range, or neither for the next quarter hour.
     const [creating, setCreating] = useState<{ date?: Date; times?: NewEventTimes } | null>(null);
-    // The last save of an event, until the render after it, which reads the list the save refetched.
-    const [save, setSave] = useState<EventSave | null>(null);
 
     const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
@@ -92,7 +90,14 @@ function CalendarView() {
             state,
         }),
     );
-    const detailState = useEventDetailState({ events: allEvents, calendars, sharedCalendars, open: openEvent, focus });
+    const detailState = useEventDetailState({
+        events: allEvents,
+        calendars,
+        sharedCalendars,
+        open: openEvent,
+        focus,
+        onFollow: (next) => (next ? detailHistory.open(next) : detailHistory.close()),
+    });
     const shown = detailState.event;
     const openKey = shown ? occurrenceKey(shown) : undefined;
     const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
@@ -109,20 +114,6 @@ function CalendarView() {
             void navigate({ search: (prev) => ({ ...prev, occurrence: keylessDate }), replace: true, state: true });
     }, [keylessDate, navigate]);
 
-    // A save can give the open occurrence another key, such as a series split at "this and following".
-    const followSave = useEffectEvent(({ occurrence, saved, startTime }: EventSave) => {
-        if (!openEvent || !shown || !isSameOccurrence(occurrence, shown)) return;
-        const next = keyAfterSave(allEvents, openEvent, saved, startTime);
-        if (!next) detailHistory.close();
-        else if (next.eventId !== openEvent.eventId || next.occurrence !== openEvent.occurrence)
-            detailHistory.open(next);
-    });
-    useEffect(() => {
-        if (!save) return;
-        setSave(null);
-        followSave(save);
-    }, [save]);
-
     // While an event is open the grid is its list: a click on it only closes the event, and a drawn range still creates.
     const pickNew = (picked: { date?: Date; times?: NewEventTimes }, drawn: boolean) => {
         if (openEvent) detailHistory.close();
@@ -135,7 +126,6 @@ function CalendarView() {
             {...detailState}
             event={shown}
             onClose={detailHistory.close}
-            onSaved={setSave}
         />
     ) : (
         <DetailColumn width="medium" actions={null} onClose={detailHistory.close}>
@@ -165,7 +155,7 @@ function CalendarView() {
                                     onDayClick={(date) => pickNew({ date }, false)}
                                     onEventClick={handleEventClick}
                                     openKey={openKey}
-                                    onSaved={setSave}
+                                    onSaved={detailState.onSaved}
                                 />
                             ) : mode === 'schedule' ? (
                                 <ScheduleView
@@ -184,7 +174,7 @@ function CalendarView() {
                                     sharedCalendars={sharedCalendars}
                                     onEventClick={handleEventClick}
                                     openKey={openKey}
-                                    onSaved={setSave}
+                                    onSaved={detailState.onSaved}
                                     onCreateEvent={(times, drawn) => pickNew({ times }, drawn)}
                                 />
                             )}

@@ -62,7 +62,7 @@ let setOpen = (_open: EventKey) => {};
 function Harness({ initial, opened }: { initial: CalendarEventOccurrence[]; opened: EventKey }) {
     const [events, set] = useState(initial);
     const [open, setOpenState] = useState(opened);
-    selected = useEventDetailState({ events, calendars, open, focus: FOCUS }).event;
+    selected = useEventDetailState({ events, calendars, open, focus: FOCUS, onFollow: () => {} }).event;
     setEvents = set;
     setOpen = setOpenState;
     return null;

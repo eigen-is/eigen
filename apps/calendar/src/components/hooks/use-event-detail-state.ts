@@ -12,7 +12,8 @@ import type {
     CalendarItem,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import { useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
+import { isSameOccurrence } from '../calendar-utils';
 
 export type EventKey = { eventId: string; occurrence?: string };
 
@@ -26,6 +27,8 @@ type UseEventDetailStateOptions = {
     sharedCalendars?: readonly SharedCalendar[];
     open: EventKey | undefined;
     focus: Date;
+    // The key the URL moves to after a save, or null to close the column.
+    onFollow: (next: EventKey | null) => void;
 };
 
 type UseEventDetailStateReturn = {
@@ -34,6 +37,7 @@ type UseEventDetailStateReturn = {
     sharedCalendar: SharedCalendar | null;
     // The Home the event is saved in: the viewer's, or the owner's of the calendar shared with them.
     ownerId: string;
+    onSaved: (save: EventSave) => void;
 };
 
 export function eventKey(event: CalendarEventOccurrence): EventKey {
@@ -49,9 +53,12 @@ export function useEventDetailState({
     sharedCalendars,
     open,
     focus,
+    onFollow,
 }: UseEventDetailStateOptions): UseEventDetailStateReturn {
     const { user } = useAuth();
     const [kept, setKept] = useState<CalendarEventOccurrence | null>(null);
+    // The last save, until the render after it, which reads the list the save refetched.
+    const [save, setSave] = useState<EventSave | null>(null);
 
     let found: CalendarEventOccurrence | null = null;
     for (const e of events) {
@@ -66,22 +73,29 @@ export function useEventDetailState({
     const sharedCalendar =
         event && !calendar ? (sharedCalendars?.find((s) => s.calendarId === event.calendarId) ?? null) : null;
 
-    return { event, calendar, sharedCalendar, ownerId: sharedCalendar?.ownerUserId ?? user?.id ?? '' };
-}
+    // A save can give the open occurrence another key, such as a series split at "this and following".
+    const follow = useEffectEvent(({ occurrence, saved, startTime }: EventSave) => {
+        if (!open || !event || !isSameOccurrence(occurrence, event)) return;
+        // The saved event's occurrence at its new start, else the open key while the list still names it.
+        const landed = events.find(
+            (e) => (e.id === saved.id || e.parentEventId === saved.id) && e.startTime.getTime() === startTime.getTime(),
+        );
+        const next = landed ? eventKey(landed) : events.some((e) => isNamedBy(e, open)) ? open : null;
+        if (!next || next.eventId !== open.eventId || next.occurrence !== open.occurrence) onFollow(next);
+    });
+    useEffect(() => {
+        if (!save) return;
+        setSave(null);
+        follow(save);
+    }, [save]);
 
-// Where a save left the open occurrence, read from the list the save refetched: the saved event's occurrence at its new
-// start, else the open key while the list still names it, else null.
-export function keyAfterSave(
-    events: readonly CalendarEventOccurrence[],
-    open: EventKey,
-    saved: CalendarEvent,
-    startTime: Date,
-): EventKey | null {
-    const landed = events.find(
-        (e) => (e.id === saved.id || e.parentEventId === saved.id) && e.startTime.getTime() === startTime.getTime(),
-    );
-    if (landed) return eventKey(landed);
-    return events.some((e) => isNamedBy(e, open)) ? open : null;
+    return {
+        event,
+        calendar,
+        sharedCalendar,
+        ownerId: sharedCalendar?.ownerUserId ?? user?.id ?? '',
+        onSaved: setSave,
+    };
 }
 
 // An occurrence stays itself through a new override, which carries its series as the parent and keeps its date, and a

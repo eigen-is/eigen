@@ -197,7 +197,13 @@ function CalendarPage() {
     const queryClient = useQueryClient();
     const { data: events = [] } = useEvents(USER, 1, 2);
     const [open, setOpen] = useState<EventKey>();
-    const detail = useEventDetailState({ events, calendars: [work, personal], open, focus: dentist.startTime });
+    const detail = useEventDetailState({
+        events,
+        calendars: [work, personal],
+        open,
+        focus: dentist.startTime,
+        onFollow: () => {},
+    });
     const first = events[0];
     return createElement(
         'div',
