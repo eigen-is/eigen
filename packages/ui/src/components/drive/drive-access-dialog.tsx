@@ -1,8 +1,8 @@
 // The Share dialog for one Drive item: who has access, the link's general access, and whether editors may share. An
-// owner or an editor by name edits the list and saves it. Everyone else only sees it, such as a viewer, a guest,
-// someone who edits only through the signed-in link, or an editor whose owner restricted sharing. Drive's item menu and an editor's Share button open it, for example. Its envelope button closes Share and
-// opens Email collaborators for the same item, which stays open even when the host drops the path as Share closes. A
-// host that moves to another item, as Back does in an editor, gets a fresh dialog for that item.
+// owner or an editor by name edits the list and saves it. Everyone else only sees it, such as a guest, someone who
+// edits only through the signed-in link, or anyone while the item is in the trash. Drive's item menu and an editor's
+// Share button open it. Its envelope opens Email collaborators for the same item, which outlives the closed Share, and
+// a host that moves to another item, as Back does in an editor, gets a fresh dialog for that item.
 
 import { useCanShare } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';

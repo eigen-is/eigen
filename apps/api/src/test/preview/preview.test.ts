@@ -36,6 +36,7 @@ import { createTestMountConfig, overwriteFile, seedFile } from '../mount-test-he
 import {
     app,
     authedRequest,
+    createTestGuest,
     driveGet,
     drivePost,
     driveUpload,
@@ -262,7 +263,8 @@ describe('Preview', () => {
     });
 });
 
-// A visitor's miss waits behind every member's job, so a burst of link views can't take the queue from them.
+// A miss of someone who reads only through the link waits behind every member's job, signed in or not, so a burst of
+// link views can't take the queue from the people the files are shared with.
 describe("a visitor's preview miss", () => {
     const VCARD = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n';
     const EML = 'From: ada@example.com\r\nTo: bob@example.com\r\nSubject: Hello\r\n\r\nA body.\r\n';
@@ -280,6 +282,10 @@ describe("a visitor's preview miss", () => {
     let ownerId: string;
     const mountId = 'default';
     let folderId: string;
+    // A guest and a signed-in non-member read the folder only through its link, and a member reads it by name.
+    let guestToken: string;
+    let strangerToken: string;
+    let memberToken: string;
 
     function visit(path: string): Promise<Response> {
         return app.handle(new Request(`http://localhost${path}`));
@@ -304,9 +310,15 @@ describe("a visitor's preview miss", () => {
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/path/${folderId}/acl`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ visibility: 'link' }),
+            body: JSON.stringify({
+                visibility: 'link',
+                add: [{ id: ctx.charlie.user.email, read: true, write: false }],
+            }),
         });
         expect(res.status).toBe(200);
+        guestToken = (await createTestGuest('Link Guest')).sessionToken;
+        strangerToken = ctx.bob.user.sessionToken;
+        memberToken = ctx.charlie.user.sessionToken;
     });
 
     // Each request's own calls are read, since a document's search reindex enqueues background jobs of its own.
@@ -349,6 +361,52 @@ describe("a visitor's preview miss", () => {
         }
         // Nine transform children run one after another.
     }, 30_000);
+    for (const entry of PREVIEWED) {
+        test(`${entry.route} runs a miss in the background for whoever reads only through the link`, async () => {
+            const readers = [
+                ['a guest', guestToken, 'background'],
+                ['a non-member', strangerToken, 'background'],
+                ['a member', memberToken, 'foreground'],
+                ['the owner', token, 'foreground'],
+            ] as const;
+            const files = await Promise.all(readers.map(() => seed(entry)));
+            const run = spyOn(documentTransformRunner, 'run');
+            const priorities = () => run.mock.calls.splice(0).map(([, opts]) => opts.priority);
+            try {
+                for (const [i, [who, reader, expected]] of readers.entries()) {
+                    await authedRequest(reader, previewUrl(entry.route, files[i].id));
+                    const seen = priorities();
+                    expect([who, seen.length > 0]).toEqual([who, true]);
+                    if (expected === 'background') expect([who, seen.includes('foreground')]).toEqual([who, false]);
+                    else expect([who, seen.includes('foreground')]).toEqual([who, true]);
+                }
+            } finally {
+                run.mockRestore();
+            }
+        });
+    }
+
+    test("a member's preview is served while a signed-in guest's misses fill the queue", async () => {
+        const docs: DrivePath[] = [];
+        for (let i = 0; i < 20; i++) docs.push(await seed(PREVIEWED[0]));
+        const card = await seed(PREVIEWED[1]);
+        const run = spyOn(documentTransformRunner, 'run');
+        let refused = 0;
+        try {
+            const guests = docs.map(async (doc) => {
+                const res = await authedRequest(guestToken, previewUrl('text-preview', doc.id));
+                if (res.status === 503) refused += 1;
+            });
+            await eventually(async () => (run.mock.calls.length + refused >= docs.length ? true : undefined));
+            const members = await Promise.all(
+                Array.from({ length: 5 }, () => authedRequest(memberToken, previewUrl('vcard-preview', card.id))),
+            );
+            expect(members.map((res) => res.status)).toEqual([200, 200, 200, 200, 200]);
+            await Promise.all(guests);
+        } finally {
+            run.mockRestore();
+        }
+    }, 60_000);
 });
 
 describe('generateImagePreview', () => {

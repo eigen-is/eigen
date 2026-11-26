@@ -147,9 +147,9 @@ async function resolveSvgRefs(
     return strip.length > 0 ? stripEigenMediaRefs(out, strip) : out;
 }
 
-// One media name as a `data:` URI, or null to strip the ref: a missing sibling, a match that is no image file, a sibling
-// svg too deep or an unreadable object. It charges the budget for `occurrences` copies of the URI, less the token each
-// replaces. A breach throws OutputTooLargeError, which the top level turns into a stripped svg.
+// One media name as a `data:` URI, or null to strip the ref: a missing sibling, a match that is no image file, a
+// sibling svg too deep or an unreadable object. It charges the budget for `occurrences` copies of the URI, less the
+// token each replaces. A breach throws OutputTooLargeError, which the top level turns into a stripped svg.
 async function resolveRef(
     mount: Mount,
     parentId: string,
@@ -180,9 +180,9 @@ async function resolveRef(
         return uri;
     }
 
-    // Any other leaf. The client sets `child.mimeType` at upload, so it is checked before it lands in a data: URI, where
-    // a `"` in it would break out of the href, behind the sandbox CSP. The base64 length follows from the declared
-    // size, so the budget is charged before the read: a leaf too big degrades the whole pass without ever being read.
+    // Any other leaf. The client sets `child.mimeType` at upload, so it is checked before it lands in a data: URI,
+    // where a `"` in it would break out of the href, behind the sandbox CSP. The base64 length follows from the
+    // declared size, so the budget is charged before the read: a leaf too big degrades the pass without being read.
     const mime = safeDataUriMime(child.mimeType);
     const projectedLength = `data:${mime};base64,`.length + base64Length(child.size);
     charge(budget, occurrences, projectedLength, tokenLength);

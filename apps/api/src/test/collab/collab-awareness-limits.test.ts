@@ -107,6 +107,30 @@ describe('Collab awareness limits (audit findings #7, #12)', () => {
         }
     });
 
+    // Eight states of 16 KiB are the largest honest frame. Removals of ids nobody owns are cheap one by one, and a
+    // frame of millions of them would hold the event loop.
+    test('a frame over 128 KiB of removals and one valid state is dropped: the peer receives nothing', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(aliceMountId, docId);
+        const send = makeSpyConn();
+        const peer = makeSpyConn();
+        collab.subscribe(home.user, send);
+        collab.subscribe(home.user, peer);
+        try {
+            const base = peer.sent.length;
+            const removals = Array.from({ length: 16_000 }, () => ({ clientId: clientIdSeq++, clock: 1, state: null }));
+            const own = { clientId: clientIdSeq++, clock: 1, state: { user: { userId: home.user.id } } };
+            const frame = awarenessFrame([...removals, own]);
+            expect(frame.byteLength).toBeGreaterThan(128 * 1024);
+            collab.handleMessage(send, frame, true);
+            expect(peer.sent.length).toBe(base);
+            expect(send.readyState).toBe(1);
+        } finally {
+            collab.unsubscribe(send);
+            collab.unsubscribe(peer);
+        }
+    });
+
     test("a state carrying another user's identity is dropped: the peer receives nothing", async () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(aliceMountId, docId);

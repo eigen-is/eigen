@@ -5,7 +5,8 @@
 // is one picker of three choices, the third offered on a file, folder or document while the server allows public
 // links, and a stored link shows whatever the server says. The read-only list's header is a button the keyboard
 // reaches. The owner gets the Share with team menu, and a viewer who may only look gets Close alone, as does someone
-// who edits only through the signed-in link: sharing needs an owner, or write held by name.
+// who edits only through the signed-in link: sharing needs an owner, or write held by name. In the trash, even the
+// owner only sees the list.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -549,6 +550,15 @@ test('a viewer who may only look sees the list and Close alone', async () => {
 
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+// The server keeps the ACL of an item in the trash as it is, so its restore shares it again.
+test('the owner of an item in the trash sees the list and Close alone', async () => {
+    sharedPath = { ...notes, trashedAt: new Date('2026-09-21T09:00:00Z') };
+    await open();
+    expect(dialog()?.textContent).toContain('You can view who has access.');
+    expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).toBeNull();
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
 });
 
 // Chat's share summary opens Share for every member, and the server refuses a save from one who may not write.

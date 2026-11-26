@@ -22,6 +22,9 @@ import {
 } from '../lib/core/http';
 import type { TransformPriority } from '../lib/document/transform/runner';
 import { getReadDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
+import { canReadByNameFromAncestors } from '../lib/drive/acl';
+import type { DriveLike } from '../lib/drive/get-drive';
+import type { LinkDrive } from '../lib/drive/link-drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -42,6 +45,7 @@ import {
 } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import type { User } from '../lib/user';
+import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import type { TypesEqual } from './shared-schemas';
 import { importFromDriveSchema } from './shared-schemas';
@@ -49,10 +53,17 @@ import { importFromDriveSchema } from './shared-schemas';
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
 
-// A visitor's preview that isn't cached yet waits behind every member's job, so a burst of link views can't take the
-// one transform queue from the people the files are shared with.
-function previewPriority(user: User | null): TransformPriority {
-    return user ? 'foreground' : 'background';
+// A preview that isn't cached yet runs at foreground priority only for someone who reads the file by name, such as its
+// owner or a person its ACL names. Whoever reads it only through a link or "Anyone signed in", signed in or not, waits
+// behind them, so a burst of link views can't take the one transform queue from the people the files are shared with.
+async function previewPriority(
+    drive: DriveLike | LinkDrive,
+    user: User | null,
+    path: DrivePath,
+): Promise<TransformPriority> {
+    if (!user) return 'background';
+    const chain = await drive.breadCrumb(path.mountId, path.id);
+    return canReadByNameFromAncestors(chain, user, await getMemberships(user.id)) ? 'foreground' : 'background';
 }
 
 // How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
@@ -215,8 +226,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return answerPreview(request, set, path, TEXT_FORMAT, () =>
-                getTextPreview(mount, path, previewPriority(user)),
+            return answerPreview(request, set, path, TEXT_FORMAT, async () =>
+                getTextPreview(mount, path, await previewPriority(drive, user, path)),
             );
         },
         // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
@@ -230,8 +241,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, VCARD_FORMAT, () =>
-                getVCardPreview(mount, path, previewPriority(user)),
+            return answerPreview(request, set, path, VCARD_FORMAT, async () =>
+                getVCardPreview(mount, path, await previewPriority(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -243,8 +254,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, EML_FORMAT, () =>
-                getEmlPreview(mount, path, previewPriority(user)),
+            return answerPreview(request, set, path, EML_FORMAT, async () =>
+                getEmlPreview(mount, path, await previewPriority(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -256,8 +267,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, ICS_FORMAT, () =>
-                getIcsPreview(mount, path, previewPriority(user)),
+            return answerPreview(request, set, path, ICS_FORMAT, async () =>
+                getIcsPreview(mount, path, await previewPriority(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
