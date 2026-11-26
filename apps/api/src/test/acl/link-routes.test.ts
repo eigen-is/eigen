@@ -1,13 +1,16 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import type { TestUser } from '../setup';
 import {
     app,
     assertJson,
     authedRequest,
+    createTestGuest,
     driveDelete,
     driveGet,
     driveGetList,
@@ -416,6 +419,44 @@ describe('files and folders without a login', () => {
             expect((await authedRequest('not-a-session', urlOf(LINK_ROUTES[0].route, siblingFile.id))).status).toBe(
                 403,
             );
+        });
+    });
+
+    describe('while public links are off a link is private to a signed-in caller too', () => {
+        let guest: TestUser;
+
+        // A download, a folder listing and a chat in the folder by status, and whether the document's info reads.
+        async function reads(token: string): Promise<[number, number, number, boolean]> {
+            const statusOf = async (url: string) => (await authedRequest(token, url)).status;
+            const info = await authedRequest(token, urlOf(INFO_ROUTE, doc.id));
+            return [
+                await statusOf(urlOf(LINK_ROUTES[3].route, inFolder.text.id)),
+                await statusOf(urlOf(LINK_ROUTES[1].route, folder.id)),
+                await statusOf(`/chat/${aliceId}/${mountId}/${chat.id}/messages`),
+                (await assertJson<CollabDocumentInfo>(info)).canRead,
+            ];
+        }
+
+        beforeAll(async () => {
+            guest = await createTestGuest('Link Guest');
+        });
+
+        test('a non-member and a guest get what a private path gives them, and an ACL entry keeps its access', async () => {
+            await withPublicLinks(false);
+            try {
+                expect(await reads(ctx.bob.user.sessionToken)).toEqual([403, 403, 403, false]);
+                expect(await reads(guest.sessionToken)).toEqual([403, 403, 403, false]);
+                expect(await reads(ctx.charlie.user.sessionToken)).toEqual([200, 200, 200, true]);
+            } finally {
+                await withPublicLinks(true);
+            }
+        });
+
+        test('turning them on opens the link to a signed-in caller again', async () => {
+            await withPublicLinks(false);
+            await withPublicLinks(true);
+            expect(await reads(ctx.bob.user.sessionToken)).toEqual([200, 200, 200, true]);
+            expect(await reads(guest.sessionToken)).toEqual([200, 200, 200, true]);
         });
     });
 

@@ -1,7 +1,8 @@
 // The way a route gets at a drive. The owner gets their own Drive. Anyone else who is signed in gets a
 // SharedDrive, which checks their access before every call. A visitor without a login gets a LinkDrive,
-// which reads only what a public link opens.
+// which reads only what a public link opens. What a caller may do with a path, signed in or not, is answered here too.
 
+import type { DrivePathPermissions } from '@workspace/lib/types/drive-access';
 import { getHome } from '../home';
 import type { User } from '../user';
 import type { Drive } from './drive';
@@ -33,4 +34,20 @@ export async function getLinkDrive(ownerId: string): Promise<LinkDrive> {
 
 export async function getReadDrive(ownerId: string, user: User | null): Promise<DriveLike | LinkDrive> {
     return user ? getSharedDrive(ownerId, user) : getLinkDrive(ownerId);
+}
+
+// A visitor never writes, and a member's read and write take the user.
+export async function readPermissions(
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    user: User | null,
+): Promise<DrivePathPermissions> {
+    if (!user) return { canRead: await (await getLinkDrive(ownerId)).canRead(mountId, pathId), canWrite: false };
+    const drive = await getSharedDrive(ownerId, user);
+    const [canRead, canWrite] = await Promise.all([
+        drive.canRead(mountId, pathId, user),
+        drive.canWrite(mountId, pathId, user),
+    ]);
+    return { canRead, canWrite };
 }

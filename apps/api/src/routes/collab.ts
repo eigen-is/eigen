@@ -1,8 +1,8 @@
 // The collab routes: a document's access info and comment index over HTTP, and the WebSocket each editor opens to sync
 // a document. The socket checks read and its session when it opens and on its keepalive, and write on every message,
 // and it hands the frames to the CollabDocument the Drive keeps open for that document. An open that succeeds counts on
-// the user's Recent page. The info route and the socket also answer a visitor without a login, who reads what a public
-// link opens and never writes.
+// the user's Recent page. A visitor without a login gets the info, and the socket where a public link opens the path,
+// and never writes.
 
 import {
     COLLAB_ACCESS_LOST_CLOSE,
@@ -22,7 +22,7 @@ import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
-import { getLinkDrive, getSharedDrive } from '../lib/drive';
+import { getLinkDrive, getReadDrive, getSharedDrive, readPermissions } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import type { LinkDrive } from '../lib/drive/link-drive';
 import { recordOpened } from '../lib/drive/recent';
@@ -30,10 +30,6 @@ import { getDataEpoch } from '../lib/home/data-epoch';
 import type { User } from '../lib/user';
 import { getSessionUser } from '../lib/user';
 import { betterAuth } from './auth';
-
-// Frames are not rate limited and the server takes very large ones, and anyone may open a public document. A
-// visitor's editor only sends a state vector or a cursor, so a larger frame closes the socket.
-const VISITOR_MAX_FRAME_BYTES = 64 * 1024;
 
 // Who a socket opened as, with the drive that checks them: a signed-in user and their session, or a visitor.
 type CollabAccess = { user: User; sessionId: string; drive: DriveLike } | { user: null; drive: LinkDrive };
@@ -60,27 +56,12 @@ export const collabRouter = new Elysia({
     .get(
         '/collab/:ownerId/:mountId/:pathId/info',
         async ({ params, user }): Promise<CollabDocumentInfo> => {
-            if (!user) {
-                const drive = await getLinkDrive(params.ownerId);
-                if (!(await drive.canRead(params.mountId, params.pathId))) {
-                    return { canRead: false, canWrite: false, path: null, folderContents: null };
-                }
-                const path = await drive.getPath(params.mountId, params.pathId);
-                const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-                return { canRead: true, canWrite: false, path, folderContents };
-            }
-            const drive = await getSharedDrive(params.ownerId, user);
-            const canRead = await drive.canRead(params.mountId, params.pathId, user);
-            const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
-
-            if (!canRead) {
-                return { canRead, canWrite, path: null, folderContents: null };
-            }
-
+            const permissions = await readPermissions(params.ownerId, params.mountId, params.pathId, user);
+            if (!permissions.canRead) return { ...permissions, path: null, folderContents: null };
+            const drive = await getReadDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
-
-            return { canRead, canWrite, path, folderContents };
+            return { ...permissions, path, folderContents };
         },
         { linkAuth: true },
     )
@@ -146,6 +127,14 @@ export const collabRouter = new Elysia({
         }),
         query: t.Object({ epoch: t.Optional(t.String()) }),
 
+        // A visitor's upgrade happens only where the link rule admits the path. The open asks again, since the access
+        // can change while the document loads.
+        async beforeHandle({ params, user }) {
+            if (user) return;
+            const drive = await getLinkDrive(params.ownerId);
+            if (!(await drive.canRead(params.mountId, params.pathId))) throw new ApiError(403, 'No read permission');
+        },
+
         async open(ws) {
             const { promise, resolve } = Promise.withResolvers<void>();
             const session: CollabSession = { opened: promise };
@@ -174,29 +163,6 @@ export const collabRouter = new Elysia({
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
-                const canRead = access.user
-                    ? await access.drive.canRead(mountId, pathId, access.user)
-                    : await access.drive.canRead(mountId, pathId);
-                if (!canRead) {
-                    ws.close(COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON);
-                    return;
-                }
-                // Only a caller who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
-                // such as for a restore, closes the socket with the retry close.
-                session.releaseHome = drive.holdHome(() =>
-                    rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
-                );
-
-                const document = await drive.getCollabDocument(mountId, pathId);
-                rawWs.send(collabEpochMessage(ownerId));
-                document.subscribe(access.user, rawWs);
-                console.log(
-                    `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
-                        `connections=${document.connectionCount}`,
-                );
-
-                session.access = access;
-                session.collabDocument = document;
                 // Answers whether the socket keeps its access, and closes it when it doesn't.
                 const checkAccess = async (): Promise<boolean> => {
                     let reads: boolean;
@@ -213,6 +179,23 @@ export const collabRouter = new Elysia({
                     cleanupSession(session, rawWs);
                     return false;
                 };
+                if (!(await checkAccess())) return;
+                // Only a caller who may read holds the Home, until cleanupSession lets go. A Home that closes anyway,
+                // such as for a restore, closes the socket with the retry close.
+                session.releaseHome = drive.holdHome(() =>
+                    rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
+                );
+
+                const document = await drive.getCollabDocument(mountId, pathId);
+                rawWs.send(collabEpochMessage(ownerId));
+                document.subscribe(access.user, rawWs);
+                console.log(
+                    `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
+                        `connections=${document.connectionCount}`,
+                );
+
+                session.access = access;
+                session.collabDocument = document;
                 // The ping keeps a proxy from dropping the connection. A check that throws says nothing about the
                 // access, so the socket stays and the next tick asks again.
                 session.pingInterval = setInterval(async () => {
@@ -271,10 +254,6 @@ export const collabRouter = new Elysia({
 
             const { access, collabDocument } = session;
             if (!access || !collabDocument) return;
-            if (!access.user && message.byteLength > VISITOR_MAX_FRAME_BYTES) {
-                ws.close(1008, 'Frame too large');
-                return;
-            }
 
             try {
                 const { mountId, pathId } = ws.data.params;

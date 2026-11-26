@@ -375,6 +375,24 @@ describe("visibility 'link'", () => {
             expect(await storedVisibility(other.id)).toBe('private');
         });
 
+        test('a stored link is private to a signed-in non-member and to an address without an ACL entry', async () => {
+            expect(await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, mountId, kept.id)).toEqual({
+                canRead: false,
+                canWrite: false,
+            });
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/path/${kept.id}/access-check`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emails: ['stranger-link@example.com'] }),
+                },
+            );
+            const { recipients } = await assertJson<DriveAccessCheckResult>(res);
+            expect(recipients.map((r) => r.hasReadAccess)).toEqual([false]);
+        });
+
         test('a stored link can always be closed', async () => {
             expect((await alicePuts(kept.id, 'private')).status).toBe(200);
             expect(await storedVisibility(kept.id)).toBe('private');

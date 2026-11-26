@@ -27,7 +27,7 @@ export class FileHistory {
     public constructor(
         private readonly db: BunSQLiteDatabase<typeof schema>,
         public readonly ownerId: string,
-        public readonly mountId: string,
+        private readonly mountId: string,
     ) {}
 
     public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {

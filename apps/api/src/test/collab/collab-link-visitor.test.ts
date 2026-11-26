@@ -136,22 +136,26 @@ function awarenessFrame(clientId: number, clock: number, state: unknown): Uint8A
 }
 
 // A y-websocket client: it sends its step 1 when the socket opens, answers the server's step 1 with a step 2, applies
-// what the server sends and sends its own edits as updates. No user means no cookie.
-function connect(user: TestUser | null, pathId: string) {
+// what the server sends and sends its own edits as updates. No user means no cookie. A client that reconnects brings
+// the document it holds.
+function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), ownerId = aliceId) {
     // Bun's WebSocket takes headers, which the DOM type the compiler sees does not know.
     const ws: WebSocket = Reflect.construct(WebSocket, [
-        `ws://localhost:${port}/ws/collab/${aliceId}/${mountId}/${pathId}`,
+        `ws://localhost:${port}/ws/collab/${ownerId}/${mountId}/${pathId}`,
         { headers: user ? { cookie: `better-auth.session_token=${user.sessionToken}` } : {} },
     ]);
     ws.binaryType = 'arraybuffer';
     sockets.add(ws);
-    const doc = new Y.Doc();
     // The kind of each sync frame the server sent, and every awareness state a peer published. The loading heartbeat
     // is an awareness frame with no state in it, and the server's own state, which a member gets at sync, is empty.
     const syncFrames: number[] = [];
     const awareness: AwarenessEntry[] = [];
 
-    ws.onopen = () => ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, doc)));
+    let upgraded = false;
+    ws.onopen = () => {
+        upgraded = true;
+        ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, doc)));
+    };
     doc.on('update', (update: Uint8Array, origin: unknown) => {
         if (origin === ws || ws.readyState !== WebSocket.OPEN) return;
         ws.send(syncFrame((encoder) => syncProtocol.writeUpdate(encoder, update)));
@@ -180,16 +184,17 @@ function connect(user: TestUser | null, pathId: string) {
         ws.onclose = ({ code, reason }) => resolve({ code, reason });
     });
     const count = (kind: number) => syncFrames.filter((frame) => frame === kind).length;
-    return { ws, doc, closed, awareness, count, text: () => doc.getText('probe').toString() };
+    const text = () => doc.getText('probe').toString();
+    return { ws, doc, closed, awareness, count, text, upgraded: () => upgraded };
 }
 
 type Client = ReturnType<typeof connect>;
 
-// Resolves once the handshake is done both ways: the server's step 2 arrived, and its step 1, which the client
-// answered with its own step 2.
-async function open(user: TestUser | null, pathId: string): Promise<Client> {
-    const client = connect(user, pathId);
-    await waitFor(() => client.count(STEP_1) > 0 && client.count(STEP_2) > 0, 10_000);
+// Resolves once the handshake is done: the server's step 2 arrived, and for a member also its step 1, which the client
+// answered with its own step 2. A visitor gets no step 1.
+async function open(user: TestUser | null, pathId: string, doc?: Y.Doc): Promise<Client> {
+    const client = connect(user, pathId, doc);
+    await waitFor(() => client.count(STEP_2) > 0 && (user === null || client.count(STEP_1) > 0), 10_000);
     return client;
 }
 
@@ -199,6 +204,12 @@ async function roundTrip(client: Client): Promise<void> {
     const before = client.count(STEP_2);
     client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, client.doc)));
     await waitFor(() => client.count(STEP_2) > before, 5_000);
+}
+
+// A refused upgrade never opens the socket, so the route's open never runs.
+async function expectRefusedUpgrade(client: Client): Promise<void> {
+    await client.closed;
+    expect(client.upgraded()).toBe(false);
 }
 
 function write(client: Client, text: string): void {
@@ -224,7 +235,7 @@ async function recentIds(user: TestUser): Promise<string[]> {
 }
 
 describe('a socket without a login opens what a public link opens', () => {
-    test('a public document: the handshake syncs its content, and a later edit reaches the visitor', async () => {
+    test('a public document: the visitor gets no step 1, syncs from its own, and a later edit reaches it', async () => {
         const doc = await newPublicDoc();
         const member = await open(alice, doc.id);
         write(member, 'hello');
@@ -233,6 +244,7 @@ describe('a socket without a login opens what a public link opens', () => {
         const visitor = await open(null, doc.id);
         expect(visitor.text()).toBe('hello');
         await roundTrip(visitor);
+        expect(visitor.count(STEP_1)).toBe(0);
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
 
         write(member, ' world');
@@ -263,7 +275,39 @@ describe('a socket without a login opens what a public link opens', () => {
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
     });
 
-    test('a private document, an unknown id and a chat close with access lost', async () => {
+    test("a member's socket gets the server's step 1", async () => {
+        const doc = await newPublicDoc();
+        const member = await open(alice, doc.id);
+        await roundTrip(member);
+        expect(member.count(STEP_1)).toBe(1);
+    });
+
+    // Every other character deleted leaves a delete set of one range per character, and a step 2 carries it whole.
+    test('a visitor that reconnects holding a much-deleted document stays open and gets the next edit', async () => {
+        const doc = await newPublicDoc();
+        const member = await open(alice, doc.id);
+        const text = member.doc.getText('probe');
+        text.insert(0, 'ab'.repeat(40_000));
+        member.doc.transact(() => {
+            for (let i = 40_000 - 1; i >= 0; i--) text.delete(2 * i + 1, 1);
+        });
+        await roundTrip(member);
+
+        const first = await open(null, doc.id);
+        expect(first.text()).toBe('a'.repeat(40_000));
+        first.ws.close();
+        await first.closed;
+        const held = syncFrame((encoder) => syncProtocol.writeSyncStep2(encoder, first.doc));
+        expect(held.byteLength).toBeGreaterThan(100 * 1024);
+
+        const visitor = await open(null, doc.id, first.doc);
+        write(member, '!');
+        await waitFor(() => visitor.text().endsWith('!'), 5_000);
+        await roundTrip(visitor);
+        expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
+    });
+
+    test('a private document, an unknown id, a chat and an unknown owner refuse the upgrade', async () => {
         const folder = await newFolder();
         await setVisibility(folder.id, 'link');
         const chat = await drivePost<DrivePath>(
@@ -276,10 +320,10 @@ describe('a socket without a login opens what a public link opens', () => {
         const privateDoc = await newDoc();
 
         for (const pathId of [privateDoc.id, crypto.randomUUID(), chat.id]) {
-            const visitor = connect(null, pathId);
-            expect(await visitor.closed).toEqual(ACCESS_LOST);
-            expect(visitor.count(STEP_1) + visitor.count(STEP_2)).toBe(0);
+            await expectRefusedUpgrade(connect(null, pathId));
         }
+        const publicDoc = await newPublicDoc();
+        await expectRefusedUpgrade(connect(null, publicDoc.id, new Y.Doc(), 'a'.repeat(32)));
     });
 
     // The rule admits a folder and a file. Neither is a document, so the open fails as it does for a member.
@@ -299,11 +343,11 @@ describe('a socket without a login opens what a public link opens', () => {
         }
     });
 
-    test('with public links off a public document closes with access lost', async () => {
+    test('with public links off a public document refuses the upgrade', async () => {
         const doc = await newPublicDoc();
         await withPublicLinks(false);
         try {
-            expect(await connect(null, doc.id).closed).toEqual(ACCESS_LOST);
+            await expectRefusedUpgrade(connect(null, doc.id));
         } finally {
             await withPublicLinks(true);
         }
@@ -365,57 +409,32 @@ describe('a visitor has no awareness, either way', () => {
     });
 });
 
-describe('a visitor may send almost nothing', () => {
-    test('its step 2 and its update do not change the document', async () => {
+describe('a visitor writes nothing, and its socket stays', () => {
+    test('its step 2 and update over 100 KB leave the document unchanged, and a member sends the same', async () => {
         const doc = await newPublicDoc();
         const member = await open(alice, doc.id);
         write(member, 'kept');
         await roundTrip(member);
 
-        // What the visitor wrote before it connected travels in its step 2, and what it writes after in an update.
-        const visitor = connect(null, doc.id);
-        write(visitor, 'offline');
-        await waitFor(() => visitor.count(STEP_1) > 0 && visitor.count(STEP_2) > 0, 10_000);
-        write(visitor, 'online');
+        const big = new Y.Doc();
+        big.getText('probe').insert(0, 'x'.repeat(100 * 1024));
+        const step2 = syncFrame((encoder) => syncProtocol.writeSyncStep2(encoder, big));
+        const update = syncFrame((encoder) => syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(big)));
+        expect(Math.min(step2.byteLength, update.byteLength)).toBeGreaterThan(100 * 1024);
+
+        const visitor = await open(null, doc.id);
+        visitor.ws.send(step2);
+        visitor.ws.send(update);
         await roundTrip(visitor);
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
-
         await roundTrip(member);
         expect(member.text()).toBe('kept');
         expect(await storedText(doc.id)).toBe('kept');
 
-        // What is stored, read back from data.db by a fresh open.
-        await (await getHome(aliceId)).drive.closeCollabDocument(mountId, doc.id);
-        expect(await storedText(doc.id)).toBe('kept');
-    });
-
-    test('a frame over 64 KiB closes it with 1008, and a member sends the same frame', async () => {
-        const doc = await newPublicDoc();
-        const big = new Y.Doc();
-        big.getText('probe').insert(0, 'x'.repeat(64 * 1024));
-        const frame = syncFrame((encoder) => syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(big)));
-        expect(frame.byteLength).toBeGreaterThan(64 * 1024);
-
-        const visitor = await open(null, doc.id);
-        visitor.ws.send(frame);
-        expect((await visitor.closed).code).toBe(1008);
-
-        const member = await open(alice, doc.id);
-        member.ws.send(frame);
+        member.ws.send(update);
         await roundTrip(member);
-        expect(member.ws.readyState).toBe(WebSocket.OPEN);
-        expect((await storedText(doc.id)).length).toBe(64 * 1024);
-    });
-
-    test('a frame under the cap leaves it open', async () => {
-        const doc = await newPublicDoc();
-        const small = new Y.Doc();
-        small.getText('probe').insert(0, 'x'.repeat(60 * 1024));
-        const visitor = await open(null, doc.id);
-        visitor.ws.send(syncFrame((encoder) => syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(small))));
-        await roundTrip(visitor);
+        expect((await storedText(doc.id)).length).toBe('kept'.length + 100 * 1024);
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
-        expect(await storedText(doc.id)).toBe('');
     });
 });
 
@@ -483,8 +502,8 @@ describe('the keepalive asks the link rule, and closes a visitor at the next tic
         await tick();
 
         for (const visitor of visitors) await visitor.closed;
-        expect(await connect(null, inFolder.id).closed).toEqual(ACCESS_LOST);
-        expect(await connect(null, alone.id).closed).toEqual(ACCESS_LOST);
+        await expectRefusedUpgrade(connect(null, inFolder.id));
+        await expectRefusedUpgrade(connect(null, alone.id));
     });
 });
 
