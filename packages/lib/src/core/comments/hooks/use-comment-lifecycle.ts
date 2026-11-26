@@ -50,11 +50,8 @@ type CommentLifecycle = {
     requestDelete: (cardId: string | null) => void;
 };
 
-// A host passes `ready` once its cards first synced and its active set is computed, and keeps it through a disconnect, or
-// the open card would close. Until then a chat or a landing waits instead of opening a card the host may not use, and no
-// card reads deleted. `onOpenChat` and `onCloseChat` write and
-// clear the host's ?chat= with its history rule; `onClearChat` drops it by replace, after a delete or for a chat that
-// names nothing.
+// A host passes `ready` once its cards first synced and its active set is computed, and keeps it through a disconnect,
+// or the open card would close. Until then a chat or a landing waits, and no card reads deleted.
 export function useCommentLifecycle({
     ownerId,
     mountId,
@@ -117,9 +114,8 @@ export function useCommentLifecycle({
         if (shownCardId === editCardId) setEditCardId(null);
     }
 
-    // The two opens are stable, because hosts hand them to memoized components such as a board's columns and to editor
-    // extensions that keep the closures they were built with. So they read every value through here; the rest of the
-    // bundle is made each render and reads the render.
+    // The two opens are stable, since memoized components and editor extensions keep the closures they were given, so
+    // they read every value through here; the rest of the bundle reads the render.
     const latest = useRef({ cards, allComments, chat, onOpenChat, onCloseChat, onClearChat });
     latest.current = { cards, allComments, chat, onOpenChat, onCloseChat, onClearChat };
     const setOpenCardId = useCallback((cardId: string | null) => {
@@ -151,7 +147,7 @@ export function useCommentLifecycle({
     // Runs once per chat that names nothing, as the host's clear takes it out of the URL.
     const chatMissing = !!chat && chatReady && !openCard && !openEntry;
     useEffect(() => {
-        if (chatMissing && chat) latest.current.onClearChat();
+        if (chatMissing) latest.current.onClearChat();
     }, [chatMissing, chat]);
     // A peer's delete takes away a card open here, and an undo that brings it back leaves it closed.
     const openGone = !chat && !!open && !openCard;
