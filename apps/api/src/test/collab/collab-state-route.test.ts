@@ -414,6 +414,39 @@ describe('one version is built once and then served from its file', () => {
     });
 });
 
+// The version names the rows of one data.db, so a data.db replaced by an older copy can name a cached state again.
+describe('a data.db replaced by a version', () => {
+    test('drops the cached state, so the same row ids answer the restored content', async () => {
+        const doc = await newPublicDoc();
+        const home = await getHome(aliceId);
+        const { drive } = home;
+        const first = await member(doc.id);
+        await first.write('v1');
+        const saved = await drive.saveVersion(mountId, doc.id);
+        await first.write(' v2');
+        const before = await visit(doc.id);
+        expect((await docOf(before)).getText('probe').toString()).toBe('v1 v2');
+
+        // A data.db whose stored object is gone takes the version's bytes in place.
+        for (const ws of sockets) ws.close();
+        await drive.closeCollabDocument(mountId, doc.id, { skipFinalSnapshot: true });
+        const mount = await mountOf(doc.id);
+        const dataDb = await mount.getChildByName(doc.id, CONTAINER_DATA_DB);
+        if (!dataDb) throw new Error('the container lacks its data.db');
+        await mount.reindexQueue?.drain();
+        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        await mount.storage.delete(await mount.getStorageKey(dataDb.id));
+        await drive.restoreContainer(mountId, doc.id, saved.name, home.user);
+
+        // The version's next update takes the id the cached state's last one had.
+        const restored = (await serverDoc(doc.id)).getText('probe');
+        restored.insert(restored.length, ' restored');
+        const after = await visit(doc.id);
+        expect(after.headers.get('etag')).toBe(before.headers.get('etag'));
+        expect((await docOf(after)).getText('probe').toString()).toBe('v1 restored');
+    });
+});
+
 // A build that ran out of time or memory would again, each time on the only transform slot, and a link reader's tab
 // would retry a 5xx every few seconds. So the version answers the 413 an export or an index answers, once remembered.
 describe('a state whose build keeps failing', () => {

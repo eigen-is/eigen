@@ -1,6 +1,7 @@
 // Puts a document back to one of its saved versions. Drive.restoreContainer calls it when a user
-// picks a version in the history panel. It first saves the current state as a version of its own. An
-// open document then takes the old state in place, so connected editors follow without a reload.
+// picks a version in the history panel. It first saves the current state as a version of its own. A
+// collab document then takes the old state in place, so connected editors follow without a reload. A
+// chat, or a document whose data.db is gone, gets the version's bytes in place of its data.db instead.
 
 import { isCurrentSheetsSnapshot, readSheetsSnapshotJson } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -11,7 +12,7 @@ import { ApiError } from '../core';
 import { resetSheetsCompactionFailures } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import type { Mount } from '../mount/mount';
-import type { RetentionPolicy } from './retention';
+import { dropPreviews } from '../preview/preview-cache';
 import { DEFAULT_RETENTION } from './retention';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
 
@@ -20,7 +21,6 @@ export async function restoreContainer(
     mount: Mount,
     container: DrivePath,
     snapshotName: string,
-    policy: RetentionPolicy = DEFAULT_RETENTION,
 ): Promise<void> {
     const versions = await mount.getChildByName(container.id, VERSIONS_FOLDER_NAME);
     if (!versions) throw new ApiError(404, 'No versions folder');
@@ -54,7 +54,7 @@ export async function restoreContainer(
         }
         // A 410 means data.db is gone, after the temp and staged copies were checked too. Then there
         // are no bytes to save first and no live document to update.
-        const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
+        const gone = await mount.snapshotContainerDataDb(container.id, DEFAULT_RETENTION).then(
             () => false,
             (error: unknown) => {
                 if (!(error instanceof ApiError && error.status === 410)) throw error;
@@ -69,6 +69,7 @@ export async function restoreContainer(
         } else {
             // A chat, or a gone data.db, gets the bytes of the version written over data.db.
             await mount.replaceContainerDataDb(container.id, tempPath);
+            await dropPreviews(mount.previewsDir, container.id);
         }
     } finally {
         await mount.cleanupTemp(tempId);

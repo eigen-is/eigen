@@ -92,14 +92,31 @@ async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<nu
 
 // A path keeps one file of each kind, which is its extension, so a text preview and a collab state live side by side
 // while a format bump prunes the earlier format of its kind. A failed marker counts as the kind of its file.
-async function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
-    const prefix = `${pathId}-`;
+function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
     const kind = path.extname(keep);
+    return removeCachedFiles(
+        previewsDir,
+        pathId,
+        (name) => name !== keep && path.extname(name.replace(/\.failed$/, '')) === kind,
+    );
+}
+
+// Every cached file of a path, for a data.db replaced under it: the copy's row ids restart and can name a cached state
+// again, and a preview of the old content is stale anyway.
+export function dropPreviews(previewsDir: string, pathId: string): Promise<void> {
+    return removeCachedFiles(previewsDir, pathId, () => true);
+}
+
+async function removeCachedFiles(
+    previewsDir: string,
+    pathId: string,
+    remove: (name: string) => boolean,
+): Promise<void> {
+    const prefix = `${pathId}-`;
     const files = await fs.promises.readdir(previewsDir);
     await Promise.all(
         files
-            .filter((name) => name !== keep && name.startsWith(prefix))
-            .filter((name) => path.extname(name.replace(/\.failed$/, '')) === kind)
+            .filter((name) => name.startsWith(prefix) && remove(name))
             .map((name) => fs.promises.unlink(path.join(previewsDir, name)).catch(() => {})),
     );
 }
