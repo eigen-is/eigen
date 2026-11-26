@@ -26,7 +26,7 @@ The undo manager tracks all three roots. So a card and its column reference undo
 
 Stickies follow the format policy in [ROADMAP.md](ROADMAP.md) like every other document. The `tasks` root holds the cards. Any collaborator can write any value into the Yjs doc, so a reader's checks are the boundary for that edit, and each one stops a crash or an injection:
 
-- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). The description is sanitized, because every viewer renders it as HTML. A field of the wrong type reads as '' or absent, because the renderers call string and date methods on it. `creator` and `createdAt` are optional. A card without a string `chatName` is no card (`isCommentCard`), so it shows nowhere while it stays in the Y.Doc. An `attachments` list keeps only its string and object elements.
+- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). The description is sanitized, because every viewer renders it as HTML. A field of the wrong type reads as '' or absent, because the renderers call string and date methods on it. `creator` and `createdAt` are optional. A card without a string `chatName` is no card (`isCommentCard`), so it shows nowhere until a writer's open gives it a thread ([below](#a-writers-open-gives-a-card-without-a-thread-its-own)). An `attachments` list keeps only its string and object elements.
 - A column is read by `readBoard` (`hooks/use-board.ts`). A `title` that isn't a string reads as '', and a `taskIds` that isn't a list as an empty one. A new card has no list to land in on such a column, so it stays off the board until the ref repair places it.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
 - An entry of `tasks` or `columns` that isn't a map is skipped by every reader and by the ref repair (`normalizeParentChildRefs`).
@@ -39,6 +39,14 @@ The server's search reader keeps the map check and takes each field as stored. A
 The `tasks` entries are not a stickies type. They are written with the shared `writeCardToDoc(doc, 'tasks', card)` and read through `useCommentLifecycle({ mapName: 'tasks' })`, so the board and the comment layer agree on one card shape ([COMMENTS.md](COMMENTS.md)). `types.ts` holds only what the board owns: `ColumnItem` and `BoardData`.
 
 A card is on the board when some column's `taskIds` lists it. That set is also what the lifecycle hook treats as the active cards. `createCard` creates the card's `.eigenchat` room first, stores its name as `chatName`, and writes the card and its column reference in one transaction; clicking the card opens that thread in the shared card dialog. Deleting a card removes it from its column and from `tasks` in one transaction, so there is no orphan reference and ⌘Z restores both. The chat and its `comments.db` row stay, so undo and a version revert bring the thread back with the card.
+
+## A writer's open gives a card without a thread its own
+
+A board can hold a card stored without a `chatName`, such as one written before every add made a thread. When someone who may write the board opens it, its first sync gives each such card a thread, created in the board's `chat/` folder as a new card's is, all in parallel. One transaction then sets each `chatName`, only on a card that still exists and still has none. It writes under its own origin, so it syncs to peers but ⌘Z can't take it back. A failed create leaves its card as it is, and the next open tries again.
+
+Two writers opening the board at once may both create a thread for a card. The card keeps one `chatName`, and the other thread names no card. It stays in `chat/` until Delete history sweeps it, once nobody wrote in it for 72 hours, or a copy sweeps it on the copy, as any thread no card names ([COMMENTS.md](COMMENTS.md#delete-history-and-a-copy-remove-a-thread-nothing-names)). Its `comments.db` row goes with it.
+
+A reader can't create a thread in the sharer's drive, so for a reader such a card stays hidden until a writer opens the board. Until then the server's reader throws on the board, so its sweep deletes nothing; after the repair it reads the board again.
 
 ## A concurrent merge can leave a card in two columns, or none
 

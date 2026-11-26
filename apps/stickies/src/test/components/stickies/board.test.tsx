@@ -253,6 +253,14 @@ test('a card without a chatName is left out, and the board shows its other cards
     expect(seen.cardTitles).toEqual(['Ship it']);
 });
 
+test('a card a peer strips of its thread leaves the board', async () => {
+    await openBoard(['/']);
+    const card = doc.getMap('tasks').get('card-1');
+    if (!(card instanceof Y.Map)) throw new Error('no card');
+    await act(async () => card.delete('chatName'));
+    expect(seen.cardTitles).toEqual([]);
+});
+
 test("a link's ?chat= opens the board's dialog, and closing it takes ?chat= out", async () => {
     await openBoard(['/', '/?chat=ship.eigenchat']);
     expect(dialogText()).toContain('Ship it');
