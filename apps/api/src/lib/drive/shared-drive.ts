@@ -24,7 +24,7 @@ import type { Mount } from '../mount';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { canonicalACLId, canReadFromAncestors } from './acl';
+import { canonicalACLId, canReadFromAncestors, canWriteByNameFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -370,7 +370,8 @@ export class SharedDrive {
     // ---- Access and sharing ----
 
     // Write access comes first, so a reader gets the same 403 as on any path they can't change. A value
-    // for the restriction from anyone but an owner is dropped.
+    // for the restriction from anyone but an owner is dropped. A new link opens the item to people with no login, so
+    // it needs write the caller holds by name: "Anyone signed in can edit" lets everyone change it, not publish it.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -386,6 +387,13 @@ export class SharedDrive {
         const path = await this.drive.getPath(mountId, pathId);
         if (!path) throw new ApiError(404, 'Path not found');
         if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
+        if (
+            visibility === 'link' &&
+            path.visibility !== 'link' &&
+            !canWriteByNameFromAncestors(await this.drive.breadCrumb(mountId, pathId), this.user, memberships)
+        ) {
+            throw new ApiError(403, 'Only the owner or someone it is shared with can turn on a public link');
+        }
 
         const effectiveOwner = this.isEffectiveOwner(path.ownerId, memberships);
         return this.drive.updateACLDelta(

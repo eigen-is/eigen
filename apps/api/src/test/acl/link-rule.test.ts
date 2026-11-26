@@ -1,12 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import type { DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
+import { getServerConfig } from '../../lib/config/server-config';
 import { arePublicLinksEnabled, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { canReadByLink } from '../../lib/drive/acl';
 import { getHome } from '../../lib/home';
 import {
+    addMember,
+    app,
     assertJson,
     authedRequest,
+    createTeam,
     driveGet,
     driveGetList,
     driveGetPermission,
@@ -341,6 +346,82 @@ describe("visibility 'link'", () => {
             );
             expect(write.status).toBe(403);
             expect((await putVisibility(ctx.bob.user.sessionToken, folder.id, 'private')).status).toBe(403);
+        });
+    });
+
+    // Write that comes only from "Anyone signed in can edit" lets anyone signed in change the item, so it must not let
+    // them open it to the world.
+    describe('who may choose a link', () => {
+        let teamId: string;
+
+        async function folderUnderRoot(name: string, body: object = {}): Promise<DrivePath> {
+            const token = ctx.alice.user.sessionToken;
+            const aliceId = ctx.alice.user.id;
+            const root = await driveGet(token, aliceId, mountId, 'root');
+            const made = await drivePost(token, aliceId, mountId, `folder/${root.id}`, { folderName: name });
+            expect((await putACL(token, made.id, { visibility: 'public-write', ...body })).status).toBe(200);
+            return made;
+        }
+
+        beforeAll(async () => {
+            const config = getServerConfig();
+            if (!config) throw new Error('setup not completed');
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: config.orgId }),
+            });
+            teamId = await createTeam(ctx, config.orgId, `Link Team ${crypto.randomUUID()}`);
+            await addMember(ctx, teamId, ctx.charlie.user.id);
+        });
+
+        test('a signed-in non-member of an item anyone can edit is refused, and it stays closed to a visitor', async () => {
+            const open = await folderUnderRoot('Anyone Edits');
+            const res = await putVisibility(ctx.bob.user.sessionToken, open.id, 'link');
+            expect(res.status).toBe(403);
+            expect(await res.text()).toBe('Only the owner or someone it is shared with can turn on a public link');
+            expect(await storedVisibility(open.id)).toBe('public-write');
+            const visit = await app.handle(
+                new Request(`http://localhost/drive/${ctx.alice.user.id}/${mountId}/path/${open.id}`),
+            );
+            expect(visit.status).toBe(403);
+        });
+
+        test('an editor by name, a team member through a team entry, one through a folder above and the owner set it', async () => {
+            const editor = { id: ctx.bob.user.email, read: true, write: true };
+            const team = { id: teamOwnerId(teamId), read: true, write: true };
+            const named = await folderUnderRoot('Named Editor', { add: [editor] });
+            const byTeam = await folderUnderRoot('Team Editor', { add: [team] });
+            const above = await folderUnderRoot('Editor Above', { add: [editor] });
+            const token = ctx.alice.user.sessionToken;
+            const below = await drivePost(token, ctx.alice.user.id, mountId, `folder/${above.id}`, {
+                folderName: 'Below',
+            });
+            expect((await putACL(token, below.id, { visibility: 'public-write' })).status).toBe(200);
+            const owned = await folderUnderRoot('Owner Links');
+
+            for (const [person, path] of [
+                [ctx.bob.user, named],
+                [ctx.charlie.user, byTeam],
+                [ctx.bob.user, below],
+                [ctx.alice.user, owned],
+            ] as const) {
+                expect((await putVisibility(person.sessionToken, path.id, 'link')).status).toBe(200);
+                expect(await storedVisibility(path.id)).toBe('link');
+            }
+        });
+
+        test('a link below an item anyone can edit is saved again and closed by a non-member, as before', async () => {
+            const open = await folderUnderRoot('Anyone Edits Above');
+            const token = ctx.alice.user.sessionToken;
+            const linked = await drivePost(token, ctx.alice.user.id, mountId, `folder/${open.id}`, {
+                folderName: 'Linked Below',
+            });
+            expect((await alicePuts(linked.id, 'link')).status).toBe(200);
+
+            expect((await putVisibility(ctx.bob.user.sessionToken, linked.id, 'link')).status).toBe(200);
+            expect((await putVisibility(ctx.bob.user.sessionToken, linked.id, 'private')).status).toBe(200);
+            expect(await storedVisibility(linked.id)).toBe('private');
         });
     });
 
