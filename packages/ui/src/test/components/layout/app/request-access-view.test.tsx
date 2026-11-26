@@ -1,6 +1,7 @@
 // Request access keeps the page form contract, less what it opens without: its message box shows only after "Add a
 // message", which then takes the focus, and it has no leave guard. The request carries the typed message. The server
 // refuses an access request from a guest, so the view offers none: a guest is told to ask the owner to share instead.
+// A visitor without a login, such as one whose public link closed while the page was open, goes to log in instead.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { expectFormContract, type } from '../../../form-contract';
 import { installHappyDom } from '../../../happy-dom';
@@ -15,7 +16,8 @@ const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realPublic = { ...(await import('@workspace/lib/public')) };
 // One object per hook, as a mocked hook returns, so nothing that depends on it runs again on every render.
-const auth = { user: { email: 'visitor@example.com' } };
+const signedIn = { user: { email: 'visitor@example.com' } };
+let auth: { user: { email: string } | null } = signedIn;
 const request = { mutateAsync: requestAccess, isSuccess: false };
 const owner = { data: { name: 'Olivia' } };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => auth, useIsGuest: () => isGuest }));
@@ -31,6 +33,21 @@ const { act, createElement } = await import('react');
 const { RequestAccessView } = await import('../../../../components/layout/app/request-access-view');
 
 const view = () => createElement(RequestAccessView, { ownerId: 'owner-1', mountId: 'default', pathId: 'path-1' });
+
+// The view on a page at `url` in a memory router that also has the login page.
+async function renderAt(url: string) {
+    const router = await import('@tanstack/react-router');
+    const root = router.createRootRoute();
+    const page = router.createRoute({ getParentRoute: () => root, path: '/doc/$id', component: view });
+    const login = router.createRoute({ getParentRoute: () => root, path: '/login', component: () => 'Login' });
+    const memory = router.createRouter({
+        routeTree: root.addChildren([page, login]),
+        history: router.createMemoryHistory({ initialEntries: [url] }),
+    });
+    await memory.load();
+    const rendered = await renderInDocument(createElement(router.RouterProvider, { router: memory }));
+    return { ...rendered, location: () => memory.state.location };
+}
 
 const button = (label: string) => {
     const found = [...document.querySelectorAll('button')].find((b) => b.textContent === label);
@@ -64,7 +81,7 @@ test('Request access keeps the page form contract', async () => {
 test('Add a message shows the box with the focus in it, and the request carries what was typed', async () => {
     isGuest = false;
     requestAccess.mockClear();
-    const { unmount } = await renderInDocument(view());
+    const { unmount } = await renderAt('/doc/a');
     await addMessage('I need this for the review');
     expect(document.activeElement === messageBox()).toBe(true);
     await act(async () => button('Request access').click());
@@ -74,8 +91,19 @@ test('Add a message shows the box with the focus in it, and the request carries 
 
 test('a guest is told to ask the owner to share, with nothing to request', async () => {
     isGuest = true;
-    const { container, unmount } = await renderInDocument(view());
+    const { container, unmount } = await renderAt('/doc/a');
     expect(container.querySelectorAll('button')).toHaveLength(0);
     expect(container.textContent).toContain('Ask the owner to share it with you');
+    await unmount();
+});
+
+test('a visitor without a login goes to the login page with the way back, as the route guard sends one', async () => {
+    isGuest = false;
+    auth = { user: null };
+    const { container, location, unmount } = await renderAt('/doc/a?pid=b');
+    expect(location().pathname).toBe('/login');
+    expect(location().search).toEqual({ redirect: 'http://localhost:3000/doc/a?pid=b' });
+    expect(container.textContent).not.toContain('Request access');
+    auth = signedIn;
     await unmount();
 });
