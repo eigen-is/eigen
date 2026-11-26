@@ -32,7 +32,7 @@ A scroll or a focus call on a `display: none` subtree does nothing. So a phone o
 
 ## Docs panels need 769px
 
-The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left and scales down only when the slack runs out; the shift keeps the text column clear, so a wide table may tuck under the panel. A phone has no form of these panels. Format › Table and Format › Image hold what a table and an image need there, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
+The docs properties panels, and the comments column over the page, render beside it whenever the viewport is not a phone; on a phone the column takes the screen with the editor hidden, not unmounted. With a panel or the column open, the page first slides left and scales down only when the slack runs out; the shift keeps the text column clear, so a wide table may tuck under the panel. A phone has no form of these panels. Format › Table and Format › Image hold what a table and an image need there, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
 
 ## A phone views canvas documents, never edits them
 
@@ -63,7 +63,7 @@ On a phone a `DropdownMenu`, and every app-bar menu, shows a `DropdownMenuSub` a
 ## Two small differences are decided, not bugs
 
 - The read-only Eye marker is dropped on a phone: its tooltip can't show on touch.
-- On desktop, tapping a card in the docs activity panel switches to the comments panel to reveal its anchor. Every phone pane stays put.
+- On desktop a comment opened from the list or the activity selects its anchor in the doc; on a phone the column covers the doc, so nothing moves.
 
 Open mobile work, a check on real devices included, is the Mobile row in [ROADMAP.md](ROADMAP.md). The [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md) covers checking at phone sizes.
 

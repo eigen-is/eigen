@@ -7,12 +7,12 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-26
 ---
 
 Docs is where you write in Eigen. You create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time.
 
-An open document has the toolbar across the top and the page in the middle. Comments open in a panel on the right.
+An open document has the toolbar across the top and the page in the middle. Comments open in a column on the right.
 
 ::: video src="/data/about/media/docs-hero" caption="A line added to a document, and undo takes it back."
 :::
@@ -47,7 +47,7 @@ If you have **Viewer** access to a document, the toolbar shows an eye icon in pl
 
 ## Comments
 
-You can attach comments to any piece of text. Select the text, right-click, and choose **Add comment**. A panel opens on the right where you can reply and track discussions. Click the **Comments** button in the toolbar to open or close the panel. See [Comment and discuss](/support/docs/comments) for details.
+You can attach comments to any piece of text. Select the text, right-click, and choose **Add comment**. A column opens on the right where you can reply and track discussions. Click the **Comments** button in the toolbar to open or close the column. See [Comment and discuss](/support/docs/comments) for details.
 
 ## Export and import
 
