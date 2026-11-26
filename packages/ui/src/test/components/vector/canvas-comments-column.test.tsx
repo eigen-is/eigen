@@ -1,7 +1,7 @@
 // A canvas app's comments open in one column beside the canvas: the list at ?panel=comments, 256 wide like the
-// properties panel, and a thread at ?chat=, 320 wide, with "‹ Comments" back to the list by replace and its scroll
+// properties panel, and a thread at ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll
 // kept. The toolbar's toggle pushes, close goes back on that push, and X and Esc close the whole column from a thread
-// too. A ?chat= landing opens at once at 320 and loads; one that names nothing lands on the list, a deleted one opens
+// too. A ?chat= landing opens at once at 400 and loads; one that names nothing lands on the list, a deleted one opens
 // as deleted. The editor beside it never remounts, on a desktop or a phone, and the find bar keeps clear of the column.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
@@ -284,7 +284,7 @@ test("the toolbar's toggle pushes ?panel=comments, and closing goes back over th
     expect(column()).toBeNull();
 });
 
-test('a click on an anchor opens its thread at 320 straight away and writes ?chat=', async () => {
+test('a click on an anchor opens its thread at 400 straight away and writes ?chat=', async () => {
     await openCanvas(['/']);
     const widths: (string | undefined)[] = [];
     const observer = new MutationObserver(() => widths.push(columnWidth()));
@@ -293,8 +293,8 @@ test('a click on an anchor opens its thread at 320 straight away and writes ?cha
     await settle();
     observer.disconnect();
     expect(search().get('chat')).toBe('thread-1.eigenchat');
-    expect(widths.filter((w) => w !== undefined).every((w) => w === '320px')).toBe(true);
-    expect(columnWidth()).toBe('320px');
+    expect(widths.filter((w) => w !== undefined).every((w) => w === '400px')).toBe(true);
+    expect(columnWidth()).toBe('400px');
     expect(thread.chatName).toBe('thread-1.eigenchat');
     expect(button('Comments')).toBeDefined();
 });
@@ -305,7 +305,7 @@ test("a list row reveals its anchor with the room the thread grows into, and the
     writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box');
     await openCanvas(['/', '/?panel=comments']);
     await click(listRow());
-    expect(reveal.mock.calls).toEqual([['box', 64]]);
+    expect(reveal.mock.calls).toEqual([['box', 144]]);
     await click(button('Comments'));
     reveal.mockClear();
     await act(async () => openCard('card-1'));
@@ -321,11 +321,11 @@ test('"‹ Comments" goes back to the list by replace, with its scroll kept', as
     list.scrollTop = 120;
     await click(listRow());
     expect(search().get('chat')).toBe('thread-1.eigenchat');
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('400px');
     expect(historyIndex()).toBe(1);
     // Under the thread the list keeps the list's width, so its rows don't wrap again.
     expect(list.classList.contains('invisible')).toBe(true);
-    expect(list.style.right).toBe('64px');
+    expect(list.style.right).toBe('144px');
     await click(button('Comments'));
     expect(search().get('chat')).toBeNull();
     expect(search().get('panel')).toBe('comments');
@@ -359,10 +359,10 @@ test('Esc on a thread closes the whole column', async () => {
     expect(column()).toBeNull();
 });
 
-test('a ?chat= landing opens at 320 with a loader until the cards sync', async () => {
+test('a ?chat= landing opens at 400 with a loader until the cards sync', async () => {
     // The comment rows have not come yet, so the lifecycle waits.
     await openCanvas(['/?chat=thread-1.eigenchat'], { rows: null });
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('400px');
     expect(document.querySelector('[data-slot="detail-column"] [aria-label="Loading"]')).not.toBeNull();
 });
 
@@ -390,7 +390,7 @@ test("a deleted comment's ?chat= opens it as deleted", async () => {
     };
     await openCanvas(['/?chat=thread-1.eigenchat'], { rows: [row] });
     expect(search().get('chat')).toBe('thread-1.eigenchat');
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('400px');
     expect(column()?.textContent).toContain('This comment was deleted');
 });
 
@@ -435,7 +435,7 @@ test("the find bar's inset follows the column as it grows into a thread", async 
     const bar = () => document.querySelector<HTMLElement>('.absolute.right-4.z-10');
     expect(bar()?.style.right).toBe('272px');
     await click(listRow());
-    expect(bar()?.style.right).toBe('336px');
+    expect(bar()?.style.right).toBe('416px');
     await click(button('Close'));
     expect(bar()?.style.right).toBe('');
 });
@@ -464,7 +464,7 @@ test("a thread's Edit opens the card's form in a dialog over the column, and Can
     await click(cancel);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(search().get('chat')).toBe('thread-1.eigenchat');
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('400px');
 });
 
 test('a dropped connection keeps the open thread, its URL and an edit in progress', async () => {
@@ -475,7 +475,7 @@ test('a dropped connection keeps the open thread, its URL and an edit in progres
     await setSynced(true);
     expect(search().get('chat')).toBe('thread-1.eigenchat');
     expect(historyIndex()).toBe(1);
-    expect(columnWidth()).toBe('320px');
+    expect(columnWidth()).toBe('400px');
     expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('A new title');
 });
 
