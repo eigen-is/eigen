@@ -84,7 +84,7 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
     const open = !!url || unlinked;
     const threadOpen = !!chat || unlinked;
     const width = threadOpen ? 'large' : 'medium';
-    const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('medium', isTablet);
+    const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('medium');
 
     const closeUnlinked = () => {
         if (unlinked) setOpenCardId(null);

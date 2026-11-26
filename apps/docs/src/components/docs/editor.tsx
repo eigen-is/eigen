@@ -126,7 +126,7 @@ type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommand
 type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
-const PANEL_INTRUSION_PX = columnWidthPx('small', false) - 16;
+const PANEL_INTRUSION_PX = columnWidthPx('small') - 16;
 // Room an outline jump leaves above its heading, in screen pixels.
 const JUMP_MARGIN = 24;
 // A page-less doc's Full text width leaves this much beside the column, past the scroll box's own gutter, as Google's.
@@ -659,7 +659,7 @@ const TiptapEditor = ({
     const widest = isMobile ? room : (TEXT_WIDTHS[textWidth].px ?? room - 2 * FULL_WIDTH_GUTTER_PX);
     // The outline is an absolute overlay too. It covers the scroll box's p-4 gutter as well, which a page-less column
     // keeps as room between the outline and the text.
-    const roomStart = outlineOverlayShown ? columnWidthPx('small', false) : 0;
+    const roomStart = outlineOverlayShown ? columnWidthPx('small') : 0;
     const roomEdge = showSidebar ? room - PANEL_INTRUSION_PX : room;
     const centeredWidth = Math.min(widest, room);
     const centeredLeft = (room - centeredWidth) / 2;

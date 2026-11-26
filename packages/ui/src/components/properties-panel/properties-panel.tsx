@@ -22,7 +22,7 @@ export function PropertiesPanel({ title, children, className }: PropertiesPanelP
                 'w-(--column-small) border-l bg-background shrink-0 h-full flex flex-col overflow-hidden',
                 className,
             )}
-            style={{ '--column-small': `${columnWidthPx('small', false)}px` }}
+            style={{ '--column-small': `${columnWidthPx('small')}px` }}
         >
             {title && (
                 <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">

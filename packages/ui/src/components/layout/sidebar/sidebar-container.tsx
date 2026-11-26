@@ -39,7 +39,7 @@ export function SidebarContainer({ sidebar }: SidebarContainerProps) {
                 !isMobile && 'app-gutter-sidebar',
                 isMobile ? (sidebarColumnShown ? 'block w-full' : 'hidden') : isTablet ? 'block w-16' : 'block',
             )}
-            style={isMobile || isTablet ? undefined : { width: columnWidthPx('small', false) }}
+            style={isMobile || isTablet ? undefined : { width: columnWidthPx('small') }}
         >
             {sidebarContent}
         </div>

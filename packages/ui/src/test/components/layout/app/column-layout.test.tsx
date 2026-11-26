@@ -44,9 +44,9 @@ async function render(width: Width, { isMobile = false, isTablet = false } = {})
 }
 
 test('each fixed size has one width, and only large steps down on a tablet', () => {
-    expect(columnWidthPx('small', false)).toBe(256);
-    expect(columnWidthPx('medium', false)).toBe(320);
-    expect(columnWidthPx('large', false)).toBe(400);
+    expect(columnWidthPx('small')).toBe(256);
+    expect(columnWidthPx('medium')).toBe(320);
+    expect(columnWidthPx('large')).toBe(400);
     expect(columnWidthPx('small', true)).toBe(256);
     expect(columnWidthPx('medium', true)).toBe(320);
     expect(columnWidthPx('large', true)).toBe(320);

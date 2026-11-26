@@ -67,7 +67,7 @@ export function CanvasDocumentShell({
         : column.open
           ? columnWidthPx(column.width, isTablet)
           : canEdit
-            ? columnWidthPx('small', isTablet)
+            ? columnWidthPx('small')
             : 0;
 
     return (

@@ -10,6 +10,6 @@ const COLUMN_WIDTH_PX = { small: 256, medium: 320, large: 400 } as const;
 // A tablet beside the sidebar's 64 rail has no room for 400, so every column there that isn't small is 320.
 const LARGE_ON_TABLET_PX = 320;
 
-export function columnWidthPx(width: FixedColumnWidth, isTablet: boolean): number {
+export function columnWidthPx(width: FixedColumnWidth, isTablet = false): number {
     return width === 'large' && isTablet ? LARGE_ON_TABLET_PX : COLUMN_WIDTH_PX[width];
 }
