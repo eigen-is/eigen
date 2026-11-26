@@ -4,7 +4,7 @@
 
 import { useAuth } from '@workspace/lib/auth';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
-import { writeCardToDoc } from '@workspace/lib/comments';
+import { isCommentCard, writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { useCreateDriveItem } from '@workspace/lib/drive';
 import { nanoid } from 'nanoid';
@@ -39,8 +39,8 @@ export function readBoard(doc: Y.Doc): BoardData {
         columns[id] = {
             id,
             title: typeof title === 'string' ? title : '',
-            taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter(
-                (taskId) => tasksMap.get(taskId) instanceof Y.Map,
+            taskIds: (getIdArray(columnMap, 'taskIds')?.toArray() ?? []).filter((taskId) =>
+                isCommentCard(tasksMap.get(taskId)),
             ),
         };
     }
@@ -165,15 +165,14 @@ export const useBoard = (
                 });
             };
 
-            // tasks shallow: a card's own edits don't change which ids the board can read.
             columnsMap.observeDeep(updateReactState);
-            tasksMap.observe(updateReactState);
+            tasksMap.observeDeep(updateReactState);
             columnOrderArray.observe(updateReactState);
             updateReactState();
 
             return () => {
                 columnsMap.unobserveDeep(updateReactState);
-                tasksMap.unobserve(updateReactState);
+                tasksMap.unobserveDeep(updateReactState);
                 columnOrderArray.unobserve(updateReactState);
             };
         },

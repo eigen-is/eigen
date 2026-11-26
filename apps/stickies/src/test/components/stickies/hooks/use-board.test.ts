@@ -3,12 +3,19 @@ import { boardCardIds } from '@workspace/lib/collab';
 import * as Y from 'yjs';
 import { readBoard } from '../../../../components/stickies/hooks/use-board';
 
+// A card as the board stores one, with its thread.
+function card(): Y.Map<unknown> {
+    const map = new Y.Map<unknown>();
+    map.set('chatName', 'thread.eigenchat');
+    return map;
+}
+
 describe('readBoard', () => {
     it("reads a column's fields by type and skips a peer's scalar entry", () => {
         const doc = new Y.Doc();
         const columns = doc.getMap<unknown>('columns');
         doc.transact(() => {
-            doc.getMap<unknown>('tasks').set('t1', new Y.Map());
+            doc.getMap<unknown>('tasks').set('t1', card());
 
             const good = new Y.Map<unknown>();
             good.set('title', 'To Do');
@@ -33,11 +40,12 @@ describe('readBoard', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
-            tasks.set('t1', new Y.Map());
+            tasks.set('t1', card());
             tasks.set('t2', 'not-a-card');
+            tasks.set('t3', new Y.Map());
 
             const column = new Y.Map<unknown>();
-            column.set('taskIds', Y.Array.from(['t1', 't2', 'gone']));
+            column.set('taskIds', Y.Array.from(['t1', 't2', 't3', 'gone']));
             const columns = doc.getMap<unknown>('columns');
             columns.set('c1', column);
             columns.set('c2', 'not-a-column');
@@ -55,7 +63,7 @@ describe('readBoard', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const tasks = doc.getMap<unknown>('tasks');
-            for (const id of ['t1', 't2', 't3']) tasks.set(id, new Y.Map());
+            for (const id of ['t1', 't2', 't3']) tasks.set(id, card());
             const columns = doc.getMap<unknown>('columns');
             const first = new Y.Map<unknown>();
             first.set('taskIds', Y.Array.from(['t1', 'gone']));

@@ -4,6 +4,7 @@
 // covers the board on a phone without remounting it, and shares its entry with a card it opens.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
+import { getIdArray } from '@workspace/lib/collab';
 import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import { drivePath } from '@workspace/ui/test/drive-path';
@@ -20,6 +21,7 @@ type ToolbarProps = { onToggleActivity?: () => void; activityOpen?: boolean };
 // The props the toolbar, the find bar's provider and the first column were last rendered with.
 const seen: {
     onCardOpen?: (id: string) => void;
+    cardTitles?: string[];
     toolbar?: ToolbarProps;
     rightInsetPx?: number;
     onSearchOpenChange?: (open: boolean) => void;
@@ -79,7 +81,7 @@ mock.module('@workspace/ui/components/search/doc-search-provider', () => ({
 mock.module('../../../components/stickies/hooks/use-board', () => ({
     useBoard: () => ({
         isSynced: useSyncExternalStore(subscribeSync, () => isSynced),
-        board: { columns: { col: { id: 'col', title: 'To do', taskIds: ['card-1'] } }, columnOrder: ['col'] },
+        board: realBoard.readBoard(doc),
         isAddColumnDialogOpen: false,
         setIsAddColumnDialogOpen: () => {},
         handleAddColumn: () => {},
@@ -105,8 +107,9 @@ mock.module('../../../components/stickies/toolbar', () => ({
     },
 }));
 mock.module('../../../components/stickies/column', () => ({
-    Column: (props: { onCardOpen?: (id: string) => void }) => {
+    Column: (props: { onCardOpen?: (id: string) => void; cards: { title: string }[] }) => {
         seen.onCardOpen = props.onCardOpen;
+        seen.cardTitles = props.cards.map((card) => card.title);
         useEffect(() => {
             mounts++;
         }, []);
@@ -150,8 +153,10 @@ beforeEach(() => {
     doc.getMap('tasks').set('card-1', card);
     // The card is on the board while a column lists it.
     const column = new Y.Map<unknown>();
+    column.set('title', 'To do');
     column.set('taskIds', Y.Array.from(['card-1']));
     doc.getMap('columns').set('col', column);
+    doc.getArray('columnOrder').push(['col']);
 });
 
 let unmount = async () => {};
@@ -241,6 +246,16 @@ async function openBoard(entries: string[], { browser = false, isMobile = false 
     ));
     await settle();
 }
+
+// A card with no thread is no card, such as one an older board stored, so the board leaves it out.
+test('a card without a chatName is left out, and the board shows its other cards', async () => {
+    doc.transact(() => {
+        doc.getMap('tasks').set('card-2', new Y.Map());
+        getIdArray(doc.getMap('columns').get('col'), 'taskIds')?.push(['card-2']);
+    });
+    await openBoard(['/']);
+    expect(seen.cardTitles).toEqual(['Ship it']);
+});
 
 test("a link's ?chat= opens the board's dialog, and closing it takes ?chat= out", async () => {
     await openBoard(['/', '/?chat=ship.eigenchat']);
