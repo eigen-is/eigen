@@ -71,6 +71,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Security
 
 - **Server runtime** — the server runs on Bun 1.4.5, which fixes security issues in its web server, its encrypted connections, its DNS lookups and its decompression
+- **Opening files in the browser** — in Drive, Mail and a mounted drive, only pictures, PDFs, sound, video and plain text open as they are. Any other file opens locked down, so nothing in it can run
+- **SVG previews** — an SVG builds in the pictures it names only inside a document, and only pictures, never other files beside it
+- **Who can change sharing** — only the owner and people added by name, or through a team, can change who has access. Someone who edits through Anyone signed in with the link can edit, but not share
+- **Busy servers** — a flood of sync requests on an open document no longer stalls the server for everyone else, and previews for people on a public link wait behind the previews and exports of signed-in people
 
 ## [0.4.4] - 2026-11-17
 
