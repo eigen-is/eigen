@@ -8,9 +8,9 @@ On disk a collab document is a container: a Drive folder named like a file, such
 
 A browser opens one WebSocket per document, and the server keeps one `CollabDocument` in memory for each document someone has open. The two sides first exchange what the other is missing, the sync handshake (y-websocket's sync step 1 and step 2). From then on each update goes to the server, into `data.db`, and out to the other sockets. Awareness is the second thing on the socket: who is here and where their cursor is. It is never stored.
 
-Access is Drive's. The socket checks read and its session when it opens and every 15 s, and write on every update ([ACL.md](ACL.md)). Nothing persists in the browser, so an edit the server has not acknowledged is lost on reload, and the tab warns before that happens.
+Access is Drive's. The socket checks read and its session when it opens and every 15 s, and write on every update ([ACL.md](ACL.md)). A visitor, someone with no login on a document a public link opens, gets a socket too, which only receives ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)). Nothing persists in the browser, so an edit the server has not acknowledged is lost on reload, and the tab warns before that happens.
 
-The sections follow the places where this picture needs care: big documents and slow links, hostile or stale peers, replacing a document under its editors, and the editor in the browser. Six things in them surprise people:
+The sections follow the places where this picture needs care: big documents and slow links, hostile or stale peers, replacing a document under its editors, and the editor in the browser. Seven things in them surprise people:
 
 - The blobs in `data.db` are zstd on disk and raw on the wire, and the reader takes compressed and raw rows alike ([§ Yjs blobs](#yjs-blobs-are-zstd-on-disk-and-raw-on-the-wire)).
 - A read-only peer can still send awareness, so it is validated before it is applied ([§ Awareness frames](#awareness-frames-are-validated-before-apply)).
@@ -18,6 +18,7 @@ The sections follow the places where this picture needs care: big documents and 
 - The WebSocket uses Bun's shared deflate compressor, which is safe for Safari since Bun 1.4.4 and costs no per-socket zlib state ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
 - A backup restore rotates the home's data epoch, an id that changes only when the home's data is replaced or the server is updated, so a reconnecting tab reloads instead of syncing its old state over the restored copy ([§ Home replacement](#home-replacement-closes-every-socket)).
 - The editor waits on a latched `loaded`, never on `synced`, so a short outage keeps it mounted ([§ The client gates on `loaded`](#the-client-gates-on-loaded-never-synced)).
+- The server sends a visitor's socket no sync step 1 and no cursors, and drops everything it sends except its own sync step 1 ([§ A visitor's socket only receives](#a-visitors-socket-only-receives)).
 
 ## Yjs blobs are zstd on disk and raw on the wire
 
@@ -48,7 +49,7 @@ The same 30 s window bounds the whole-state sync reply, because a frame only cou
 
 ## The route refuses before it speaks
 
-An unauthenticated upgrade never reaches `open`. The `auth` macro answers the HTTP upgrade itself, so the handler's user is always a session user.
+An unauthenticated upgrade reaches `open` only on a path a public link opens. The route uses the `linkAuth` macro, which resolves the session user or null, and for a null user its `beforeHandle` asks `LinkDrive.canRead` and answers the HTTP upgrade with 403 when the link rule refuses the path. So the handler's caller is a session user or a visitor the link admits, and `open` asks again, since the access can change while the document loads.
 
 A caller without read access gets nothing but the constant empty awareness heartbeat ([The route speaks first during a cold load](#the-route-speaks-first-during-a-cold-load)), then close 4403, and so does a path that does not exist, which reads as no access in `/info` too. That is why the heartbeat may start before the access check: it carries no document data.
 
@@ -56,13 +57,13 @@ Three failed opens close with their own codes, so the tab knows what to do ([Eac
 
 Binary frames arrive as Bun `Buffer`s. A string frame is `ping` or `pong`, or it is ignored.
 
-The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive, the hold on the Home) in a `WeakMap` keyed by the raw Bun socket. That socket is the one identity that survives Elysia's fresh wrapper per event. User and params come from the typed `ws.data`.
+The route keeps its per-socket state (the `opened` gate, the caller and its drive, the document, the keepalive, the hold on the Home) in a `WeakMap` keyed by the raw Bun socket. That socket is the one identity that survives Elysia's fresh wrapper per event. User and params come from the typed `ws.data`.
 
 ## Read and the session are checked at open and every 15 s, write on every message
 
 The route checks write on every binary frame, so a writer demoted to reader, or whose share or team went, loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness. It reads a sync frame's type once and applies a step 2 or an update only from a writer, because a varuint has more than one encoding and a second read could see another type. The route keeps each socket's session in a map keyed on `ws.raw`: Elysia's Bun WebSocket adapter hands every open, message and close a fresh wrapper, so a map keyed on `ws` never matches between events.
 
-Read and the session have one check, `checkAccess` in the route's `open` (`apps/api/src/routes/collab.ts`). It runs when the socket has opened and again on the socket's 15 s keepalive. It reads the socket's session and that session's user with `getSessionUser` and asks `Drive.canRead` with that row. A session that is gone or past its expiry, a user with no row, or a user who may no longer read closes the socket with 4403. So nothing has to tell a socket what happened: an ACL change, a move out of a shared folder (read inherits from the whole ancestor chain), a team or membership that goes, a deleted user, a password reset, a sign-out, a session revoked through `/auth/revoke-session` or the admin's `/admin/revoke-user-session` and `/admin/revoke-user-sessions`, and a new email that the ACL doesn't name all reach it the same way, and no way out needs a hook of its own. `apps/api/src/test/collab/collab-membership-revoke.test.ts` pins them, running each tick by hand.
+Read and the session have one check, `checkAccess` in the route's `open` (`apps/api/src/routes/collab.ts`). It runs when the socket has opened and again on the socket's 15 s keepalive. It reads the socket's session and that session's user with `getSessionUser` and asks `Drive.canRead` with that row; a visitor's socket asks `LinkDrive.canRead` instead ([§ A visitor's socket only receives](#a-visitors-socket-only-receives)). A session that is gone or past its expiry, a user with no row, or a user who may no longer read closes the socket with 4403. So nothing has to tell a socket what happened: an ACL change, a move out of a shared folder (read inherits from the whole ancestor chain), a team or membership that goes, a deleted user, a password reset, a sign-out, a session revoked through `/auth/revoke-session` or the admin's `/admin/revoke-user-session` and `/admin/revoke-user-sessions`, and a new email that the ACL doesn't name all reach it the same way, and no way out needs a hook of its own. `apps/api/src/test/collab/collab-membership-revoke.test.ts` pins them, running each tick by hand.
 
 The price is up to 15 s. Until the tick a socket that lost read still receives edits and cursors, and a deleted or reset user's edit can still land, because the frame's write check uses the user as the socket opened and an ACL entry outlives its user. That is accepted. A check that throws is logged and leaves the socket, and the next tick asks again.
 
@@ -83,7 +84,18 @@ A session is one browser, so a socket ends with the session that opened it, and 
 
 A reload can't loop: the page that comes back opens a socket only if the session and read hold, and those are what the check reads. A tick that lands in the moment between a password change's commit and the browser storing its new cookie reloads on the old cookie, which lands on sign-in. The user signs in again. Like any 4403, it loses only the typing still in flight in that round trip ([the 4403 row](#each-close-code-tells-the-tab-what-to-do)).
 
-The check at open is why a change during a cold load isn't left to the first tick: it found no connection to close, and a load can take as long as a download. That check reads only SQLite, so no edit reaches the socket during it, and a client's frames wait for `opened`. A socket that fails has its session cleaned up first, so its sync step 1 gets no reply and a waiting edit lands nowhere. The test file above pins that with a held load. What such a socket did get before the close is the sync step 1 and the awareness frame of `subscribe`: a state vector and the other editors' names and cursors, no document content. A failed check at open closes with the retry code, so the client reconnects.
+The check at open is why a change during a cold load isn't left to the first tick: it found no connection to close, and a load can take as long as a download. That check reads only SQLite, so no edit reaches the socket during it, and a client's frames wait for `opened`. A socket that fails has its session cleaned up first, so its sync step 1 gets no reply and a waiting edit lands nowhere. The test file above pins that with a held load. What a member's socket did get before the close is the sync step 1 and the awareness frame of `subscribe`: a state vector and the other editors' names and cursors, no document content. A failed check at open closes with the retry code, so the client reconnects.
+
+## A visitor's socket only receives
+
+A socket that opens without a user keeps that kind until it closes, whoever signs in meanwhile, and the route holds it as a visitor's access with a `LinkDrive` (`CollabAccess` in `routes/collab.ts`). `CollabDocument` stores `null` as its user.
+
+- **It gets edits and nothing else.** `CollabDocument.greetMember` sends a connection without a user neither the server's sync step 1 nor the awareness states, and `broadcastMessage` passes edits to it but never awareness. The server's step 1 would only ask for the visitor's whole state as a step 2, which is dropped unread, so the visitor syncs from its own step 1.
+- **What it sends is dropped, except its sync step 1.** Its step 2, its updates and its awareness are dropped unread, since it never has write and has no user for an awareness state. Its sync step 1 is answered every time, as any reader's: the client sends one every 5 s, and on a quiet document that answer is what keeps y-websocket from closing the socket after 30 s. There is no frame-size cap of its own, so a visitor that reconnects holding a large document stays open (`collab-link-visitor.test.ts`).
+- **The keepalive asks the link rule.** A visitor has no session, so its `checkAccess` asks only `LinkDrive.canRead` for the path. Another General access, public links turned off, a trash and a move out of a public folder all close it with 4403 at the next tick.
+- **No Recent row.** `recordOpened` needs a user, so an open without one records nothing.
+
+A visitor whose link closed while their tab was offline gets a 403 on every new upgrade, so the tab shows a connection that keeps retrying until a reload. That is accepted.
 
 ## A document lingers after the last unsubscribe
 
