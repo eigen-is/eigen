@@ -49,7 +49,6 @@ export function useFileHistory(ownerId: string, mountId: string, pathId: string,
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        // A visitor, with no login, may not read the history.
         enabled: !!user && !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
