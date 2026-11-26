@@ -12,6 +12,7 @@ import { touchRecent } from '../../lib/drive/recent';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/shared-schema';
 import { clearHomeRestoring, getHome, markHomeRestoring } from '../../lib/home/get-home';
+import * as homeRelay from '../../lib/home/home-relay';
 import type { TestUser } from '../setup';
 import {
     addMember,
@@ -201,6 +202,31 @@ describe('Recent records an open', () => {
         await openSocket(viewer, doc);
         await waitForRow(viewer, doc);
         expect(await listedIds(viewer)).toContain(doc.id);
+    });
+
+    test("of a document's stored state for a reader with no socket, and none of a 304 or a visitor's load", async () => {
+        const { alice } = ctx;
+        const viewer = await newViewer();
+        const doc = await create(alice.user, 'doc');
+        await drivePut(alice.user.sessionToken, doc.ownerId, doc.mountId, `path/${doc.id}/acl`, { visibility: 'link' });
+        const stateUrl = `/collab/${doc.ownerId}/${doc.mountId}/${doc.id}/state`;
+        const pushes = spyOn(homeRelay, 'pushToHomes');
+        const visitor = await ctx.app.handle(new Request(`http://localhost${stateUrl}`));
+        expect(visitor.status).toBe(200);
+        expect(pushes.mock.calls.filter(([, message]) => message.type === 'drive:recent-open')).toEqual([]);
+
+        const first = await authedRequest(viewer.sessionToken, stateUrl);
+        expect(first.status).toBe(200);
+        await waitForRow(viewer, doc);
+        expect(await listedIds(viewer)).toContain(doc.id);
+
+        const sharedDb = await getSharedDatabase(await getHome(viewer.id));
+        sharedDb.delete(recentPaths).run();
+        const etag = first.headers.get('etag') ?? '';
+        const notModified = await authedRequest(viewer.sessionToken, stateUrl, { headers: { 'If-None-Match': etag } });
+        expect(notModified.status).toBe(304);
+        await settle(viewer);
+        expect(await storedIds(viewer)).not.toContain(doc.id);
     });
 
     test('of a plain file in the inline editor', async () => {

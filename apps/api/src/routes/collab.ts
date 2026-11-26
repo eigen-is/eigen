@@ -1,8 +1,8 @@
 // The collab routes: a document's access info, stored state and comment index over HTTP, and the WebSocket a live
 // reader's editor opens to sync a document. The socket checks its session and that its user is a live reader when it
 // opens and on its keepalive, and write on every message, and it hands the frames to the CollabDocument the Drive keeps
-// open for that document. An open that succeeds counts on the user's Recent page. Any other reader, such as a visitor
-// on a public link, gets the info and the stored state, and no socket.
+// open for that document. Any other reader, such as a visitor on a public link, gets the info and the stored state,
+// and no socket. A socket that opens, or a stored state a signed-in reader loads, counts on the user's Recent page.
 
 import { collabStateVersion } from '@workspace/lib/collab/collab-state';
 import {
@@ -88,22 +88,17 @@ export const collabRouter = new Elysia({
             const { snapshotId, lastUpdateId } = await readCollabStateVersion(mount, path);
             const epoch = getDataEpoch(params.ownerId);
             const version = collabStateVersion(epoch, snapshotId, lastUpdateId, COLLAB_STATE_FORMAT);
-            const body = await answerRevalidated(
-                request,
-                set,
-                `"${version}"`,
-                async () =>
-                    new Response(
-                        await getCollabState(
-                            mount,
-                            path,
-                            type,
-                            version,
-                            async () =>
-                                (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
-                        ),
-                    ),
-            );
+            const body = await answerRevalidated(request, set, `"${version}"`, async () => {
+                const state = await getCollabState(
+                    mount,
+                    path,
+                    type,
+                    version,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                );
+                if (user) recordOpened(user, path);
+                return new Response(state);
+            });
             set.headers['Content-Type'] = 'application/octet-stream';
             return body;
         },
