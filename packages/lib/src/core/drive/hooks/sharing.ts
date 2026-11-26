@@ -5,8 +5,13 @@
 import { skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import type { DriveACL, DriveAccessCheckResult, DriveVisibility } from '@workspace/lib/types/drive-access';
+import type { DrivePath, DrivePathRef } from '@workspace/lib/types/drive';
+import type {
+    DriveACL,
+    DriveAccessCheckResult,
+    DrivePathPermissions,
+    DriveVisibility,
+} from '@workspace/lib/types/drive-access';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateAclUpdated, invalidateViewerLists } from './keys';
@@ -73,16 +78,16 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
 export function useCheckPermissions(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.permissions(ownerId, mountId, pathId || ''),
-        queryFn:
-            pathId && ownerId && mountId
-                ? async () => {
-                      const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
-                      if (response.error) throw new AppError(response);
-                      return response.data;
-                  }
-                : skipToken,
+        queryFn: pathId && ownerId && mountId ? () => fetchPathPermissions({ ownerId, mountId, pathId }) : skipToken,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
+}
+
+// A plain function too, for a route's beforeLoad, whose context holds no query client.
+export async function fetchPathPermissions({ ownerId, mountId, pathId }: DrivePathRef): Promise<DrivePathPermissions> {
+    const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
+    if (response.error) throw new AppError(response);
+    return response.data;
 }
 
 // Teams expanded into their members and the folders above walked, each person once.

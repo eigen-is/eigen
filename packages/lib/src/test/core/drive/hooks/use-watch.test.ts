@@ -30,7 +30,7 @@ test('Watch refreshes the item it ran on after the host hands the hook no item',
         return { watch: useWatchToggle(target.ownerId, target.mountId, target.pathId), setTarget };
     }, queryClient);
 
-    await act(async () => latest.watch.toggle());
+    await act(async () => latest.watch?.toggle());
     await act(async () => latest.setTarget(NOTHING));
     await act(async () => {
         answer();

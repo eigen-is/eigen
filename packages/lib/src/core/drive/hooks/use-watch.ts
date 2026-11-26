@@ -21,12 +21,15 @@ type WatchToggle = {
 
 type WatchTarget = { ownerId: string; mountId: string; pathId: string };
 
-// An empty pathId reads nothing, for a host that has no single item to show.
-export function useWatchToggle(ownerId: string, mountId: string, pathId: string): WatchToggle {
-    const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
+// An empty pathId reads nothing, for a host that has no single item to show. A visitor, with no login,
+// watches nothing, so the hook answers null for them and reads nothing.
+export function useWatchToggle(ownerId: string, mountId: string, pathId: string): WatchToggle | null {
+    const { user } = useAuth();
+    const { data: status } = useIsPathWatched(ownerId, mountId, user ? pathId : '');
     const watch = useWatchPath();
     const unwatch = useUnwatchPath();
 
+    if (!user) return null;
     const direct = status?.direct ?? false;
     const label = direct
         ? 'Stop watching'

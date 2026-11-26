@@ -1,13 +1,17 @@
+// A Drive item's history: the events that changed it, read for the detail column's recent activity and an editor's
+// activity panel, and the card events a stickies board records itself. A folder's history holds its descendants'
+// events too. Drive events refresh it through invalidateFileHistory.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
 
-// RECORD CLIENT-EMITTED HISTORY EVENT (the sticky-* card events)
 export function useRecordHistory(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (input: ClientFileEventInput) => {
@@ -31,10 +35,9 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
     });
 }
 
-// GET FILE HISTORY — file: direct events; folder: descendant events included.
-// limit is part of the queryKey: drive detail (default 5) and the editors'
-// activity panel (50) cache independently.
+// The limit is in the key, so the detail column's few events and the activity panel's many cache apart.
 export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
+    const { user } = useAuth();
     return useQuery({
         queryKey: driveKeys.fileHistory(ownerId, mountId, pathId, limit),
         queryFn: async () => {
@@ -44,7 +47,8 @@ export function useFileHistory(ownerId: string, mountId: string, pathId: string,
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId && !!mountId && !!pathId,
+        // A visitor, with no login, may not read the history.
+        enabled: !!user && !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }

@@ -39,19 +39,20 @@ function DriveActionsPalette({ items, listing, actions }: DrivePaletteSelectionP
         action,
         run: (format?: ExportFormat) => actions.run(action.id, items, format),
     }));
-    const watchRows: PaletteSelectionAction[] = single
-        ? [
-              {
-                  action: {
-                      id: 'watch',
-                      label: watch.label,
-                      icon: watch.direct ? BellRing : Bell,
-                      group: 'collaborate',
+    const watchRows: PaletteSelectionAction[] =
+        single && watch
+            ? [
+                  {
+                      action: {
+                          id: 'watch',
+                          label: watch.label,
+                          icon: watch.direct ? BellRing : Bell,
+                          group: 'collaborate',
+                      },
+                      run: watch.toggle,
                   },
-                  run: watch.toggle,
-              },
-          ]
-        : [];
+              ]
+            : [];
     const fileRows = runner.actions.map((action) => ({ action, run: () => runner.run(action) }));
     usePaletteSelection(items, inMenuOrder([...driveRows, ...watchRows, ...fileRows]));
 

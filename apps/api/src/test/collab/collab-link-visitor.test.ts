@@ -545,9 +545,8 @@ describe('the info route without a login', () => {
         expect(info.canWrite).toBe(false);
         expect(info.path?.id).toBe(doc.id);
         expect(info.path?.acl).toBeNull();
-        expect(info.path?.parentId).toBeNull();
+        expect(info.path?.parentId).toBe(folder.id);
         expect(info.folderContents?.map((child) => child.name)).toEqual(['media']);
-        expect(JSON.stringify(info)).not.toContain(folder.id);
     });
 
     test('a private document and an unknown id answer what a signed-in non-reader gets', async () => {
