@@ -23,7 +23,7 @@ The toolbar is the `toolbar` prop of a `Column`, never part of the page content.
 </ColumnLayout>
 ```
 
-A list whose items open a detail is `ListDetailLayout`, as on the contacts, admin users, teams and waitlist pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`, `?entryId=`), keeping every other param. Mail lays out its own list, which scrolls itself, beside the same `flex` `DetailColumn` ([MAIL.md](MAIL.md#the-open-message-and-the-composer-share-one-detail-column)).
+A list whose items open a detail is `ListDetailLayout`, as on the contacts, admin users, teams and waitlist pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`, `?entryId=`), keeping every other param. Mail lays out its own list, which scrolls itself, beside the same `flex` `DetailColumn` ([MAIL.md](MAIL.md#the-open-message-and-the-composer-share-one-detail-column)). Drive's `DriveLayout` draws its `DriveDetail` as a `large` `DetailColumn` beside the `flex` list, with Share, Watch and the item's ⋮ in the bar and Open under the name. Every Drive listing and the editor apps' file lists open and close it through `useDetailHistory` over `?pid=` (with `uid` and `mid`), in `useDriveListRoute`, so an arrow key's next row replaces the entry like a click on another row.
 
 ## A side column is small, medium or large
 
@@ -247,7 +247,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`: `useListSelection`, `useKeyboardListNavigation`, `useListDrag`, `useListDropTarget` and `useContextMenu`. `email-list.tsx`, `PersonList` and `use-drive-item-controller.ts` are the working examples.
 
-**A list's Esc clears a selection of two or more rows and does nothing else.** With one row selected, which is the open one, `useKeyboardListNavigation` leaves the key alone and calls no `preventDefault`, so the detail column beside the list closes on it. In Drive, whose detail is not a `DetailColumn` yet, Esc on a single selected row now does nothing, and the row stays selected.
+**A list's Esc clears a selection of two or more rows and does nothing else.** With one row selected, which is the open one, `useKeyboardListNavigation` leaves the key alone and calls no `preventDefault`, so the detail column beside the list closes on it. In Drive the open row is the one selected row too, so Esc closes its detail.
 
 A row's state is a class in `globals.css`, painted in the current app's color:
 

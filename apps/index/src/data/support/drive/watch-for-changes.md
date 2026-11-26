@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, notifications, watch, activity, collaboration]
 related: [drive/file-activity, drive/share-a-file]
 order: 140
-updated: 2026-11-04
+updated: 2026-11-26
 ---
 
 When you work on something with other people, you can ask Eigen to tell you when it changes. Watching a file or a folder sends you a notification whenever someone else does something to it.
@@ -19,7 +19,7 @@ When you work on something with other people, you can ask Eigen to tell you when
 
 The same menu item now reads **Stop watching**. Choose it again to turn watching off.
 
-You can also use the bell button. Click a file to open the detail panel on the right, then click the bell next to the **Share** button. The bell stays highlighted while you are watching. The same bell sits in the toolbar of Docs, Sheets, Slides, Stickies, and Vector, so you can start watching a document while you have it open.
+You can also use the bell button. Click a file to open the detail panel on the right, then click the bell at the top of the panel, next to the **Share** button. The bell stays highlighted while you are watching. The same bell sits in the toolbar of Docs, Sheets, Slides, Stickies, and Vector, so you can start watching a document while you have it open.
 
 ## Watch a whole folder
 
