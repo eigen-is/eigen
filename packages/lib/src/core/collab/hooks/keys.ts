@@ -6,6 +6,8 @@ export const collabKeys = {
     mount: (ownerId: string, mountId: string) => [...collabKeys.info(), ownerId, mountId] as const,
     document: (ownerId: string, mountId: string, pathId: string) =>
         [...collabKeys.mount(ownerId, mountId), pathId] as const,
+    storedState: (ownerId: string, mountId: string, pathId: string) =>
+        [...collabKeys.all, 'stored-state', ownerId, mountId, pathId] as const,
 };
 
 // Refreshes canRead/canWrite in the open document views.

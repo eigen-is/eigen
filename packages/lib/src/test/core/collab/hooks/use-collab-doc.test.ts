@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
@@ -9,6 +9,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
+import { encodeCollabState } from '../../../../core/collab/collab-state';
 import type { CollabDoc, useCollabDoc as UseCollabDoc } from '../../../../core/collab/hooks/use-collab-doc';
 import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
@@ -121,6 +122,7 @@ afterAll(() => {
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { useCollabDoc } = await import('../../../../core/collab/hooks/use-collab-doc');
 type UseCollabDocOptions = Parameters<typeof UseCollabDoc>[0];
 
@@ -133,9 +135,16 @@ function mount(options: UseCollabDocOptions) {
     let latest: CollabDoc | null = null;
     const container = document.createElement('div');
     const root = createRoot(container);
+    const client = new QueryClient();
     const render = (next: UseCollabDocOptions) =>
         act(() => {
-            root.render(createElement(Harness, { options: next, onRender: (c) => (latest = c) }));
+            root.render(
+                createElement(
+                    QueryClientProvider,
+                    { client },
+                    createElement(Harness, { options: next, onRender: (c) => (latest = c) }),
+                ),
+            );
         });
     render(options);
     return {
@@ -514,14 +523,141 @@ describe('useCollabDoc connection state', () => {
         active = mount(OPTIONS);
         expect(active.provider.awareness.getLocalState()).toEqual({});
     });
+});
 
-    test('a visitor has no awareness state, so no cursor or presence of theirs reaches the socket', () => {
+// The state route as the hook's fetch sees it: the stored document under an ETag that moves with every edit, a 304 for
+// the ETag a request names, or a refusal.
+function stateServer() {
+    const stored = new Y.Doc();
+    const asked: { url: string; ifNoneMatch: string | null }[] = [];
+    const server = {
+        stored,
+        asked,
+        refuse: 0,
+        write: (text: string) => stored.getText('probe').insert(stored.getText('probe').length, text),
+    };
+    const realFetch = globalThis.fetch;
+    const answer = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const ifNoneMatch = new Headers(init?.headers).get('if-none-match');
+        asked.push({ url: String(input), ifNoneMatch });
+        if (server.refuse) return new Response('No read permission', { status: server.refuse });
+        const etag = `"${stored.getText('probe').length}"`;
+        if (ifNoneMatch === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
+        return new Response(encodeCollabState([Y.encodeStateAsUpdate(stored)]), { headers: { ETag: etag } });
+    };
+    globalThis.fetch = Object.assign(answer, { preconnect: realFetch.preconnect });
+    return Object.assign(server, { restore: () => void (globalThis.fetch = realFetch) });
+}
+
+// TanStack Query refetches a stale query when the tab shows again.
+const focusWindow = () =>
+    act(async () => {
+        window.dispatchEvent(new window.Event('visibilitychange'));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+describe('useCollabDoc for a reader who gets no socket', () => {
+    let server: ReturnType<typeof stateServer>;
+    let active: ReturnType<typeof mount> | null = null;
+
+    beforeEach(() => {
+        FakeProvider.instances = [];
         session.user = null;
-        try {
-            active = mount(OPTIONS);
-            expect(active.provider.awareness.getLocalState()).toBeNull();
-        } finally {
-            session.user = { id: 'u1' };
-        }
+        server = stateServer();
+    });
+    afterEach(() => {
+        active?.unmount();
+        active = null;
+        session.user = { id: 'u1' };
+        server.restore();
+    });
+
+    test('it opens no socket, loads the stored state over HTTP and runs onSync once', async () => {
+        server.write('stored');
+        const syncs: boolean[] = [];
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) });
+        const h = active;
+        expect(h.state.loaded).toBe(false);
+        await settle();
+
+        expect(FakeProvider.instances).toEqual([]);
+        expect(h.state.provider).toBeNull();
+        expect(server.asked).toEqual([
+            { url: expect.stringMatching(/\/collab\/owner\/mount\/doc-1\/state$/), ifNoneMatch: null },
+        ]);
+        expect(h.doc.getText('probe').toString()).toBe('stored');
+        expect(h.state.loaded).toBe(true);
+        expect(h.state.synced).toBe(true);
+        expect(h.state.offline).toBe(false);
+        expect(syncs).toEqual([true]);
+    });
+
+    test('a focus asks again with the ETag: a newer state updates the held document, an unchanged one does nothing', async () => {
+        server.write('one');
+        const syncs: boolean[] = [];
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) });
+        const h = active;
+        await settle();
+        const doc = h.doc;
+
+        server.write(' two');
+        await focusWindow();
+        expect(server.asked.at(-1)?.ifNoneMatch).toBe('"3"');
+        expect(h.doc).toBe(doc);
+        expect(doc.getText('probe').toString()).toBe('one two');
+
+        let updates = 0;
+        doc.on('update', () => updates++);
+        await focusWindow();
+        expect(server.asked.map((ask) => ask.ifNoneMatch)).toEqual([null, '"3"', '"7"']);
+        expect(updates).toBe(0);
+        expect(h.state.loaded).toBe(true);
+        expect(syncs).toEqual([true]);
+    });
+
+    test("the reader's own change to the document arms no unsynced-edits guard", async () => {
+        active = mount(OPTIONS);
+        const h = active;
+        await settle();
+        act(() => h.doc.getMap('items').set('local', 1));
+        expect(h.state.unsyncedEdits).toBe(false);
+    });
+
+    test('a 403 on the first fetch reloads the page into the guard', async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        server.refuse = 403;
+        active = mount(OPTIONS);
+        await settle();
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(active.state.loaded).toBe(false);
+    });
+
+    test('a link closed while the document is open reloads at the next focus', async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        active = mount(OPTIONS);
+        await settle();
+        expect(reload).not.toHaveBeenCalled();
+
+        server.refuse = 403;
+        await focusWindow();
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    test('a document switch loads the other document into a new doc', async () => {
+        server.write('first');
+        active = mount(OPTIONS);
+        const h = active;
+        await settle();
+        const first = h.doc;
+
+        h.rerender({ ...OPTIONS, pathId: 'doc-2' });
+        expect(h.state.loaded).toBe(false);
+        await settle();
+        expect(h.doc).not.toBe(first);
+        expect(h.state.loaded).toBe(true);
+        expect(server.asked.at(-1)?.url).toMatch(/doc-2\/state$/);
     });
 });
