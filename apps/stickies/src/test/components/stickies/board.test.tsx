@@ -123,7 +123,7 @@ beforeEach(() => {
 let unmount = async () => {};
 afterEach(() => unmount());
 
-let history = router.createMemoryHistory();
+let history: ReturnType<typeof router.createMemoryHistory> = router.createMemoryHistory();
 const param = (name: string) => new URLSearchParams(history.location.search).get(name);
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 const dialogText = () => document.querySelector('[role="dialog"]')?.textContent ?? null;
@@ -135,7 +135,8 @@ async function closeDialog() {
 }
 
 // The board under a route that reads ?chat= and ?card=, as the board route does.
-async function openBoard(entries: string[]) {
+// A browser history runs the router's blockers on back, which a memory history skips.
+async function openBoard(entries: string[], { browser = false } = {}) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(commentKeys.list('owner-1', 'm1', 'b1'), []);
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'b1'), []);
@@ -171,7 +172,8 @@ async function openBoard(entries: string[]) {
         }),
         component: Page,
     });
-    history = router.createMemoryHistory({ initialEntries: entries });
+    if (browser) window.history.replaceState(null, '', entries[0]);
+    history = browser ? router.createBrowserHistory() : router.createMemoryHistory({ initialEntries: entries });
     const memory = router.createRouter({ routeTree: root.addChildren([page]), history });
     await memory.load();
     ({ unmount } = await renderInDocument(
@@ -232,4 +234,80 @@ test('a dropped connection keeps the open thread, its URL and an edit in progres
     expect(param('chat')).toBe('ship.eigenchat');
     expect(history.location.state.__TSR_index).toBe(1);
     expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('Ship it today');
+});
+
+// Back, or a second link, closes or switches the card without the dialog's own close, so a changed edit form asks
+// through the router first, and the edit ends with its card, so the card opens again in its view.
+const editButton = () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Edit"]');
+const question = () =>
+    [...document.querySelectorAll('[role="dialog"]')].find((d) => d.textContent?.includes('Discard changes?'));
+const questionButton = (name: string) => {
+    const found = [...(question()?.querySelectorAll<HTMLElement>('button') ?? [])].find((b) => b.textContent === name);
+    if (!found) throw new Error(`no ${name} button`);
+    return found;
+};
+const back = async () => {
+    await act(async () => history.back());
+    await settle();
+};
+
+test('back with a changed edit form asks first, and Keep editing keeps the URL and the form', async () => {
+    await openBoard(['/'], { browser: true });
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    await act(async () => editButton()?.click());
+    await type('Title', 'Ship it today');
+    await back();
+    expect(question()).toBeDefined();
+    await act(async () => questionButton('Keep editing').click());
+    await settle();
+    expect(param('chat')).toBe('ship.eigenchat');
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('Ship it today');
+});
+
+test('Discard on back closes the card, which opens again in its view', async () => {
+    await openBoard(['/'], { browser: true });
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    await act(async () => editButton()?.click());
+    await type('Title', 'Ship it today');
+    await back();
+    await act(async () => questionButton('Discard').click());
+    await settle();
+    expect(param('chat')).toBeNull();
+    expect(dialogText()).toBeNull();
+
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    expect(editButton()).not.toBeNull();
+    expect(document.querySelector('[role="dialog"] input')).toBeNull();
+});
+
+test('back from an unchanged edit closes at once, and the card opens again in its view', async () => {
+    await openBoard(['/']);
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    await act(async () => editButton()?.click());
+    await back();
+    expect(question()).toBeUndefined();
+    expect(param('chat')).toBeNull();
+
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    expect(editButton()).not.toBeNull();
+});
+
+test("the dialog's X on a changed edit asks once, and Discard closes the card and takes ?chat= out", async () => {
+    await openBoard(['/'], { browser: true });
+    await act(async () => seen.onCardOpen?.('card-1'));
+    await settle();
+    await act(async () => editButton()?.click());
+    await type('Title', 'Ship it today');
+    await act(async () => document.querySelector<HTMLElement>('[data-slot="dialog-close"]')?.click());
+    await settle();
+    await act(async () => questionButton('Discard').click());
+    await settle();
+    expect(question()).toBeUndefined();
+    expect(param('chat')).toBeNull();
+    expect(dialogText()).toBeNull();
 });

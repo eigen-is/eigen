@@ -18,6 +18,7 @@ import { CardDetail } from '../cards/card-detail';
 import type { useContextMenu } from '../context-menu';
 import { Dialog, DialogContent } from '../dialog';
 import { DetailColumn } from '../layout/app/detail-column';
+import { LeaveGuard } from '../layout/app/leave-guard';
 import { LoadingState } from '../layout/app/loading-state';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { ActivityPanel } from './activity-panel';
@@ -126,8 +127,8 @@ export function CommentsColumn({
     );
 }
 
-// The open card's edit form, in a dialog over the column. A save ends the edit once it lands, and a close asks
-// "Discard changes?" once the form changed.
+// The open card's edit form, in a dialog over the column. A save ends the edit once it lands, and a close, or a
+// navigation that would close or switch the card, asks "Discard changes?" once the form changed.
 function CommentEditDialog({
     editForm,
     onEditingChange,
@@ -147,6 +148,7 @@ function CommentEditDialog({
                 </DialogContent>
             </Dialog>
             {discard.dialog}
+            <LeaveGuard active={open && changed} />
         </>
     );
 }

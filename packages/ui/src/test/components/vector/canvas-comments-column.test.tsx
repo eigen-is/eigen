@@ -122,7 +122,7 @@ beforeEach(() => {
 let unmount = async () => {};
 afterEach(() => unmount());
 
-let history = router.createMemoryHistory();
+let history: ReturnType<typeof router.createMemoryHistory> = router.createMemoryHistory();
 const search = () => new URLSearchParams(history.location.search);
 const historyIndex = () => history.location.state.__TSR_index;
 
@@ -138,11 +138,15 @@ function Editor() {
 let openCard: (cardId: string) => void = () => {};
 let toggleComments: () => void = () => {};
 
-// Rows null leave the comment index unanswered, as on a landing before it loads.
-type Options = { isMobile?: boolean; rows?: CommentEntry[] | null; initialSearchTerm?: string };
+// Rows null leave the comment index unanswered, as on a landing before it loads. A browser history runs the router's
+// blockers on back, which a memory history skips.
+type Options = { isMobile?: boolean; rows?: CommentEntry[] | null; initialSearchTerm?: string; browser?: boolean };
 
 // The shell and its comments host under a route that reads the editor search, as the slide and vector routes do.
-async function openCanvas(entries: string[], { isMobile = false, rows = [], initialSearchTerm }: Options = {}) {
+async function openCanvas(
+    entries: string[],
+    { isMobile = false, rows = [], initialSearchTerm, browser = false }: Options = {},
+) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     if (rows) queryClient.setQueryData(commentKeys.list('owner', 'mount', 'v1'), rows);
     queryClient.setQueryData(driveKeys.effectiveMembers('owner', 'mount', 'v1'), []);
@@ -189,7 +193,8 @@ async function openCanvas(entries: string[], { isMobile = false, rows = [], init
         validateSearch: eigenDocEditorValidateSearch,
         component: Page,
     });
-    history = router.createMemoryHistory({ initialEntries: entries });
+    if (browser) window.history.replaceState(null, '', entries[0]);
+    history = browser ? router.createBrowserHistory() : router.createMemoryHistory({ initialEntries: entries });
     const memory = router.createRouter({ routeTree: root.addChildren([page]), history });
     await memory.load();
     const layout = {
@@ -432,4 +437,50 @@ test('a dropped connection keeps the open thread, its URL and an edit in progres
     expect(historyIndex()).toBe(1);
     expect(columnWidth()).toBe('400px');
     expect(document.querySelector<HTMLInputElement>('[role="dialog"] input')?.value).toBe('A new title');
+});
+
+// Back closes or switches the thread without the edit dialog's own close, so a changed form asks through the router
+// first, and the edit ends with its card, so the thread opens again in its view.
+const editDialog = () =>
+    [...document.querySelectorAll('[role="dialog"]')].find(
+        (d) => d.querySelector('h2')?.textContent === 'Edit comment',
+    );
+const question = () =>
+    [...document.querySelectorAll('[role="dialog"]')].find((d) => d.textContent?.includes('Discard changes?'));
+const answer = async (name: string) =>
+    click([...(question()?.querySelectorAll<HTMLElement>('button') ?? [])].find((b) => b.textContent === name));
+const back = async () => {
+    await act(async () => history.back());
+    await settle();
+};
+async function editOpenThread() {
+    await openCanvas(['/'], { browser: true });
+    await act(async () => toggleComments());
+    await settle();
+    await click(listRow());
+    await click(button('Edit'));
+    await type('Title', 'A new title');
+}
+
+test('back with a changed edit asks first, and Keep editing keeps the URL and the form', async () => {
+    await editOpenThread();
+    await back();
+    expect(question()).toBeDefined();
+    await answer('Keep editing');
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(editDialog()?.querySelector('input')?.value).toBe('A new title');
+});
+
+test('Discard on back closes the column, and the thread opens again in its view', async () => {
+    await editOpenThread();
+    await back();
+    await answer('Discard');
+    expect(search().get('chat')).toBeNull();
+    expect(column()).toBeNull();
+    expect(editDialog()).toBeUndefined();
+
+    await act(async () => openCard('card-1'));
+    await settle();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(editDialog()).toBeUndefined();
 });

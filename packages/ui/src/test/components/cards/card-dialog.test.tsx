@@ -15,6 +15,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user:
 afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
 
 const { act, createElement, useState } = await import('react');
+const router = await import('@tanstack/react-router');
 const { CardDialog } = await import('../../../components/cards/card-dialog');
 const { PreviewProvider } = await import('../../../components/preview-provider');
 
@@ -25,7 +26,17 @@ const update = mock(async (_patch: CardFormPatch) => {});
 // The card's open state, as its host last set it.
 let cardOpen = true;
 
+// The dialog on a page, as every host renders it: its edit form's leave guard needs the router.
 function EditCard() {
+    const [memory] = useState(() => {
+        const root = router.createRootRoute({ component: router.Outlet });
+        const page = router.createRoute({ getParentRoute: () => root, path: '/', component: EditCardDialog });
+        return router.createRouter({ routeTree: root.addChildren([page]), history: router.createMemoryHistory() });
+    });
+    return createElement(router.RouterProvider, { router: memory });
+}
+
+function EditCardDialog() {
     const [open, setOpen] = useState(true);
     cardOpen = open;
     const [editing, setEditing] = useState(true);

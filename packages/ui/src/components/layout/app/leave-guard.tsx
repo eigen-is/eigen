@@ -34,7 +34,7 @@ export function LeaveGuard({ active, question = DISCARD_CHANGES_QUESTION, allowS
 
     return (
         <ConfirmDialog
-            open={blocker.status === 'blocked'}
+            open={blocker.status === 'blocked' && active}
             onOpenChange={(open) => {
                 if (!open) blocker.reset?.();
             }}

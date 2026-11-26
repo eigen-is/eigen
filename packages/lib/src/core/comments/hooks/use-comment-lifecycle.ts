@@ -89,7 +89,7 @@ export function useCommentLifecycle({
     onCardNotFound?: () => void;
 }): CommentLifecycle {
     const [open, setOpen] = useState<OpenComment | null>(null);
-    // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
+    // Edit mode is pinned to a card id, so Edit can name a card before the URL opens it.
     const [editCardId, setEditCardId] = useState<string | null>(null);
     const [deleteCardId, requestDelete] = useState<string | null>(null);
 
@@ -108,6 +108,14 @@ export function useCommentLifecycle({
     const chatOpen = useMemo(() => (chat && chatReady ? { chatName: chat } : null), [chat, chatReady]);
     const { card: openCard, entry: openEntry, gone } = useOpenCommentCard(cards, allComments, chat ? chatOpen : open);
     const isCardDeleted = useIsCardDeleted(activeCardIds, ready);
+
+    // The edit ends with its card, such as on back or another card's link, so the card opens again in its view.
+    const openCardId = openCard?.id ?? null;
+    const [shownCardId, setShownCardId] = useState(openCardId);
+    if (openCardId !== shownCardId) {
+        setShownCardId(openCardId);
+        if (shownCardId === editCardId) setEditCardId(null);
+    }
 
     // The opens are stable, because hosts hand them to memoized components such as a board's columns and to editor
     // extensions that keep the closures they were built with. So they read this render's values here.
@@ -178,6 +186,7 @@ export function useCommentLifecycle({
         },
         closeDeletedCard: () => {
             setOpen(null);
+            setEditCardId(null);
             if (chat) onClearChat();
         },
         openCardEditing: !!openCard && openCard.id === editCardId,
