@@ -1,6 +1,5 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
-// its data.db, saves every edit back to it, and relays edits and cursors between its sockets, where a visitor without
-// a login gets only the edits. Server-side writers, such as an import or a version restore, edit the same Y.Doc, so
+// its data.db, saves every edit back to it, and relays edits and cursors between its sockets. Server-side writers, such as an import or a version restore, edit the same Y.Doc, so
 // every editor sees them. Drive opens each document once and closes it a while after the last socket leaves or after
 // an open no socket joins, holding its Home meanwhile. Before that close, a workbook saves a version and folds its log.
 
@@ -66,7 +65,7 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 export class CollabDocument {
     private readonly awareness: awarenessProtocol.Awareness;
-    private readonly connections = new Map<ServerWebSocket<unknown>, User | null>();
+    private readonly connections = new Map<ServerWebSocket<unknown>, User>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
     // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
     private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
@@ -104,7 +103,6 @@ export class CollabDocument {
             this.broadcastMessage(
                 conn,
                 encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeUpdate(encoder, update)),
-                true,
             );
             const user = conn && this.connections.get(conn);
             if (user) this.recordEditThrottled(user);
@@ -120,7 +118,7 @@ export class CollabDocument {
                 const changedClients = added.concat(updated, removed);
                 if (changedClients.length === 0) return;
                 const message = this.encodeAwareness(changedClients);
-                this.broadcastMessage(isConnection(origin) ? origin : null, message, false);
+                this.broadcastMessage(isConnection(origin) ? origin : null, message);
             },
         );
 
@@ -197,14 +195,14 @@ export class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(user: User | null, conn: ServerWebSocket<unknown>): void {
+    public subscribe(user: User, conn: ServerWebSocket<unknown>): void {
         // A mount sweep can close a document while a socket still waits for it to load. That socket
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
         this.releaseLingerHold();
         this.connections.set(conn, user);
-        this.greetMember(conn);
+        this.sendSyncStep1(conn);
     }
 
     public unsubscribe(conn: ServerWebSocket<unknown>): void {
@@ -387,10 +385,7 @@ export class CollabDocument {
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
     }
 
-    // The server's sync step 1 and the cursors. A visitor's answer to the step 1 would be its whole state, which a
-    // reader's socket drops unread, so a visitor gets neither and syncs from its own step 1.
-    private greetMember(conn: ServerWebSocket<unknown>): void {
-        if (!this.connections.get(conn)) return;
+    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
         try {
             sendFrame(
                 conn,
@@ -403,14 +398,10 @@ export class CollabDocument {
         }
     }
 
-    private broadcastMessage(
-        originConn: ServerWebSocket<unknown> | null,
-        message: Uint8Array,
-        toVisitors: boolean,
-    ): void {
+    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
         if (this.closed) return;
-        for (const [conn, user] of this.connections) {
-            if (conn !== originConn && conn.readyState === WebSocket.OPEN && (user || toVisitors)) {
+        for (const conn of this.connections.keys()) {
+            if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
                 try {
                     sendFrame(conn, message);
                 } catch (err) {

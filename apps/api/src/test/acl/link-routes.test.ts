@@ -53,9 +53,6 @@ const LINK_ROUTES = [
     { route: '/collab/:ownerId/:mountId/:pathId/state', reads: 'doc', bytes: true },
 ] as const;
 
-// The collab socket answers without a login too. No request here can open one, so its own test file covers it.
-const LINK_SOCKET = '/ws/collab/:ownerId/:mountId/:pathId';
-
 type Reads = (typeof LINK_ROUTES)[number]['reads'];
 
 // The two link routes that answer what a visitor may do, so they refuse with a 200 that says no.
@@ -498,7 +495,7 @@ describe('files and folders without a login', () => {
                     if (route !== undefined && /linkAuth:\s*true/.test(chunk)) linkAuth.push(route);
                 }
             }
-            expect(linkAuth.sort()).toEqual([...LINK_ROUTES.map(({ route }) => route), LINK_SOCKET].sort());
+            expect(linkAuth.sort()).toEqual(LINK_ROUTES.map(({ route }) => route).sort());
         });
     });
 
