@@ -42,6 +42,7 @@ const card: CommentCard = {
     title: 'The stored title',
     description: '<p>The description</p>',
     color: '#fde68a',
+    chatName: 'card-1.eigenchat',
     attachments: ['cover.png', 'notes.pdf'],
 };
 const entry: CommentEntry = {

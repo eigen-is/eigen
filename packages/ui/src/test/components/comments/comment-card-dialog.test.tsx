@@ -1,7 +1,6 @@
 // The open thread is the page's ?chat=, so a link, a click and the comment menu's Edit all open the card dialog through
 // the URL, and every close takes ?chat= out again: back after a click's push, a replace on a link. A delete and a chat
-// that names nothing drop it by replace. A card without a thread opens without the URL, and a peer's delete closes it
-// for good, an undo included.
+// that names nothing drop it by replace.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -74,18 +73,18 @@ const row = (chatName: string): CommentEntry => ({
     title: 'Gone',
 });
 
-function addCard(doc: Y.Doc, id: string, chatName?: string): void {
+function addCard(doc: Y.Doc, id: string, chatName: string): void {
     const card = new Y.Map<unknown>();
     card.set('title', 'Ship it');
     card.set('description', '');
-    if (chatName) card.set('chatName', chatName);
+    card.set('chatName', chatName);
     doc.getMap('tasks').set(id, card);
 }
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// A board at / whose route reads ?chat=, as every editor route does. Its first card has a thread, its second none.
+// A board at / whose route reads ?chat=, as every editor route does. Its second card's thread has no row yet.
 async function openBoard(entries: string[]) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(commentKeys.list('owner-1', 'm1', 'board-1'), [
@@ -95,7 +94,6 @@ async function openBoard(entries: string[]) {
     queryClient.setQueryData(driveKeys.effectiveMembers('owner-1', 'm1', 'board-1'), []);
     const doc = new Y.Doc();
     addCard(doc, 'card-1', 'ship.eigenchat');
-    addCard(doc, 'card-2');
     addCard(doc, 'card-3', 'fresh.eigenchat');
     const onClose = mock(() => {});
     const onDelete = mock((_cardId: string) => {});
@@ -109,7 +107,7 @@ async function openBoard(entries: string[]) {
             chatFolderId: 'chat-1',
             mediaFolderId: null,
             doc,
-            activeCardIds: new Set(['card-1', 'card-2', 'card-3']),
+            activeCardIds: new Set(['card-1', 'card-3']),
             ...useCommentChatParam(chat),
             mapName: 'tasks',
             ready: true,
@@ -223,20 +221,6 @@ test('a delete runs the host delete and drops ?chat= by replace', async () => {
     expect(board.onDelete).toHaveBeenCalledWith('card-1');
     expect(board.chat()).toBeNull();
     expect(board.index()).toBe(1);
-    expect(seen.open).toBe(false);
-});
-
-test("a card without a thread opens without the URL, and a peer's delete closes it for good", async () => {
-    const board = await openBoard(['/']);
-    await run(() => board.lifecycle().setOpenCardId('card-2'));
-    expect(board.chat()).toBeNull();
-    expect(seen.open).toBe(true);
-
-    await run(() => board.doc.getMap('tasks').delete('card-2'));
-    expect(seen.open).toBe(false);
-    expect(board.onClose).toHaveBeenCalledTimes(1);
-
-    await run(() => addCard(board.doc, 'card-2'));
     expect(seen.open).toBe(false);
 });
 

@@ -575,6 +575,7 @@ test('⌘F leaves the band: find searches the body', async () => {
 test('a click on a comment card leaves the band for the comment’s anchor in the body', async () => {
     const stored = new Y.Map<unknown>();
     stored.set('title', 'Check this');
+    stored.set('chatName', 'thread-1.eigenchat');
     doc.getMap('comments').set('c1', stored);
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     await render(WRITER);

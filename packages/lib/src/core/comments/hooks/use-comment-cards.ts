@@ -44,10 +44,12 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
     for (const [id, yCard] of map) {
         if (!(yCard instanceof Y.Map)) continue;
+        // A card is a comment card, so one without a thread is no card.
+        const chatName = yCard.get('chatName');
+        if (typeof chatName !== 'string') continue;
         const title = yCard.get('title');
         const description = yCard.get('description');
         const color = yCard.get('color');
-        const chatName = yCard.get('chatName');
         const creator = yCard.get('creator');
         const createdAt = yCard.get('createdAt');
         const attachments = yCard.get('attachments');
@@ -59,7 +61,7 @@ function readCards(map: Y.Map<unknown>): Record<string, CommentCard> {
             // sanitized, before anything renders it as HTML.
             description: typeof description === 'string' ? sanitizeCommentCardHtml(description) : '',
             color: typeof color === 'string' ? color : undefined,
-            chatName: typeof chatName === 'string' ? chatName : undefined,
+            chatName,
             creator: typeof creator === 'string' ? creator : undefined,
             createdAt: typeof createdAt === 'number' ? createdAt : undefined,
             // A peer can write anything into the list, and sameAttachments and the chips read each entry as a file name

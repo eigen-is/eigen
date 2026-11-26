@@ -1,7 +1,7 @@
 // The open thread is the host's ?chat=: while it names a chat, the open comment is the card that holds it, else the
 // index row that keeps it, which opens as deleted. Every open of a card with a chat goes through the host, which writes
 // ?chat=, and close and delete ask the host to clear it. A chat nothing names is reported once, so the host can drop
-// it. Only what has no chat, such as a card with none or a ?card= landing, opens in the lifecycle's own state.
+// it. Only a ?card= landing, which names no chat, opens in the lifecycle's own state.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
@@ -40,7 +40,7 @@ const entry = (chatName: string, title: string | null): CommentEntry => ({
 const rows = [entry('kept.eigenchat', 'Kept'), entry('removed.eigenchat', 'Ship it')];
 const listKey = commentKeys.list('owner-1', 'm1', 'board-1');
 
-// A board that holds a card with a thread and one without. The card of `removed.eigenchat` was deleted from it, and its index row stayed.
+// A board that holds a card with a thread. The card of `removed.eigenchat` was deleted from it, and its index row stayed.
 function board(): Y.Doc {
     const doc = new Y.Doc();
     const card = new Y.Map<unknown>();
@@ -49,11 +49,6 @@ function board(): Y.Doc {
     card.set('description', '');
     card.set('chatName', 'kept.eigenchat');
     doc.getMap('tasks').set('card-1', card);
-    const unlinked = new Y.Map<unknown>();
-    unlinked.set('id', 'card-2');
-    unlinked.set('title', 'No thread');
-    unlinked.set('description', '');
-    doc.getMap('tasks').set('card-2', unlinked);
     return doc;
 }
 
@@ -87,7 +82,7 @@ async function mountBoard(options: { chat?: string; initialCardId?: string; rows
             chatFolderId: 'chat-1',
             mediaFolderId: null,
             doc,
-            activeCardIds: new Set(['card-1', 'card-2']),
+            activeCardIds: new Set(['card-1']),
             chat,
             onOpenChat,
             onCloseChat,
@@ -165,23 +160,6 @@ test('closing a chat asks the host to clear it, and a delete asks it to drop it'
     await act(async () => lifecycle().closeDeletedCard());
     expect(onClearChat).toHaveBeenCalledTimes(1);
     expect(onCloseChat).toHaveBeenCalledTimes(1);
-});
-
-test('a card without a chat opens in the lifecycle, and closes without the host', async () => {
-    const { lifecycle, onOpenChat, onCloseChat } = await mountBoard({ rows });
-    await act(async () => lifecycle().setOpenCardId('card-2'));
-    expect(lifecycle().openCard?.id).toBe('card-2');
-    expect(onOpenChat).not.toHaveBeenCalled();
-    await act(async () => lifecycle().setOpenCardId(null));
-    expect(lifecycle().openCard).toBeNull();
-    expect(onCloseChat).not.toHaveBeenCalled();
-});
-
-test('a chat in the URL wins over a card opened without one', async () => {
-    const { lifecycle, setChat } = await mountBoard({ rows });
-    await act(async () => lifecycle().setOpenCardId('card-2'));
-    await setChat('kept.eigenchat');
-    expect(lifecycle().openCard?.id).toBe('card-1');
 });
 
 test('a search hit or an activity row writes the chat of a live card and of one whose card is gone', async () => {

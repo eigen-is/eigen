@@ -274,7 +274,7 @@ const TiptapEditor = ({
     const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
         const card = cardId ? cardsRef.current[cardId] : undefined;
         if (!card) return null;
-        const entry = card.chatName ? allCommentsRef.current.find((c) => c.chatName === card.chatName) : undefined;
+        const entry = allCommentsRef.current.find((c) => c.chatName === card.chatName);
         return { card, entry };
     };
 
@@ -602,7 +602,7 @@ const TiptapEditor = ({
             const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (created) =>
                 addCommentAnchor(editor, pendingMarkRange, created.id),
             );
-            if (assignee !== undefined && card?.chatName) {
+            if (assignee !== undefined && card) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setPendingMarkRange(null);
@@ -620,10 +620,8 @@ const TiptapEditor = ({
             const card = cards[cardId];
             if (!card) continue;
             if (card.color) colorMap.set(cardId, card.color);
-            if (card.chatName) {
-                const entry = allComments.find((c) => c.chatName === card.chatName);
-                if (entry?.status === 'resolved') resolved.add(cardId);
-            }
+            const entry = allComments.find((c) => c.chatName === card.chatName);
+            if (entry?.status === 'resolved') resolved.add(cardId);
         }
         updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, cards, allComments, activeComments.ids]);

@@ -126,13 +126,13 @@ export const Column = memo(function Column({
                     <div className="flex-grow space-y-2" onDoubleClick={handleEmptyDoubleClick}>
                         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
                             {cards.map((card) => {
-                                const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
+                                const entry = entryByChatName.get(card.chatName);
                                 return (
                                     <SortableCard
                                         key={card.id}
                                         card={card}
                                         replyCount={entry?.messageCount}
-                                        unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                                        unread={unreadChatNames.has(card.chatName)}
                                         resolved={entry?.status === 'resolved'}
                                         assigneeEmail={entry?.assignee}
                                         canWrite={canWrite}

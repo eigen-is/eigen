@@ -60,7 +60,7 @@ export function CommentMenuItems({
     const { card, entry } = item;
     // A missing entry is a thread with no row, open and unassigned (matchesCommentFilter's rule). Its first message
     // adds the row.
-    const chatName = card.chatName;
+    const { chatName } = card;
     const status = entry?.status ?? 'open';
     const view = onOpen && (
         <DropdownMenuItem onClick={() => onOpen(card.id)}>
@@ -97,7 +97,7 @@ export function CommentMenuItems({
                     onChange={(color) => onChangeColor(card.id, color)}
                 />
             )}
-            {onAssign && members && currentUserEmail && chatName && (
+            {onAssign && members && currentUserEmail && (
                 <AssigneeMenuItems
                     members={members}
                     currentUserEmail={currentUserEmail}
@@ -105,12 +105,12 @@ export function CommentMenuItems({
                     onAssign={(email) => onAssign(chatName, email, card.title)}
                 />
             )}
-            {chatName && status === 'open' && onResolve && (
+            {status === 'open' && onResolve && (
                 <DropdownMenuItem onClick={() => onResolve(chatName, card.title)}>
                     <Check className="h-4 w-4" /> Resolve {noun}
                 </DropdownMenuItem>
             )}
-            {chatName && status === 'resolved' && onReopen && (
+            {status === 'resolved' && onReopen && (
                 <DropdownMenuItem onClick={() => onReopen(chatName, card.title)}>
                     <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </DropdownMenuItem>

@@ -25,7 +25,7 @@ const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
 type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
 
-const CARD: CommentCard = { id: 'card-1', title: 'The title', description: '<p>The note</p>' };
+const CARD: CommentCard = { id: 'card-1', title: 'The title', description: '<p>The note</p>', chatName: 'c.eigenchat' };
 const cards: Record<string, CommentCard> = { 'card-1': CARD };
 const entries: CommentEntry[] = [];
 const RECT = new DOMRect(100, 200, 10, 20);

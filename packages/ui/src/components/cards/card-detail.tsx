@@ -114,14 +114,14 @@ export function CardDetail({
 
     // A thread without an index row reads as open and unassigned, as the comment filter reads it. Its first message or
     // assignment creates the row on the server.
-    const chatName = card.chatName;
+    const { chatName } = card;
     const status = entry?.status ?? 'open';
     const assignee = entry?.assignee ?? null;
 
     // Resolve and reopen are writes, so they are gated like the menus' rows and the Edit pencil. A viewer would only
     // get the 403 the route answers with.
     const action =
-        canWrite && chatName && onResolve
+        canWrite && onResolve
             ? {
                   actionIcon: status === 'open' ? Check : RotateCcw,
                   actionTooltip: status === 'open' ? 'Resolve' : 'Reopen',
@@ -134,7 +134,7 @@ export function CardDetail({
     const handleEditSave = async (patch: CardFormPatch, drafts?: CardAttachmentDraft[], assignee?: string | null) => {
         // The same Save may rename the card. The new title goes along, so the activity row and the title cache don't
         // record the old name.
-        if (assignee !== undefined && chatName) onAssign?.(chatName, assignee, patch.title ?? card.title);
+        if (assignee !== undefined) onAssign?.(chatName, assignee, patch.title ?? card.title);
         if (!onUpdate) return;
         if (drafts === undefined) {
             await onUpdate(patch);
@@ -147,35 +147,33 @@ export function CardDetail({
     // The assignee sits in the meta row: a picker when the user may reassign, else a plain chip. A read-only card with
     // no assignee shows nothing there.
     let assigneeControl: ReactNode = null;
-    if (chatName) {
-        if (canWrite && onAssign && members && currentUserEmail) {
-            assigneeControl = (
-                <AssigneePicker
-                    value={assignee}
-                    onChange={(email) => onAssign(chatName, email, card.title)}
-                    members={members}
-                    currentUserEmail={currentUserEmail}
+    if (canWrite && onAssign && members && currentUserEmail) {
+        assigneeControl = (
+            <AssigneePicker
+                value={assignee}
+                onChange={(email) => onAssign(chatName, email, card.title)}
+                members={members}
+                currentUserEmail={currentUserEmail}
+            >
+                <button
+                    type="button"
+                    // items-baseline lines the name up with the Created by text. The avatar centers itself.
+                    className="-mx-1 -my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
                 >
-                    <button
-                        type="button"
-                        // items-baseline lines the name up with the Created by text. The avatar centers itself.
-                        className="-mx-1 -my-0.5 inline-flex items-baseline gap-1 rounded-sm px-1 py-0.5 hover:bg-muted"
-                    >
-                        {assignee ? (
-                            <AssigneeChip email={assignee} />
-                        ) : (
-                            <span className="text-muted-foreground">Unassigned</span>
-                        )}
-                    </button>
-                </AssigneePicker>
-            );
-        } else if (assignee) {
-            assigneeControl = (
-                <span className="inline-flex items-baseline gap-1">
-                    <AssigneeChip email={assignee} />
-                </span>
-            );
-        }
+                    {assignee ? (
+                        <AssigneeChip email={assignee} />
+                    ) : (
+                        <span className="text-muted-foreground">Unassigned</span>
+                    )}
+                </button>
+            </AssigneePicker>
+        );
+    } else if (assignee) {
+        assigneeControl = (
+            <span className="inline-flex items-baseline gap-1">
+                <AssigneeChip email={assignee} />
+            </span>
+        );
     }
 
     // Who made the card on the left, who it is for on the right. On a narrow screen the creator's name gives way first.
@@ -255,27 +253,6 @@ export function CardDetail({
         />
     );
 
-    let body: ReactNode;
-    if (chatName) {
-        body = (
-            <CommentThread
-                ownerId={ownerId}
-                mountId={mountId}
-                pathId={pathId}
-                chatName={chatName}
-                lead={content}
-                autoFocus={autoFocus}
-            />
-        );
-    } else {
-        body = (
-            <div className="min-h-0 flex-1 overflow-y-auto">
-                {content}
-                <p className="app-gutter-x pb-4 text-sm text-muted-foreground">No chat available for this card.</p>
-            </div>
-        );
-    }
-
     return children({
         title: card.title,
         deleted: false,
@@ -286,7 +263,16 @@ export function CardDetail({
                 {...action}
             />
         ),
-        body,
+        body: (
+            <CommentThread
+                ownerId={ownerId}
+                mountId={mountId}
+                pathId={pathId}
+                chatName={chatName}
+                lead={content}
+                autoFocus={autoFocus}
+            />
+        ),
         editForm,
     });
 }

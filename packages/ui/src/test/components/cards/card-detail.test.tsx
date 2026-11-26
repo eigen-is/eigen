@@ -4,22 +4,36 @@
 // stays, such as a column over its list, keeps its place.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { CommentCard } from '@workspace/lib/types/comments';
+import type { ReactNode } from 'react';
 import type { CardDetailParts } from '../../../components/cards/card-detail';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const realAuth = await import('@workspace/lib/auth');
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
-afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
-
 const { act, createElement, useState } = await import('react');
+const realAuth = await import('@workspace/lib/auth');
+const realThread = { ...(await import('../../../components/comments/comment-thread')) };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
+// The thread's chat room fetches, so it shows only the card above it.
+mock.module('../../../components/comments/comment-thread', () => ({
+    CommentThread: ({ lead }: { lead: ReactNode }) => createElement('div', null, lead),
+}));
+afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
+    mock.module('../../../components/comments/comment-thread', () => realThread);
+});
+
 const { CardDetail } = await import('../../../components/cards/card-detail');
 const { PreviewProvider } = await import('../../../components/preview-provider');
 
-// No thread, so the body is the card and its line.
-const card: CommentCard = { id: 'card-1', title: 'Audit card', description: '<p>Check the roof</p>', color: '#fde68a' };
+const card: CommentCard = {
+    id: 'card-1',
+    title: 'Audit card',
+    description: '<p>Check the roof</p>',
+    color: '#fde68a',
+    chatName: 'audit.eigenchat',
+};
 
 // The parts as the host last got them.
 let parts: CardDetailParts | null | undefined;

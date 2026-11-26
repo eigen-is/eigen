@@ -49,7 +49,7 @@ async function mount() {
             }),
         },
     ];
-    const commentCards = { c1: { id: 'c1', title: 'One', description: '' } };
+    const commentCards = { c1: { id: 'c1', title: 'One', description: '', chatName: 'c1.eigenchat' } };
     await act(async () => {
         root.render(createElement(Workbook, { ref: workbook, data, commentCards }));
     });

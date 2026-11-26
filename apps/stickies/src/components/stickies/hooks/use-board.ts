@@ -95,8 +95,8 @@ export const useBoard = (
             if (columnsMap.size > 0) return;
 
             const chatName = await createCardChat();
-
-            if (columnsMap.size > 0) return;
+            // Every card has its thread, so a board whose first thread failed stays empty until it opens again.
+            if (!chatName || columnsMap.size > 0) return;
 
             doc.transact(() => {
                 const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');

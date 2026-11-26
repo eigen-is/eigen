@@ -48,6 +48,10 @@ const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realCards = { ...(await import('@workspace/ui/components/cards')) };
 const realLayout = { ...(await import('@workspace/ui/components/layout/app')) };
 const realSearch = { ...(await import('@workspace/ui/components/search/doc-search-provider')) };
+const realBoard = { ...(await import('../../../components/stickies/hooks/use-board')) };
+const realPresence = { ...(await import('../../../components/stickies/hooks/use-stickies-presence')) };
+const realToolbar = { ...(await import('../../../components/stickies/toolbar')) };
+const realColumn = { ...(await import('../../../components/stickies/column')) };
 const Children = ({ children }: { children?: ReactNode }) => children;
 const Nothing = () => null;
 mock.module('@workspace/lib/auth', () => ({
@@ -118,6 +122,10 @@ afterAll(() => {
     mock.module('@workspace/ui/components/cards', () => realCards);
     mock.module('@workspace/ui/components/layout/app', () => realLayout);
     mock.module('@workspace/ui/components/search/doc-search-provider', () => realSearch);
+    mock.module('../../../components/stickies/hooks/use-board', () => realBoard);
+    mock.module('../../../components/stickies/hooks/use-stickies-presence', () => realPresence);
+    mock.module('../../../components/stickies/toolbar', () => realToolbar);
+    mock.module('../../../components/stickies/column', () => realColumn);
     fetchSpy.mockRestore();
 });
 

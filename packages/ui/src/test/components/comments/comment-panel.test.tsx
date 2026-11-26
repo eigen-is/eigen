@@ -24,8 +24,8 @@ const filter = {
     isActive: false,
     clear: () => {},
 };
-const titled: CommentCard = { id: 'titled', title: 'Check this', description: '' };
-const untitled: CommentCard = { id: 'untitled', title: '', description: '' };
+const titled: CommentCard = { id: 'titled', title: 'Check this', description: '', chatName: 'titled.eigenchat' };
+const untitled: CommentCard = { id: 'untitled', title: '', description: '', chatName: 'untitled.eigenchat' };
 const cards = { titled, untitled };
 const ids = new Set(['titled']);
 

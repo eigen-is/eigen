@@ -290,7 +290,7 @@ export function SheetEditor({
                 const existing = grid?.[cell.r]?.[cell.c]?.commentCardIds ?? [];
                 workbookRef.current?.setCellFormat(cell.r, cell.c, 'commentCardIds', [...existing, created.id]);
             });
-            if (assignee !== undefined && card?.chatName) {
+            if (assignee !== undefined && card) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setAddTargetCell(null);
@@ -458,11 +458,9 @@ export function SheetEditor({
                                                     const cardId = grid?.[r]?.[c]?.commentCardIds?.[0];
                                                     const card = cardId ? cards[cardId] : undefined;
                                                     if (!card) return null;
-                                                    const entry = card.chatName
-                                                        ? allComments.find(
-                                                              (comment) => comment.chatName === card.chatName,
-                                                          )
-                                                        : undefined;
+                                                    const entry = allComments.find(
+                                                        (comment) => comment.chatName === card.chatName,
+                                                    );
                                                     return { card, entry };
                                                 },
                                                 onCommentHover: commentHover.report,

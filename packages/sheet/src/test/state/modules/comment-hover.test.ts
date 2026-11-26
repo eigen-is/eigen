@@ -24,7 +24,7 @@ function grid(cardsAt: [number, number][] = [], frozen?: Sheet['frozen']): Conte
         visibledatarow: Array.from({ length: size }, (_, i) => (i + 1) * ROW),
         visibledatacolumn: Array.from({ length: size }, (_, i) => (i + 1) * COLUMN),
         editingCellPosition: [],
-        commentCards: { c1: { id: 'c1', title: 'One', description: '' } },
+        commentCards: { c1: { id: 'c1', title: 'One', description: '', chatName: 'c1.eigenchat' } },
     });
     const data: NonNullable<Sheet['data']> = Array.from({ length: size }, () =>
         Array.from({ length: size }, () => null),

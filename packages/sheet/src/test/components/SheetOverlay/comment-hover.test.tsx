@@ -61,8 +61,8 @@ async function mount(onHover: (target: CommentHoverTarget | null, workbook: Work
         },
     ];
     const commentCards = {
-        c1: { id: 'c1', title: 'One', description: '' },
-        c2: { id: 'c2', title: 'Two', description: '' },
+        c1: { id: 'c1', title: 'One', description: '', chatName: 'c1.eigenchat' },
+        c2: { id: 'c2', title: 'Two', description: '', chatName: 'c2.eigenchat' },
     };
     const hooks = {
         onCommentHover: (target: CommentHoverTarget | null) => {

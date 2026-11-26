@@ -19,7 +19,7 @@ export function useOpenCommentCard(
         const cardId = !open ? undefined : 'cardId' in open ? open.cardId : findCardIdByChatName(cards, open.chatName);
         const card = cardId ? cards[cardId] : undefined;
         if (card) {
-            const entry = card.chatName ? entries.find((e) => e.chatName === card.chatName) : undefined;
+            const entry = entries.find((e) => e.chatName === card.chatName);
             return { card, entry, gone: false };
         }
         const entry = open && 'chatName' in open ? entries.find((e) => e.chatName === open.chatName) : undefined;

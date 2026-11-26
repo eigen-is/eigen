@@ -49,7 +49,7 @@ export function CommentPanel({
         for (const cardId of activeCardIds) {
             const card = cards[cardId];
             if (!card) continue;
-            const entry = card.chatName ? byChatName.get(card.chatName) : undefined;
+            const entry = byChatName.get(card.chatName);
             all.push({ card, entry });
             if (matchesCommentFilter(card, entry, filter.filter, currentUserEmail)) shown.push({ card, entry });
         }
@@ -88,7 +88,7 @@ export function CommentPanel({
                                     card={card}
                                     entry={entry}
                                     title={prefix ? `${prefix} · ${title}` : title}
-                                    unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                                    unread={unreadChatNames.has(card.chatName)}
                                     deleted={isCardDeleted(card)}
                                     onClick={() => onCommentClick?.(card.id)}
                                     onContextMenu={

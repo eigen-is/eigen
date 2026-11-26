@@ -136,10 +136,7 @@ export function StickiesBoard({
     });
 
     const entryByChatName = useMemo(() => new Map(allComments.map((entry) => [entry.chatName, entry])), [allComments]);
-    const entryOf = useCallback(
-        (card: CommentCard) => (card.chatName ? entryByChatName.get(card.chatName) : undefined),
-        [entryByChatName],
-    );
+    const entryOf = useCallback((card: CommentCard) => entryByChatName.get(card.chatName), [entryByChatName]);
     const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
 
     // The card this user works on: the card open in the dialog, else the card being dragged. Peers see it outlined
@@ -203,7 +200,7 @@ export function StickiesBoard({
             const card = await createCard({ ...patch, attachments }, (card) => {
                 getIdArray(getItemMapRoot(yjsDoc, 'columns').get(targetColumnId), 'taskIds')?.insert(0, [card.id]);
             });
-            if (assignee !== undefined && card?.chatName) {
+            if (assignee !== undefined && card) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             recordHistory.mutate({
@@ -266,7 +263,7 @@ export function StickiesBoard({
                     card={card}
                     entry={entryOf(card)}
                     title={card.title}
-                    unread={!!card.chatName && unreadChatNames.has(card.chatName)}
+                    unread={unreadChatNames.has(card.chatName)}
                     className={isMobile ? 'w-full' : 'w-[254px]'}
                 />
             );

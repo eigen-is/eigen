@@ -59,7 +59,7 @@ export function lifecycleCardDetailProps(
         deleted: lifecycle.openCardDeleted,
         isEditing: lifecycle.openCardEditing,
         onEditingChange: lifecycle.setOpenCardEditing,
-        copyLinkUrl: openCard?.chatName ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined,
+        copyLinkUrl: openCard ? getDriveShareUrl(path, { chat: openCard.chatName }) : undefined,
         members,
         currentUserEmail,
         onUpdate: (patch) => {

@@ -89,7 +89,9 @@ describe('a comment mark', () => {
 
     test.each([[undefined], ['x']])('takes the colour of its card, on a cell holding %s', (value) => {
         const ctx = commented('card', value);
-        ctx.commentCards = { card: { id: 'card', title: '', description: '', color: '#123456' } };
+        ctx.commentCards = {
+            card: { id: 'card', title: '', description: '', color: '#123456', chatName: 'card.eigenchat' },
+        };
         expect(paintedFills(ctx)).toEqual(['#123456']);
     });
 

@@ -130,7 +130,7 @@ export function useCanvasCommentHost({
                     doc.updateElementUntracked(anchorId, { commentCardIds: serializeIdList([...ids, card.id]) });
                 }
             }
-            if (assignee !== undefined && card?.chatName) {
+            if (assignee !== undefined && card) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
             setCommentAnchorId(null);

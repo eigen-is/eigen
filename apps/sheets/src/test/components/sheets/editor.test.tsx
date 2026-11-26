@@ -80,6 +80,9 @@ const realUiComments = { ...(await import('@workspace/ui/components/comments')) 
 const realThread = { ...(await import('@workspace/ui/components/comments/comment-thread')) };
 const realSearch = { ...(await import('@workspace/ui/components/search/doc-search-provider')) };
 const realCards = { ...(await import('@workspace/ui/components/cards')) };
+const realUseSheet = { ...(await import('../../../components/sheets/hooks/use-sheet')) };
+const realPresence = { ...(await import('../../../components/sheets/hooks/use-presence')) };
+const realSearchController = { ...(await import('../../../components/sheets/hooks/use-search-controller')) };
 
 const Children = ({ children }: { children?: ReactNode }) => children;
 const Nothing = () => null;
@@ -160,6 +163,9 @@ afterAll(() => {
     mock.module('@workspace/ui/components/comments/comment-thread', () => realThread);
     mock.module('@workspace/ui/components/search/doc-search-provider', () => realSearch);
     mock.module('@workspace/ui/components/cards', () => realCards);
+    mock.module('../../../components/sheets/hooks/use-sheet', () => realUseSheet);
+    mock.module('../../../components/sheets/hooks/use-presence', () => realPresence);
+    mock.module('../../../components/sheets/hooks/use-search-controller', () => realSearchController);
     fetchSpy.mockRestore();
 });
 

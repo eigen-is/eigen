@@ -9,7 +9,7 @@ installHappyDom();
 type CommentFilter = Parameters<typeof matchesCommentFilter>[2];
 
 function makeCard(overrides: Partial<CommentCard> = {}): CommentCard {
-    return { id: 'c1', title: 't', description: 'd', ...overrides };
+    return { id: 'c1', title: 't', description: 'd', chatName: 'c1.eigenchat', ...overrides };
 }
 
 function makeEntry(overrides: Partial<CommentEntry> = {}): CommentEntry {
