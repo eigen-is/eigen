@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { TestContext } from '../setup';
-import { getTestContext } from '../setup';
+import { driveGet, drivePost, drivePut, getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV ACL', () => {
@@ -55,6 +55,31 @@ describe('WebDAV ACL', () => {
             headers: { Destination: `http://localhost${baseHrefAlice}/moved.txt` },
         });
         expect(res.status).toBe(404);
+    });
+
+    // Write from "Anyone signed in can edit" renames in place, but moving needs write held by name.
+    test('Bob renames a file in a folder anyone can edit, but cannot MOVE it to a folder he holds by name', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const rootId = (await driveGet(token, ctx.alice.user.id, aliceMount, 'root')).id;
+        const folder = (name: string) =>
+            drivePost(token, ctx.alice.user.id, aliceMount, `folder/${rootId}`, { folderName: name });
+        const open = await folder(`open-${crypto.randomUUID()}`);
+        const mine = await folder(`mine-${crypto.randomUUID()}`);
+        await drivePut(token, ctx.alice.user.id, aliceMount, `path/${open.id}/acl`, { visibility: 'public-write' });
+        await drivePut(token, ctx.alice.user.id, aliceMount, `path/${mine.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHrefAlice}/${open.name}/item.txt`, { body: 'e' });
+        const bobMoves = (from: string, to: string) =>
+            webdavRequest(ctx.bob.user.email, 'MOVE', `${baseHrefAlice}/${from}`, {
+                headers: { Destination: `http://localhost${baseHrefAlice}/${to}` },
+            });
+
+        expect((await bobMoves(`${open.name}/item.txt`, `${mine.name}/item.txt`)).status).toBe(403);
+        expect((await bobMoves(`${open.name}/item.txt`, `${open.name}/renamed.txt`)).status).toBe(201);
+        const get = (name: string) => webdavRequest(ctx.alice.user.email, 'GET', `${baseHrefAlice}/${name}`);
+        expect((await get(`${open.name}/renamed.txt`)).status).toBe(200);
+        expect((await get(`${mine.name}/item.txt`)).status).toBe(404);
     });
 
     // A LOCK on a name Bob can't see would create it, so he gets a PUT's answer for a folder he can't see.

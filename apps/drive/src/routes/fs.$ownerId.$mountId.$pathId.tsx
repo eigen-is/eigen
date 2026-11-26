@@ -8,7 +8,13 @@ import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import { useCanWriteFolder, useFolderContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
+import {
+    useCanWriteByName,
+    useCanWriteFolder,
+    useFolderContent,
+    usePathInfo,
+    validateDriveSearch,
+} from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
@@ -70,7 +76,10 @@ function FolderRoute() {
     }, [selectedItemUrl]);
 
     // One capability set for menus, detail column and quick look.
-    const capabilities = browseCapabilities(useCanWriteFolder(ownerId, mountId, pathId));
+    const capabilities = browseCapabilities(
+        useCanWriteFolder(ownerId, mountId, pathId),
+        useCanWriteByName(currentPath),
+    );
 
     const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
         items: folderContents,

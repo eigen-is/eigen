@@ -117,14 +117,23 @@ export class SharedDrive {
         return path.sharingRestricted && !this.isEffectiveOwner(path.ownerId, memberships);
     }
 
-    // Changing who has access needs write held by name: "Anyone signed in can edit" lets everyone change the
-    // content, never hand it on. The owner's restriction comes on top.
-    private async requireShare(mountId: string, pathId: string, memberships: Memberships): Promise<DrivePath> {
+    // "Anyone signed in can edit" lets everyone change the content, never hand it on, take it somewhere else or mail
+    // the people who have it. Those need write held by name, as an owner or through an ACL entry on the path or above.
+    private async requireWriteByName(
+        mountId: string,
+        pathId: string,
+        memberships: Memberships,
+        message: string,
+    ): Promise<DrivePath> {
         const chain = await this.drive.breadCrumb(mountId, pathId);
         const path = chain.at(-1);
-        if (!path || !canWriteByNameFromAncestors(chain, this.user, memberships)) {
-            throw new ApiError(403, 'No permission to change sharing');
-        }
+        if (!path || !canWriteByNameFromAncestors(chain, this.user, memberships)) throw new ApiError(403, message);
+        return path;
+    }
+
+    // The owner's restriction comes on top of write held by name.
+    private async requireShare(mountId: string, pathId: string, memberships: Memberships): Promise<DrivePath> {
+        const path = await this.requireWriteByName(mountId, pathId, memberships, 'No permission to change sharing');
         if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
         return path;
     }
@@ -266,7 +275,8 @@ export class SharedDrive {
     }
 
     // The move trashes or writes over what holds the name. Write on the folder covers that path too, as access only
-    // widens down a chain of folders.
+    // widens down a chain of folders. A MOVE that keeps its folder is a rename, as Finder sends one, so it asks what
+    // renamePath asks.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -274,16 +284,18 @@ export class SharedDrive {
         name: string,
         checkedId: string | null,
     ): Promise<DrivePath> {
-        await this.requireMove(mountId, pathId, destParentId);
+        const path = await this.drive.getPath(mountId, pathId);
+        if (path?.parentId === destParentId) await this.requireWrite(mountId, destParentId);
+        else await this.requireMove(mountId, pathId, destParentId);
         return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
     }
 
-    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does. In a folder the
+    // mover holds by name the item would be theirs to share, so the move needs write held by name, as sharing does.
     private async requireMove(mountId: string, pathId: string, targetParentId: string): Promise<void> {
         const memberships = await getMemberships(this.user.id);
-        await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
-        const path = await this.drive.getPath(mountId, pathId);
-        if (!path?.parentId) throw new ApiError(403, 'No write permission on source folder');
+        const path = await this.requireWriteByName(mountId, pathId, memberships, 'No permission to move this item');
+        if (!path.parentId) throw new ApiError(403, 'No write permission on source folder');
         await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');
     }
@@ -429,6 +441,8 @@ export class SharedDrive {
         return { canShare, recipients };
     }
 
+    // A mail to everyone the path is shared with is for those who may manage its sharing. The owner's restriction
+    // limits who changes access, not who writes to the people who have it.
     public async emailCollaborators(
         mountId: string,
         pathId: string,
@@ -436,7 +450,8 @@ export class SharedDrive {
         message: string,
         sendCopyToSelf: boolean,
     ): Promise<{ sent: number }> {
-        await this.requireWrite(mountId, pathId);
+        const memberships = await getMemberships(this.user.id);
+        await this.requireWriteByName(mountId, pathId, memberships, 'No permission to email collaborators');
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
     }
 

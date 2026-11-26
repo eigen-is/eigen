@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2467 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2468 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -387,7 +387,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (322)
+## Hooks (323)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -531,6 +531,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAttachmentSubjects` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-attachment-subjects.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useCanShare` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `useCanWriteByName` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useCanWriteFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
