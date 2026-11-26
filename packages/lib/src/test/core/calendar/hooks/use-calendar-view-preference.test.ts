@@ -85,15 +85,16 @@ describe('useCalendarViewPreference', () => {
         await reopened.unmount();
     });
 
-    test('picking the stored view again saves nothing', async () => {
+    test('a pick of the cached view still saves, so a stale cache does not lose it to a pick on another device', async () => {
         window.localStorage.clear();
         saved.length = 0;
-        stored = { calendarView: { desktop: 'week' } };
+        stored = { calendarView: { desktop: 'month' } };
         const { latest, unmount } = await renderHook(() => useCalendarViewPreference(), client(stored));
+        stored = { calendarView: { desktop: 'week' } };
         await act(async () => {
-            latest.setMode('week');
+            latest.setMode('month');
         });
-        expect(saved).toEqual([]);
+        expect(saved).toEqual([{ calendarView: { desktop: 'month' } }]);
         await unmount();
     });
 
