@@ -8,13 +8,13 @@ import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { isVisitorRoute, OWNER, session, sessionAuth, withSession } from '@workspace/ui/test/visitor-server';
 
 const window = installHappyDom();
 window.happyDOM.setViewport({ width: 1440, height: 900 });
 // happy-dom lays nothing out, so the list's virtualizer would see a scroller 0 px tall and draw no row.
 Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { get: () => 900 });
 
-const OWNER = 'alice'.padEnd(32, '0');
 const link = { ownerId: OWNER, visibility: 'link' as const };
 // The public folder heads its own chain, cut by the server, and keeps the id of the private folder above it.
 const pub = drivePath({
@@ -55,18 +55,7 @@ const chains = new Map<string, DrivePath[]>([
     ['readme', [readme]],
 ]);
 
-// The routes a public link opens, as the API's linkAuth lists them, and the public user and config routes.
-const VISITOR_ROUTES = [
-    /^\/drive\/[^/]+\/[^/]+\/path\/[^/]+(\/breadcrumb|\/permissions)?$/,
-    /^\/drive\/[^/]+\/[^/]+\/folder\/[^/]+$/,
-    /^\/drive\/[^/]+\/[^/]+\/file\/[^/]+\/(download|embed\/.+|preview|text-preview|vcard-preview|eml-preview|ics-preview)$/,
-    /^\/drive\/[^/]+\/[^/]+\/thumb\/.+$/,
-    /^\/collab\/[^/]+\/[^/]+\/[^/]+\/info$/,
-    /^\/p\//,
-];
-const isVisitorRoute = (pathname: string) => VISITOR_ROUTES.some((route) => route.test(pathname));
-
-// What the server answers: a signed-in user gets every route, a visitor only the routes above.
+// What the server answers: a signed-in user gets every route, a visitor only the routes a public link opens.
 function serve(pathname: string): Response {
     const at = pathname.match(/^\/drive\/[^/]+\/[^/]+\/(path|folder)\/([^/]+)(?:\/(\w+))?$/);
     if (!session.user && !isVisitorRoute(pathname)) return Response.json({ message: 'Unauthorized' }, { status: 401 });
@@ -100,13 +89,8 @@ beforeEach(() => {
     };
 });
 
-const session: { user: { id: string; email: string; name: string; role?: string } | null } = { user: null };
 const realAuth = { ...(await import('@workspace/lib/auth')) };
-mock.module('@workspace/lib/auth', () => ({
-    ...realAuth,
-    useAuth: () => auth(),
-    useIsGuest: () => session.user?.role === 'guest',
-}));
+mock.module('@workspace/lib/auth', () => withSession(realAuth));
 afterAll(() => {
     g.fetch = realFetch;
     mock.module('@workspace/lib/auth', () => realAuth);
@@ -118,17 +102,6 @@ const { CommandPaletteProvider } = await import('@workspace/ui/components/layout
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
 const { UploadProvider } = await import('@workspace/ui/components/upload-provider');
 const { routeTree } = await import('../../routeTree.gen');
-
-function auth() {
-    const user = session.user && { ...session.user, emailVerified: true, createdAt: new Date(), updatedAt: new Date() };
-    return {
-        isAuthenticated: !!user,
-        isLoading: false,
-        user,
-        login: async () => ({ success: true }),
-        logout: async () => {},
-    };
-}
 
 let unmount = async () => {};
 afterEach(async () => {
@@ -148,7 +121,7 @@ async function open(url: string) {
     const router = createRouter({
         routeTree,
         history: createMemoryHistory({ initialEntries: [url] }),
-        context: { auth: auth() },
+        context: { auth: sessionAuth() },
     });
     await router.load();
     const rendered = await renderInDocument(
