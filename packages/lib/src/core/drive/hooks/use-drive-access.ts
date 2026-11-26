@@ -169,26 +169,31 @@ export function useCanWriteFolder(ownerId: string, mountId: string, pathId: stri
     return isOwner || permissions?.canWrite === true;
 }
 
-// Whether the user holds write on the item by name, as the server decides it: an owner, or someone an entry on the
-// item or a folder above it lets write, by email or team. Write from "Anyone signed in can edit" changes the content
-// only, so it neither moves the item nor shares it. In the trash only an owner holds it. Until the folders above
-// load, only the item's own entries count.
-export function useCanWriteByName(path: DrivePath | null): boolean {
+// Whether the user holds write by name on an item in or at a folder, as the server decides it: an owner, or someone an
+// entry on the item or a folder above it lets write, by email or team. Write from "Anyone signed in can edit" changes
+// the content only, so it neither moves the item nor shares it. In the trash only an owner holds it. Until the folder's
+// chain loads, only the item's own entries count.
+export function useWritesByName(ownerId: string, mountId: string, folderId: string): (item: DrivePath) => boolean {
     const { user } = useAuth();
     const { data: myTeams } = useMyTeams();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
-    const { data: chain } = useBreadcrumb(path?.ownerId ?? '', path?.mountId ?? '', path?.id);
-    if (!user || !path) return false;
-    if (isEffectiveOwnerOf(path.ownerId)) return true;
-    const crumbs = [...(chain ?? []), path];
-    if (crumbs.some((crumb) => crumb.trashedAt)) return false;
-    const email = user.email.toLowerCase();
-    const holdsWrite = (entry: DriveACL) => {
-        const parsed = parseOwnerId(entry.id);
-        if (parsed.type === 'team') return !!myTeams?.some((team) => team.id === parsed.id);
-        return entry.id.toLowerCase() === email;
-    };
-    return crumbs.some((crumb) => !!crumb.acl?.some((entry) => entry.write && holdsWrite(entry)));
+    const { data: chain } = useBreadcrumb(ownerId, mountId, folderId);
+    return useCallback(
+        (item: DrivePath) => {
+            if (!user) return false;
+            if (isEffectiveOwnerOf(item.ownerId)) return true;
+            const crumbs = [...(chain ?? []), item];
+            if (crumbs.some((crumb) => crumb.trashedAt)) return false;
+            const email = user.email.toLowerCase();
+            const holdsWrite = (entry: DriveACL) => {
+                const parsed = parseOwnerId(entry.id);
+                if (parsed.type === 'team') return !!myTeams?.some((team) => team.id === parsed.id);
+                return entry.id.toLowerCase() === email;
+            };
+            return crumbs.some((crumb) => !!crumb.acl?.some((entry) => entry.write && holdsWrite(entry)));
+        },
+        [user, myTeams, isEffectiveOwnerOf, chain],
+    );
 }
 
 // Whether the user may change who has access: write held by name, unless the owner restricted sharing. Nobody changes
@@ -196,7 +201,7 @@ export function useCanWriteByName(path: DrivePath | null): boolean {
 export function useCanShare(path: DrivePath): boolean {
     const isGuest = useIsGuest();
     const isOwner = useIsEffectiveOwner(path.ownerId);
-    const writesByName = useCanWriteByName(path);
+    const writesByName = useWritesByName(path.ownerId, path.mountId, path.id)(path);
     if (isGuest || path.trashedAt || !writesByName) return false;
     return isOwner || !path.sharingRestricted;
 }

@@ -1,6 +1,6 @@
 // The Delete key runs the listing's delete row and no other destructive row, and the menu key opens the menu at the
-// row or tile under the cursor. A folder is a drop target only where the view can move items, and a drop moves the
-// dragged items in one batch.
+// row or tile under the cursor. A folder is a drop target only where the view can move items and Move to applies to
+// the dragged ones, and a drop moves them in one batch.
 import { expect, test } from 'bun:test';
 import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -38,13 +38,16 @@ const selection: UseListSelectionReturn<DrivePath> = {
     handleItemClick: () => {},
 };
 
-const destructive = (id: DriveActionId): DriveAction => ({
+const row = (id: DriveActionId, group: DriveAction['group']): DriveAction => ({
     id,
     label: id,
     icon: Trash2,
-    group: 'destructive',
+    group,
     applies: () => true,
 });
+const moveTo = row('move-to', 'organize');
+
+const destructive = (id: DriveActionId): DriveAction => row(id, 'destructive');
 
 // A runner whose rows are the given ones, recording the ids it runs.
 function runner(rows: DriveAction[], onMove?: DriveActionRunner['onMove']) {
@@ -92,14 +95,17 @@ test('Delete and Backspace run the row that shows the delete key, even after ano
     }
 });
 
-test('a folder is a drop target only where the view can move', () => {
-    expect(render(runner([]).actions).isValidFolderDrop(folder)).toBe(false);
-    expect(render(runner([], () => {}).actions).isValidFolderDrop(folder)).toBe(true);
+test('a folder is a drop target only where the view can move the dragged items', () => {
+    expect(render(runner([moveTo]).actions).isValidFolderDrop(folder)).toBe(false);
+    expect(render(runner([], () => {}).actions).isValidFolderDrop(folder)).toBe(false);
+    expect(render(runner([moveTo], () => {}).actions).isValidFolderDrop(folder)).toBe(true);
 });
 
 test('a drop of several items onto a folder moves them in one batch', async () => {
     const moves: [string[], string][] = [];
-    const { actions } = runner([], (paths, targetItemId) => moves.push([paths.map(({ id }) => id), targetItemId]));
+    const { actions } = runner([moveTo], (paths, targetItemId) =>
+        moves.push([paths.map(({ id }) => id), targetItemId]),
+    );
     const dragged = ['a', 'b', 'c'].map((id) =>
         drivePath({ id, name: `${id}.txt`, type: 'file', mimeType: 'text/plain' }),
     );

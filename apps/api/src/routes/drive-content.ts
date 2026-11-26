@@ -53,10 +53,11 @@ import { importFromDriveSchema } from './shared-schemas';
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
 
-// A preview that isn't cached yet runs at foreground priority only for someone who reads the file by name, such as its
-// owner or a person its ACL names. Whoever reads it only through a link or "Anyone signed in", signed in or not, waits
-// behind them, so a burst of link views can't take the one transform queue from the people the files are shared with.
-async function previewPriority(
+// An export, or a preview that isn't cached yet, runs at foreground priority only for someone who reads the file by
+// name, such as its owner or a person its ACL names. Whoever reads it only through a link or "Anyone signed in", signed
+// in or not, waits behind them, so a burst of link views can't take the one transform queue from the people the files
+// are shared with.
+async function transformPriorityFor(
     drive: DriveLike | LinkDrive,
     user: User | null,
     path: DrivePath,
@@ -98,9 +99,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const priority = await transformPriorityFor(drive, user, path);
             // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or stop
             // its Worker.
-            const result = await drive.withHomeHeld(() => exportDocument(mount, path, params.format, request.signal));
+            const result = await drive.withHomeHeld(() =>
+                exportDocument(mount, path, params.format, priority, request.signal),
+            );
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             set.headers['Content-Security-Policy'] = EXPORT_CSP;
@@ -227,7 +231,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return answerPreview(request, set, path, TEXT_FORMAT, async () =>
-                getTextPreview(mount, path, await previewPriority(drive, user, path)),
+                getTextPreview(mount, path, () => transformPriorityFor(drive, user, path)),
             );
         },
         // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
@@ -242,7 +246,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, VCARD_FORMAT, async () =>
-                getVCardPreview(mount, path, await previewPriority(drive, user, path)),
+                getVCardPreview(mount, path, () => transformPriorityFor(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -255,7 +259,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, EML_FORMAT, async () =>
-                getEmlPreview(mount, path, await previewPriority(drive, user, path)),
+                getEmlPreview(mount, path, () => transformPriorityFor(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
@@ -268,7 +272,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
             return answerPreview(request, set, path, ICS_FORMAT, async () =>
-                getIcsPreview(mount, path, await previewPriority(drive, user, path)),
+                getIcsPreview(mount, path, () => transformPriorityFor(drive, user, path)),
             );
         },
         { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },

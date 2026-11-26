@@ -1512,7 +1512,7 @@ describe('an xlsx export carries the sheets’ images', () => {
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
         await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
 
-        const result = await exportDocument(mount, path, 'xlsx');
+        const result = await exportDocument(mount, path, 'xlsx', 'foreground');
         const zip = openZip(result.data);
         expect(zip.names().filter((name) => name.startsWith('xl/media/'))).toEqual([
             'xl/media/image1.jpeg',
