@@ -1,7 +1,8 @@
 // Keeps a collab socket from going silent while its document loads. y-websocket closes a socket that
 // stays silent for 30 s and connects again, and a cold open of a large document can take longer. Each
 // retry would pay the whole load again, so the route sends an empty awareness frame right away and
-// every 10 s until the sync starts. A client applies it as a no-op.
+// every 10 s until the sync starts. A client applies it as a no-op, and the route's keepalive sends
+// the same frame once the socket is open.
 
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
@@ -17,7 +18,7 @@ function encodeEmptyAwarenessMessage(): Uint8Array {
     return encoding.toUint8Array(encoder);
 }
 
-const EMPTY_AWARENESS_MESSAGE = encodeEmptyAwarenessMessage();
+export const EMPTY_AWARENESS_MESSAGE = encodeEmptyAwarenessMessage();
 
 export function startLoadingHeartbeat(conn: ServerWebSocket<unknown>): () => void {
     const send = () => {

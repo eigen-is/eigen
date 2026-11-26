@@ -20,7 +20,7 @@ import type { ServerWebSocket } from 'elysia/ws/bun';
 import { withCommentIndex } from '../lib/chat';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
-import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
+import { EMPTY_AWARENESS_MESSAGE, startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getLinkDrive, getReadDrive, getSharedDrive, readPermissions } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
@@ -38,7 +38,7 @@ type CollabSession = {
     opened: Promise<void>;
     access?: CollabAccess;
     collabDocument?: CollabDocument;
-    pingInterval?: ReturnType<typeof setInterval>;
+    keepalive?: ReturnType<typeof setInterval>;
     releaseHome?: () => void;
 };
 
@@ -196,15 +196,16 @@ export const collabRouter = new Elysia({
 
                 session.access = access;
                 session.collabDocument = document;
-                // The ping keeps a proxy from dropping the connection. A check that throws says nothing about the
-                // access, so the socket stays and the next tick asks again.
-                session.pingInterval = setInterval(async () => {
+                // The heartbeat keeps a proxy from dropping the connection, and y-websocket from closing a quiet one,
+                // which a protocol ping does not. A check that throws says nothing about the access, so the socket
+                // stays and the next tick asks again.
+                session.keepalive = setInterval(async () => {
                     if (rawWs.readyState !== WebSocket.OPEN) {
                         cleanupSession(session, rawWs);
                         return;
                     }
                     try {
-                        rawWs.ping();
+                        rawWs.send(Buffer.from(EMPTY_AWARENESS_MESSAGE));
                         await checkAccess();
                     } catch (err) {
                         console.error('Error in collab keepalive:', err);
@@ -280,7 +281,7 @@ export const collabRouter = new Elysia({
     });
 
 function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>): void {
-    clearInterval(session.pingInterval);
+    clearInterval(session.keepalive);
     session.collabDocument?.unsubscribe(ws);
     session.collabDocument = undefined;
     session.releaseHome?.();

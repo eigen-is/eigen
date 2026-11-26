@@ -150,10 +150,11 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     ]);
     ws.binaryType = 'arraybuffer';
     sockets.add(ws);
-    // The kind of each sync frame the server sent, and every awareness state a peer published. The loading heartbeat
-    // is an awareness frame with no state in it, and the server's own state, which a member gets at sync, is empty.
+    // The kind of each sync frame the server sent, every awareness state a peer published, and how many heartbeats
+    // came: awareness frames with no state in them. The server's own state, which a member gets at sync, is empty.
     const syncFrames: number[] = [];
     const awareness: AwarenessEntry[] = [];
+    let heartbeats = 0;
     // When the server's last step 2, its answer to a step 1, arrived.
     let answeredAt = 0;
     let pongs = 0;
@@ -182,6 +183,7 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
         } else if (messageType === MESSAGE_AWARENESS) {
             const entries = decoding.createDecoder(decoding.readVarUint8Array(decoder));
             const count = decoding.readVarUint(entries);
+            if (count === 0) heartbeats++;
             for (let i = 0; i < count; i++) {
                 const clientId = decoding.readVarUint(entries);
                 decoding.readVarUint(entries);
@@ -197,7 +199,18 @@ function connect(user: TestUser | null, pathId: string, doc = new Y.Doc(), owner
     const text = () => doc.getText('probe').toString();
     // Resolves once the server would answer this socket's next step 1.
     const paced = () => Bun.sleep(Math.max(0, answeredAt + SYNC_STEP_1_INTERVAL_MS + 10 - Date.now()));
-    return { ws, doc, closed, awareness, count, text, paced, pongs: () => pongs, upgraded: () => upgraded };
+    return {
+        ws,
+        doc,
+        closed,
+        awareness,
+        count,
+        text,
+        paced,
+        pongs: () => pongs,
+        heartbeats: () => heartbeats,
+        upgraded: () => upgraded,
+    };
 }
 
 type Client = ReturnType<typeof connect>;
@@ -513,6 +526,15 @@ describe('a visitor writes nothing, and its socket stays', () => {
 });
 
 describe('the keepalive asks the link rule, and closes a visitor at the next tick', () => {
+    // y-websocket closes a socket it hears nothing on for 30 s, and a protocol-level ping is not something it hears.
+    test('a tick sends a member and a visitor the heartbeat', async () => {
+        const doc = await newPublicDoc();
+        const clients = [await open(alice, doc.id), await open(null, doc.id)];
+        const before = clients.map((client) => client.heartbeats());
+        await tick();
+        await waitFor(() => clients.every((client, i) => client.heartbeats() === before[i] + 1), 5_000);
+    });
+
     test('a tick with nothing changed keeps the socket', async () => {
         const doc = await newPublicDoc();
         const visitor = await open(null, doc.id);
