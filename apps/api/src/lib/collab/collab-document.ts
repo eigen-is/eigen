@@ -212,8 +212,8 @@ export class CollabDocument {
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            // A type has more than one varuint spelling, so it is read once, and that read decides both what a reader may
-            // send and how the frame is applied. A reader still gets the handshake; a step 2 is applied like an update.
+            // A type has more than one varuint spelling, so it is read once, and that read decides what a reader may
+            // send and how the frame is applied. A reader still gets the handshake; a step 2 counts as an update.
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
                 sendFrame(
@@ -323,8 +323,8 @@ export class CollabDocument {
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const compacted = await compactSheets(this.path, this.doc, this.compaction.signal);
-            // The swap deletes the folded batches, so a version keeps them first. It waits for the container lock while
-            // this holds data.db, which is safe: the hold is outside the slot chain, and every closer destructs it first.
+            // The swap deletes the folded batches, so a version keeps them first. Its wait for the container lock while
+            // this holds data.db is safe: the hold is outside the slot chain and every closer destructs it first.
             let saved = false;
             if (
                 compacted !== null &&

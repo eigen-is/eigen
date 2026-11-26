@@ -29,7 +29,7 @@ export const betterAuth = new Elysia({ name: 'better-auth' })
     .onBeforeHandle(({ request }) => {
         const path = new URL(request.url).pathname;
         // Self-registration is off: onboarding runs through invites, the waitlist and admin user creation.
-        // Server-side auth.api.signUpEmail (setup, tests) doesn't pass through this hook and keeps working.
+        // Server-side auth.api.signUpEmail doesn't pass through this hook and keeps working.
         if (path === '/auth/sign-up/email') throw new ApiError(403, 'Sign-up is disabled');
         if (isDemo() && DEMO_BLOCKED_AUTH_PATHS.has(path)) throw new ApiError(403, 'Disabled in demo mode');
     })

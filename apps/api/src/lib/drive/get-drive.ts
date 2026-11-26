@@ -30,3 +30,7 @@ export async function getLinkDrive(ownerId: string): Promise<LinkDrive> {
     const home = await getHome(ownerId); // ownerId-routed: the request is for this owner's home
     return new LinkDrive(home);
 }
+
+export async function getReadDrive(ownerId: string, user: User | null): Promise<DriveLike | LinkDrive> {
+    return user ? getSharedDrive(ownerId, user) : getLinkDrive(ownerId);
+}

@@ -163,10 +163,8 @@ export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
         '/drive/:ownerId/:mountId/path/:pathId/permissions',
         async ({ params, user }): Promise<DrivePathPermissions> => {
             if (!user) {
-                return {
-                    canRead: await (await getLinkDrive(params.ownerId)).canRead(params.mountId, params.pathId),
-                    canWrite: false,
-                };
+                const linkDrive = await getLinkDrive(params.ownerId);
+                return { canRead: await linkDrive.canRead(params.mountId, params.pathId), canWrite: false };
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const [canRead, canWrite] = await Promise.all([

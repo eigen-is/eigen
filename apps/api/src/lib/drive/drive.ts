@@ -304,7 +304,7 @@ export class Drive {
         return this.getMount(mountId).getPathsByMimeType(mimeTypePrefix);
     }
 
-    // The search route lets an owner search only their own drive, so SharedDrive has no wrapper for it.
+    // Owner-only, so SharedDrive has no wrapper.
     public search(opts: { q: string; limit: number }): DrivePath[] {
         const merged: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
@@ -1060,7 +1060,7 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
-    // The route checks ownership, so SharedDrive has no wrapper.
+    // Owner-only, so SharedDrive has no wrapper.
     public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
         return ensureChatsFolder(this, mountId, user);
     }

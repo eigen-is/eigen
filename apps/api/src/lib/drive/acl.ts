@@ -86,9 +86,9 @@ function canFromAncestors(
 
 // What a visitor without a login may read: the index of the highest path with a link, or null. The chain is folders,
 // then at most a file, or a collab document and at most its media/ and a file in it. The link is at or above that end.
-export function canReadByLink(chain: readonly DrivePath[], enabled: boolean): number | null {
+export function canReadByLink(chain: readonly DrivePath[]): number | null {
     const head = chain.findIndex((path) => path.visibility === 'link');
-    if (!enabled || head < 0 || isTrashedChain(chain)) return null;
+    if (head < 0 || isTrashedChain(chain)) return null;
     const end = chain.findIndex((path) => path.type !== DRIVE_TYPE_FOLDER);
     if (end < 0) return head;
     if (head > end) return null;
