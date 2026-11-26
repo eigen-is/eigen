@@ -1,4 +1,5 @@
-// A visitor who is signed out sees a login icon in the top bar, named Enter demo on a demo server. It waits for
+// A visitor who is signed out sees a login icon in the top bar, which comes back to the page after the login, and is
+// named Enter demo on a demo server. It waits for
 // the session check, so a signed-in visitor never sees it flash, and an empty app name gives the bare "eigen" wordmark.
 // A signed-out visitor of a public document reads its name in the bar's middle, where a user has the palette.
 // A signed-in user's avatar opens the account menu, which a guest gets without the rows only a user has.
@@ -25,11 +26,13 @@ mock.module('@workspace/lib/public', () => ({
     usePublicConfig: () => ({ data: { demoMode } }),
     useEnabledApps: () => [],
 }));
-// The bar sits outside a router here, so its links are plain anchors.
+// The bar sits outside a router here, so its links are plain anchors, on a page the router says it is at.
+const PAGE = '/drive/fs/alice/default/pub?pid=photo';
 const realRouter = { ...(await import('@tanstack/react-router')) };
 mock.module('@tanstack/react-router', () => ({
     ...realRouter,
     useRouter: () => ({}),
+    useLocation: () => ({ publicHref: PAGE }),
     Link: ({ to, children, className }: { to: string; children: ReactNode; className?: string }) => (
         <a href={to} className={className}>
             {children}
@@ -86,10 +89,12 @@ function loginLink(bar: HTMLElement): HTMLAnchorElement | undefined {
 }
 
 describe('the signed-out top bar', () => {
-    test('shows a login icon that goes to Space', async () => {
+    test('shows a login icon that goes to the login page, with this page as the way back', async () => {
         const link = loginLink(await renderBar());
         expect(link?.getAttribute('aria-label')).toBe('Log in');
-        expect(link?.getAttribute('href')).toBe(getSpaceAppUrl());
+        const target = new URL(link?.getAttribute('href') ?? '', window.location.origin);
+        expect(target.href.split('?')[0]).toBe(new URL(getSpaceAppUrl('login'), window.location.origin).href);
+        expect(target.searchParams.get('redirect')).toBe(`http://localhost:3000${PAGE}`);
     });
 
     test('shows Enter demo, which goes to the demo entry, on a demo server', async () => {
