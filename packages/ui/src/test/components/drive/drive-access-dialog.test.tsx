@@ -204,8 +204,7 @@ const people = () =>
 const RESTRICTED = 'Restricted';
 const SIGNED_IN = 'Anyone signed in with the link';
 const ANYONE = 'Anyone with the link';
-const PUBLIC_LINK_NOTE =
-    "Anyone who has this link can view this without signing in, and download files. The link is the item's address: whoever has seen it can open it for as long as this is on. Everything inside a public folder is public, private subfolders too. Visitors see comments and who wrote them, but not the replies, the history or who has access.";
+const PUBLIC_LINK_NOTE = 'Anyone on the internet with the link can view';
 
 // Every picker in the dialog: each person's role, General access and the role a signed-in link gives.
 const triggers = () => [...(dialog()?.querySelectorAll('[data-slot="select-trigger"]') ?? [])];
@@ -395,7 +394,7 @@ test('General access offers three choices, and the signed-in one lets people vie
     ]);
 });
 
-test('Anyone with the link waits for Save, with the sentence under it and no role to pick', async () => {
+test('Anyone with the link waits for Save, with the line under it and no role beside it', async () => {
     await open();
     expect(dialog()?.textContent).not.toContain(PUBLIC_LINK_NOTE);
     await chooseGeneralAccess(SIGNED_IN);
@@ -405,7 +404,7 @@ test('Anyone with the link waits for Save, with the sentence under it and no rol
     expect(updateACL).not.toHaveBeenCalled();
     expect(dialog()?.textContent).toContain(PUBLIC_LINK_NOTE);
     expect(triggers().map((trigger) => trigger.textContent)).toEqual(['Editor', 'Viewer', ANYONE]);
-    expect(dialog()?.textContent).toContain(`${PUBLIC_LINK_NOTE}Can view`);
+    expect(dialog()?.textContent).not.toContain('Can view');
 
     await click(button('Save'));
     await settle();
@@ -573,7 +572,7 @@ test('an open link reads the same to whoever opens Share, with the role it gives
     isGuest = true;
     sharedPath = { ...notes, visibility: 'public-write' };
     await open();
-    expect(dialog()?.textContent).toContain(`${SIGNED_IN}Anyone who signs inCan edit`);
+    expect(dialog()?.textContent).toContain(`${SIGNED_IN}They sign in to open itCan edit`);
     expect(dialog()?.textContent).not.toContain('authenticated');
     await unmount();
 
