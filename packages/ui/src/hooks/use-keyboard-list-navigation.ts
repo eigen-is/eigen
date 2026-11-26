@@ -1,7 +1,7 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
-// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
-// ⌘A selects every row. Cmd or Ctrl+Enter is left to a form around the list. The list spreads the returned
-// handleKeyDown on its focusable container.
+// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu,
+// ⌘A selects every row and Esc clears a selection of two or more. Cmd or Ctrl+Enter is left to a form around the
+// list. The list spreads the returned handleKeyDown on its focusable container.
 // The hook keeps the focus on that container while nothing else holds it and no dialog is open, and takes it back from
 // a row's own button when a key moves the cursor.
 
@@ -196,7 +196,8 @@ export function useKeyboardListNavigation<T>({
             return;
         }
 
-        if (selection && e.key === 'Escape') {
+        // A single selected row is the open one, so its Esc is left to the page, where a detail column closes it.
+        if (selection && e.key === 'Escape' && selection.selectedCount > 1) {
             e.preventDefault();
             selection.clearSelection();
             return;
