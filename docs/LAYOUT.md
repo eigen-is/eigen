@@ -23,7 +23,7 @@ The toolbar is the `toolbar` prop of a `Column`, never part of the page content.
 </ColumnLayout>
 ```
 
-A list whose items open a detail is `ListDetailLayout`, as on the contacts and admin users and teams pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page.
+A list whose items open a detail is `ListDetailLayout`, as on the contacts and admin users and teams pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`), keeping every other param.
 
 ## A side column is small, medium or large
 
@@ -35,7 +35,7 @@ Slides' slide rail is the one side column with its own width: 208 (`w-52`), and 
 
 **A detail column shows one thing the user opened, such as a calendar event or a document's comments, at the right of the page, under the bar that spans the screen.** `DetailColumn` (`layout/app/detail-column.tsx`) draws it. Its bar names a list, never an item: a title over a list, "‹" with the list's name once it drilled into one item, the item's actions, then X. It is `medium` beside a work surface, such as the calendar grid, and `large` beside a list. The comments list and Stickies' activity are `small`, the properties panel's width, and a comment thread is the one detail that grows to `large` beside a surface ([COMMENTS.md](COMMENTS.md#in-docs-sheets-slides-and-vector-comments-open-in-a-column-the-url-names)).
 
-The URL names what is open, so a link and a reload show it. `useDetailHistory` (`packages/ui/src/hooks/use-detail-history.ts`) gives every detail one history rule: an open from closed pushes an entry flagged as its own, a switch to another item replaces, and close goes back over that entry and replaces anywhere else, such as on a link. So X and back do the same, and back after X never reopens the item. X, Esc and back close it. The column hears Esc on `window`, after every `document` listener, so a handler that uses an Esc, such as a canvas deselecting, calls `preventDefault` and the column closes on the next one.
+The URL names what is open, so a link and a reload show it. `useDetailHistory` (`packages/ui/src/hooks/use-detail-history.ts`) gives every detail one history rule: an open from closed pushes an entry flagged as its own, a switch to another item replaces, and close goes back over that entry and replaces anywhere else, such as on a link. So X and back do the same, and back after X never reopens the item. X, Esc and back close it. The column hears Esc on `window`, after every `document` listener, so a handler that uses an Esc, such as a canvas deselecting or a list clearing a selection of several rows, calls `preventDefault` and the column closes on the next one.
 
 In an editor the bar that spans the screen is the editor bar. The detail takes the right slot under it and a right tool, such as the properties panel, yields while it is open; a left tool, such as Slides' rail, stays, with one top edge across. Under the bar no bar refolds as a detail opens, and the editor never remounts as the column opens, grows or closes, since it holds the document's collab session and undo. On a phone `PhoneDetail` gives the detail the whole screen and hides the main with a class, never a wrapper swap, so an editor or a grid stays mounted, and the bar's lone "‹" at the left closes it in place of X. Docs keeps its own `hidden` wrapper instead, which its outline pane shares. Sheets draws its bar inside the `Workbook`, so its right slot is the workbook's own `rightSlot`, under the menu bar and beside the formula bar, the grid and the tabs ([SHEETS.md](SHEETS.md)). Docs is the one editor whose right slot is an overlay rather than a sibling: the column lies over the page's right margin, never its text, and the page moves only as far as it must ([DOCS.md](DOCS.md#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 
@@ -246,6 +246,8 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 ## Lists compose hooks, not a shared list component
 
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`: `useListSelection`, `useKeyboardListNavigation`, `useListDrag`, `useListDropTarget` and `useContextMenu`. `email-list.tsx`, `PersonList` and `use-drive-item-controller.ts` are the working examples.
+
+**A list's Esc clears a selection of two or more rows and does nothing else.** With one row selected, which is the open one, `useKeyboardListNavigation` leaves the key alone and calls no `preventDefault`, so the detail column beside the list closes on it. In Drive, whose detail is not a `DetailColumn` yet, Esc on a single selected row now does nothing, and the row stays selected.
 
 A row's state is a class in `globals.css`, painted in the current app's color:
 

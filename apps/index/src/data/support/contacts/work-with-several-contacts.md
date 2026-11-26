@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, select, delete, labels, organize]
 related: [contacts/labels-and-groups, contacts/edit-or-delete, contacts/email-or-chat-a-contact]
 order: 80
-updated: 2026-11-03
+updated: 2026-11-26
 ---
 
 You can act on more than one contact at a time. Pick a group in the list, then delete them or change their labels in a single step.
@@ -19,7 +19,7 @@ You can act on more than one contact at a time. Pick a group in the list, then d
 
 Selected rows stay highlighted. Clicking with Cmd, Ctrl, or Shift only changes the selection, so the details panel stays where it is.
 
-The list also works from the keyboard. Press Cmd+A (Ctrl+A on Windows) to select everything currently listed, use the arrow keys to move through the list, hold Shift with an arrow key to extend the selection, and press Escape to clear it.
+The list also works from the keyboard. Press Cmd+A (Ctrl+A on Windows) to select everything currently listed, use the arrow keys to move through the list, hold Shift with an arrow key to extend the selection, and press Escape to clear a selection of two or more. With only the open contact selected, Escape closes its details instead.
 
 ## Open the menu on your selection
 

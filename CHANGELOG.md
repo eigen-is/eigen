@@ -36,6 +36,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Searching comments in Sheets, Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its cell, slide or shape
 - **Back buttons** — the back at the top left is a "‹" in every app on a phone, and Drive's text editor goes back with **‹ Files**
 - **Calendar's toolbar** — the previous and next arrows sit at the right, beside the view choice (the ⋮ menu on a phone), away from the back at the top left
+- **Details in Contacts and Admin** — Esc closes an open contact, user or team, and back after closing one doesn't open it again. A contact's details sit under small headings, in Drive's preview of a contact file too
 - **Lists in Contacts and Admin** — the list beside an open contact, user or team is wider on a computer. On a tablet these lists, Admin's waitlist and Drive's details panel are narrower, leaving more room beside them
 - **Cards and events** — events in Calendar are square, with the same flat shadow as cards in Stickies and comments in Docs, Sheets, Slides and Vector. Opened, a card, comment or event shows its title on top, then its details under small headings
 
