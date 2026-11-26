@@ -61,13 +61,14 @@ export function CanvasDocumentShell({
     const { isMobile, isTablet } = useLayout();
     const { column } = comments;
     const commentsColumn = column.open ? <CommentsColumn {...comments.columnProps} /> : null;
-    // The find bar floats clear of whatever holds the right slot, plus its own 16px gutter.
-    const rightPx =
-        !isMobile && column.open
-            ? columnWidthPx(column.threadOpen ? 'large' : 'medium', isTablet)
-            : canEdit
-              ? columnWidthPx('small', isTablet)
-              : 0;
+    // The find bar floats clear of whatever holds the right slot, plus its own 16px gutter. A phone's spans the screen.
+    const rightPx = isMobile
+        ? 0
+        : column.open
+          ? columnWidthPx(column.threadOpen ? 'large' : 'medium', isTablet)
+          : canEdit
+            ? columnWidthPx('small', isTablet)
+            : 0;
 
     return (
         // Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence.

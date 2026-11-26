@@ -140,12 +140,18 @@ let toggleComments: () => void = () => {};
 
 // Rows null leave the comment index unanswered, as on a landing before it loads. A browser history runs the router's
 // blockers on back, which a memory history skips.
-type Options = { isMobile?: boolean; rows?: CommentEntry[] | null; initialSearchTerm?: string; browser?: boolean };
+type Options = {
+    isMobile?: boolean;
+    rows?: CommentEntry[] | null;
+    initialSearchTerm?: string;
+    browser?: boolean;
+    canEdit?: boolean;
+};
 
 // The shell and its comments host under a route that reads the editor search, as the slide and vector routes do.
 async function openCanvas(
     entries: string[],
-    { isMobile = false, rows = [], initialSearchTerm, browser = false }: Options = {},
+    { isMobile = false, rows = [], initialSearchTerm, browser = false, canEdit = false }: Options = {},
 ) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     if (rows) queryClient.setQueryData(commentKeys.list('owner', 'mount', 'v1'), rows);
@@ -174,7 +180,7 @@ async function openCanvas(
             comments,
             path,
             canWrite: true,
-            canEdit: false,
+            canEdit,
             mediaFolderId: null,
             searchController,
             initialSearchTerm,
@@ -411,6 +417,15 @@ test("the find bar's inset follows the column as it grows into a thread", async 
     await click(listRow());
     expect(bar()?.style.right).toBe('416px');
     await click(button('Close'));
+    expect(bar()?.style.right).toBe('');
+});
+
+test('the find bar clears the properties panel on a desktop, and spans a phone', async () => {
+    await openCanvas(['/'], { initialSearchTerm: 'x', canEdit: true });
+    const bar = () => document.querySelector<HTMLElement>('.absolute.right-4.z-10');
+    expect(bar()?.style.right).toBe('272px');
+    await unmount();
+    await openCanvas(['/'], { initialSearchTerm: 'x', canEdit: true, isMobile: true });
     expect(bar()?.style.right).toBe('');
 });
 
