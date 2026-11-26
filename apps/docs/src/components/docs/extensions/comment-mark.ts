@@ -129,14 +129,13 @@ export function removeCommentAnchors(editor: Editor, cardId: string): void {
     editor.view.dispatch(tr);
 }
 
-// Says whether the card had an anchor to select.
+// Says whether the card had an anchor to select. It scrolls nothing: the caller places the anchor in the view.
 export function selectCommentAnchor(editor: Editor, cardId: string): boolean {
     const anchors = findCommentAnchors(editor.state.doc, cardId);
     if (anchors.length === 0) return false;
     const { node, pos } = anchors[0];
-    const chain = editor.chain().focus();
-    const selected = anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
-    selected.scrollIntoView().run();
+    const chain = editor.chain().focus(null, { scrollIntoView: false });
+    (anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos)).run();
     return true;
 }
 

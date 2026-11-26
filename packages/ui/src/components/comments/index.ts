@@ -13,7 +13,7 @@ export { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 export { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 export { CommentPanel } from './comment-panel';
 export { CommentThread } from './comment-thread';
-export { CommentsColumn } from './comments-column';
+export { CommentsColumn, THREAD_BLOCK_TOP_PX } from './comments-column';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';

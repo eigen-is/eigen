@@ -29,6 +29,9 @@ import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
 import type { CommentsColumnState } from './use-comments-column';
 
+// The open thread's colored block sits this far below the column's top: under the bar's h-12 and the card body's pt-1.
+export const THREAD_BLOCK_TOP_PX = 48 + 4;
+
 type CommentsColumnProps = {
     column: CommentsColumnState;
     lifecycle: ReturnType<typeof useCommentLifecycle>;

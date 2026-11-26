@@ -160,7 +160,7 @@ test("a deleted card leaves no anchor: its text's mark, its figure's and its equ
     editor.destroy();
 });
 
-test("scrolling to an equation's card selects the equation", () => {
+test("a reveal of an equation's card selects the equation", () => {
     const editor = new Editor({
         extensions: getDocExtensions(),
         content: docOf(text('a '), equation('x', 'card-1')),

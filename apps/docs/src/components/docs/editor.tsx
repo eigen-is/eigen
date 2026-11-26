@@ -42,6 +42,7 @@ import {
     CommentLifecycleMenuItems,
     CommentMenuItems,
     CommentsColumn,
+    THREAD_BLOCK_TOP_PX,
     useCommentsColumn,
 } from '@workspace/ui/components/comments';
 import {
@@ -491,11 +492,21 @@ const TiptapEditor = ({
         ready: activeComments.ready,
         panel,
         chat,
-        // A list row, an activity row and a landing select the comment's anchor in the body.
+        // A list row, an activity row and a landing select the comment's anchor in the body, and scroll it level with
+        // the comment's block in the thread beside it, whose top is the scroller's.
         reveal: (cardId) => {
-            const found = selectCommentAnchor(editor, cardId);
-            if (found) setEditingBand(null);
-            return found;
+            if (!selectCommentAnchor(editor, cardId)) return false;
+            setEditingBand(null);
+            const scroller = scrollContainerRef.current;
+            if (scroller) {
+                const top = editor.view.coordsAtPos(editor.state.selection.from).top;
+                const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                scroller.scrollTo({
+                    top: scroller.scrollTop + top - scroller.getBoundingClientRect().top - THREAD_BLOCK_TOP_PX,
+                    behavior: reduceMotion ? 'auto' : 'smooth',
+                });
+            }
+            return true;
         },
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount } = lifecycle;

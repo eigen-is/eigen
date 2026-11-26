@@ -32,6 +32,7 @@ const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_CHAT, DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { THREAD_BLOCK_TOP_PX } = await import('@workspace/ui/components/comments');
 const { CommandPaletteProvider } = await import('@workspace/ui/components/layout/app');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
@@ -107,6 +108,7 @@ beforeEach(() => {
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
     commentRows = [];
+    window.happyDOM.settings.device.prefersReducedMotion = 'no-preference';
     // The outline's shown or hidden, which the browser remembers.
     localStorage.clear();
 });
@@ -2002,6 +2004,31 @@ test("a click on a comment's text opens its thread and leaves the caret; a list 
     await waitUntil(() => chatParam() === 'thread-1.eigenchat', 'the thread from the list');
     expect(bodyEditor().state.selection.from).toBe(8);
 });
+
+// The scroller's top is 100 and the anchor's 700, so the anchor lands level with the comment's block in the column.
+test.each([
+    ['no-preference', 'smooth'],
+    ['reduce', 'auto'],
+] as const)(
+    "a list row scrolls its anchor level with the comment's block, with motion %s: %s",
+    async (motion, behavior) => {
+        window.happyDOM.settings.device.prefersReducedMotion = motion;
+        write('default', 'Hello', { comment: { cardId: 'c1' } });
+        writeCard();
+        await render({ ...WRITER, chatFolderId: 'chat' });
+        const scroller = bodyView()?.closest<HTMLElement>('.overflow-y-scroll');
+        if (!scroller) throw new Error('no scroller');
+        scroller.scrollTop = 300;
+        spyOn(scroller, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 800, 900));
+        spyOn(bodyEditor().view, 'coordsAtPos').mockReturnValue({ left: 0, right: 0, top: 700, bottom: 720 });
+        const scrollTo = spyOn(scroller, 'scrollTo').mockImplementation(() => {});
+        await act(async () => button('Comments')?.click());
+        await waitUntil(() => listRow() !== undefined, 'the list row');
+        await inBrowserFrames(() => listRow()?.click());
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+        expect(scrollTo).toHaveBeenCalledWith({ top: 300 + 700 - 100 - THREAD_BLOCK_TOP_PX, behavior });
+    },
+);
 
 test('the editor is never rebuilt or remounted as the column opens, drills into a thread, goes back and closes', async () => {
     write('default', 'Hello', { comment: { cardId: 'c1' } });
