@@ -610,7 +610,7 @@ test('a timed event is a block at its minutes, with its title, time and place', 
     const { container } = await open('/view/day/2026-10-13');
     const block = pill(container, 'Planning');
     expect(block?.textContent).toBe('Planning09:00 – 10:30Room 4');
-    expect(block?.getAttribute('style')).toContain('top: 432px; height: 72px;');
+    expect(block?.getAttribute('style')).toContain('top: 432px; height: 71px;');
 });
 
 test('a short block puts its title and start on one line', async () => {

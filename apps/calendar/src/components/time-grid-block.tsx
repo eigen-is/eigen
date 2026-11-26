@@ -20,6 +20,9 @@ export const HOUR_HEIGHT = 48;
 // A block's text lines are text-xs at leading-4, inside 2px of padding above and below.
 const LINE_HEIGHT = 16;
 const BLOCK_PADDING = 4;
+// A block stops a pixel short of its slot's bottom and right, so its shadow shows between back-to-back and side-by-side
+// events. A ring in the background color would part them too, but Tailwind paints a ring over the shadow.
+const BLOCK_GAP_PX = 1;
 // A button centers its content, so the lines stack from the top as a column.
 const BLOCK = cn('absolute flex flex-col justify-start px-1 py-0.5', STRIPE_INSET);
 
@@ -41,12 +44,12 @@ export function TimedEventBlock({ block, className, onResizeStart, ...surfacePro
         <EventSurface
             event={event}
             {...surfaceProps}
-            className={cn(BLOCK, 'ring-1 ring-background', className)}
+            className={cn(BLOCK, className)}
             style={{
                 top: minutesToPx(block.top),
-                height,
+                height: height - BLOCK_GAP_PX,
                 left: `${(block.column / block.columns) * 100}%`,
-                width: `${(block.span / block.columns) * 100}%`,
+                width: `calc(${(block.span / block.columns) * 100}% - ${BLOCK_GAP_PX}px)`,
             }}
         >
             {lines < 2 ? (
@@ -80,11 +83,11 @@ export function DraftBlock({ day, top, bottom, color }: { day: Date; top: number
     return (
         <div
             className={cn(
-                'eigen-block pointer-events-none inset-x-0 overflow-hidden text-xs leading-4',
+                'eigen-block pointer-events-none left-0 overflow-hidden text-xs leading-4',
                 BLOCK,
                 surface.className,
             )}
-            style={{ ...surface.style, top: minutesToPx(top), height }}
+            style={{ ...surface.style, top: minutesToPx(top), height: height - BLOCK_GAP_PX, right: BLOCK_GAP_PX }}
         >
             {textLines(height) < 2 ? (
                 <span className="block truncate">
