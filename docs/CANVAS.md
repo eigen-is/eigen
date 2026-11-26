@@ -160,6 +160,8 @@ A pan or zoom writes `viewportRef` and one animation frame sets the transform of
 
 Anything that must be exact mid-gesture reads the ref: scene conversion, hit-test thresholds, the drawing tools' screen-px radii. React's `zoom` lags behind a gesture, so only chrome layout may use it.
 
+The scroll is stored in scene units, Excalidraw's convention: a scene point sits at `(scene + scroll) × zoom` px in the container, and the scene layer, the overlay group and the chrome share that origin. While a drag runs (`frozenRef`) the wheel and a pan start wait, because the drag captured its scene scale and its rotate pivot at pointerdown and a pan or zoom under it would make both wrong; a pinch is the gesture itself, so it still zooms.
+
 ## Frame mode always shows the whole page
 
 Frame mode fits the page on open, on every resize, on every frame switch and on every change of the page's size (`fitFrameViewport` in `packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle` (`packages/ui/src/components/vector/hooks/use-viewport.ts`), which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
