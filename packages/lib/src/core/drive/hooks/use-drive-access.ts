@@ -191,12 +191,13 @@ export function useCanWriteByName(path: DrivePath | null): boolean {
     return crumbs.some((crumb) => !!crumb.acl?.some((entry) => entry.write && holdsWrite(entry)));
 }
 
-// Whether the user may change who has access: write held by name, unless the owner restricted sharing.
+// Whether the user may change who has access: write held by name, unless the owner restricted sharing. Nobody changes
+// it on an item in the trash, whose access stays as it was for the restore.
 export function useCanShare(path: DrivePath): boolean {
     const isGuest = useIsGuest();
     const isOwner = useIsEffectiveOwner(path.ownerId);
     const writesByName = useCanWriteByName(path);
-    if (isGuest || !writesByName) return false;
+    if (isGuest || path.trashedAt || !writesByName) return false;
     return isOwner || !path.sharingRestricted;
 }
 
