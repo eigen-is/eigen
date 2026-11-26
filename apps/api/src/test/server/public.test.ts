@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { PublicUser } from '@workspace/lib/types/public';
 import type { LandingLink } from '@workspace/lib/types/settings';
 import type { getPublicConfig } from '../../lib/config/server-config';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import { assertJson, authedRequest, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // All /p/* routes are intentionally PUBLIC (unauthenticated) — that is what the /p/ prefix means.
@@ -82,6 +83,30 @@ describe('Public Routes', () => {
                 expect(off.mailEnabled).toBe(false);
             } finally {
                 delete process.env['MAIL_ENABLED'];
+            }
+        });
+
+        test('reports whether public links are on: the setting, and never on a demo server', async () => {
+            const config = async () =>
+                (
+                    await assertJson<{ publicLinks: boolean }>(
+                        await ctx.app.handle(new Request('http://localhost/p/config')),
+                    )
+                ).publicLinks;
+            expect(await config()).toBe(true);
+
+            process.env['EIGEN_DEMO'] = '1';
+            try {
+                expect(await config()).toBe(false);
+            } finally {
+                delete process.env['EIGEN_DEMO'];
+            }
+
+            await updateServerSettings({ sharing: { publicLinks: false } });
+            try {
+                expect(await config()).toBe(false);
+            } finally {
+                await updateServerSettings({ sharing: { publicLinks: true } });
             }
         });
 
