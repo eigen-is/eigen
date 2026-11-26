@@ -1,6 +1,7 @@
 // Create user keeps the dialog contract and turns the username into an address on the server's mail domain:
-// lowercase, and anything an admin pastes after an @ dropped. Create with a field missing or wrong names the problem
-// under each field and creates nothing, and the dialog shows no form until the server's config has loaded.
+// lowercase, and anything an admin pastes after an @ dropped. It suggests a password in clear text, so Chrome fills in
+// no saved login, with a button that copies it. Create with a field missing or wrong names the problem under each
+// field and creates nothing, and the dialog shows no form until the server's config has loaded.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { expectFormContract, field, type } from '@workspace/ui/test/form-contract';
@@ -11,6 +12,7 @@ installHappyDom();
 
 type CreateUserInput = { name: string; email: string; password: string; role: 'admin' | 'member' };
 const createUser = mock(async (_input: CreateUserInput) => {});
+const writeText = mock(async (_text: string) => {});
 let config: { data: { orgId: string; mailDomain: string } | undefined } = {
     data: { orgId: 'org-1', mailDomain: 'example.org' },
 };
@@ -34,6 +36,8 @@ let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
     createUser.mockClear();
+    writeText.mockClear();
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     config = { data: { orgId: 'org-1', mailDomain: 'example.org' } };
 });
 
@@ -76,12 +80,24 @@ test("the username becomes a lowercase address on the server's domain, and the d
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
+test('it suggests a clear-text password of twelve characters, and the button copies it', async () => {
+    ({ unmount } = await renderInDocument(createElement(Toolbar)));
+    const password = field('Password');
+    if (!(password instanceof HTMLInputElement)) throw new Error('no password input');
+    expect(password.type).toBe('text');
+    expect(password.value).toMatch(/^[a-zA-Z2-9]{12}$/);
+    expect(field('Username').getAttribute('autocomplete')).toBe('off');
+
+    await act(async () => document.querySelector<HTMLButtonElement>('[aria-label="Copy password"]')?.click());
+    expect(writeText.mock.calls).toEqual([[password.value]]);
+});
+
 test('Create with every field missing or wrong names each problem under its field', async () => {
     ({ unmount } = await renderInDocument(createElement(Toolbar)));
     await create();
     expect(messageUnder('Name')).toBe('Add a name');
     expect(messageUnder('Username')).toBe('Add a username');
-    expect(messageUnder('Password')).toBe(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    expect(messageUnder('Password')).toBeUndefined();
     expect(document.activeElement).toBe(field('Name'));
 
     await fill({ Name: 'Ada', Username: 'a', Password: 'x'.repeat(MIN_PASSWORD_LENGTH - 1) });

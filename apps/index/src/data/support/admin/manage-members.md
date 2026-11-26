@@ -17,7 +17,7 @@ Members are the people with full accounts on your Eigen server. You manage them 
 
 1. Open [**Users**](/admin/users) in Admin.
 2. Click the **+** button in the toolbar.
-3. Fill in the **Name**, **Username**, and **Password** fields. The username becomes the person's email address on your mail domain. The password needs at least 8 characters. A field that is empty or wrong says so under it when you click **Create**, and nothing is created until you fix it.
+3. Fill in the **Name** and **Username** fields. The username becomes the person's email address on your mail domain. A random **Password** is pre-filled; you can replace it with your own of at least 8 characters, and the copy button next to it copies it. A field that is empty or wrong says so under it when you click **Create**, and nothing is created until you fix it.
 4. Set the **Role**: **Member** for a regular account, or **Admin** to give the person admin access.
 5. Click **Create**.
 
@@ -37,7 +37,7 @@ You can set a new password for any non-owner member, for example if they are loc
 
 1. Click the member's name to open their detail panel.
 2. Click the key icon in the toolbar to open **Reset password for [name]**.
-3. A new password is pre-filled. You can replace it with your own if you prefer. A password shorter than 8 characters says so under the field, and nothing changes until it is long enough.
+3. A new password is pre-filled. You can replace it with your own if you prefer, and the copy button next to it copies it. A password shorter than 8 characters says so under the field, and nothing changes until it is long enough.
 4. Click **Reset password**.
 
 The dialog generates a random password. The reset signs the person out on every device, and their [app passwords](/support/connect/app-passwords) stop working, so they add new ones in their mail, calendar and file apps. Share the new password with them securely. They can change it themselves from [Security settings](/space/security/password) after signing in.
