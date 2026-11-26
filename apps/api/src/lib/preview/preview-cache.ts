@@ -154,6 +154,9 @@ type Served<T> = { value: T; stale: boolean };
 // ignores it.
 type TextPreviewGenerator = (priority: TransformPriority) => Promise<PreviewResult | null>;
 
+// The first miss's priority is asked for only on a miss, since deciding it reads the file's ancestors.
+type MissPriority = () => Promise<TransformPriority>;
+
 // A body the parser rejects counts as a corrupt file.
 type CachedTextParser<T> = (cached: PreviewResult) => T;
 
@@ -190,7 +193,7 @@ async function getOrCacheText<T>(
     format: string,
     parse: CachedTextParser<T>,
     generate: TextPreviewGenerator,
-    firstMiss: TransformPriority,
+    firstMiss: MissPriority,
 ): Promise<Served<T> | null> {
     const pathId = drivePath.id;
     const cacheName = textCacheName(drivePath, format);
@@ -231,7 +234,7 @@ async function getOrCacheText<T>(
     }
     if (failed) return null;
 
-    const generated = await generateText(firstMiss);
+    const generated = await generateText(await firstMiss());
     return generated?.body ? { value: parse(generated), stale: false } : null;
 }
 
@@ -322,7 +325,7 @@ export async function getScreenPreview(
 export async function getTextPreview(
     mount: Mount,
     drivePath: DrivePath,
-    firstMiss: TransformPriority,
+    firstMiss: MissPriority,
 ): Promise<Served<TextPreviewResult> | null> {
     const documentType = isCollabType(drivePath.type) ? COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType) : undefined;
     const mode = documentType ?? getBytesTextPreviewMode(drivePath.mimeType, drivePath.name);
@@ -375,7 +378,7 @@ export function assertVCardPreviewable(fileName: string, contentType: string, si
 export async function getVCardPreview(
     mount: Mount,
     drivePath: DrivePath,
-    firstMiss: TransformPriority,
+    firstMiss: MissPriority,
 ): Promise<Served<VCardPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
@@ -401,7 +404,7 @@ export function assertEmlPreviewable(fileName: string, contentType: string, size
 export async function getEmlPreview(
     mount: Mount,
     drivePath: DrivePath,
-    firstMiss: TransformPriority,
+    firstMiss: MissPriority,
 ): Promise<Served<EmlPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
@@ -427,7 +430,7 @@ export function assertIcsPreviewable(fileName: string, contentType: string, size
 export async function getIcsPreview(
     mount: Mount,
     drivePath: DrivePath,
-    firstMiss: TransformPriority,
+    firstMiss: MissPriority,
 ): Promise<Served<IcsPreview> | null> {
     return getOrCacheText(
         mount.previewsDir,
