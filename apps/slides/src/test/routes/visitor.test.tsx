@@ -30,11 +30,14 @@ const open = (url: string) => server.open(routeTree, url);
 
 const URL_OF = (pathId: string) => `/slide/${OWNER}/default/${pathId}`;
 const READ_ONLY = "You can only read this document because you're set to Viewer";
+// A visitor has no role, so the marker doesn't name one.
+const VISITOR_READ_ONLY = 'You can view this document';
 
 test('a visitor reads a public slides, with its name in the bar, and asks only for what the link opens', async () => {
     const router = await open(URL_OF('pub'));
     expect(router.state.location.pathname).toBe(URL_OF('pub'));
-    expect(labelled(READ_ONLY)).not.toBeNull();
+    expect(labelled(VISITOR_READ_ONLY)).not.toBeNull();
+    expect(labelled(READ_ONLY)).toBeNull();
     expect(document.querySelector('header')?.textContent).toContain('Holiday');
     expect(labelled('Log in')).not.toBeNull();
     expect(labelled('Share')).toBeNull();
