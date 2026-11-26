@@ -1,10 +1,13 @@
-// The `_auth` route guard of every app with a signed-in area. Its beforeLoad sends a signed-out visitor to /login
-// with a way back, and hands the signed-in user to every child route's context, so a page under `_auth` reads a
-// user that is always there. Apps with no guest surface, such as Mail, also send a guest out to Drive.
+// The route guards of every app with a signed-in area. The `_auth` guard sends a signed-out visitor to /login with
+// a way back, and hands the signed-in user to every child route's context, so a page under `_auth` reads a user that
+// is always there. Apps with no guest surface, such as Mail, also send a guest out to Drive. The link guard sits on
+// the pages a public link opens, such as Drive's folder page, and lets a visitor in only to an item they may read.
 
 import { Outlet, redirect } from '@tanstack/react-router';
 import { getDriveAppUrl } from '@workspace/lib/api';
+import { fetchPathPermissions } from '@workspace/lib/drive';
 import type { RouterAppContext } from '@workspace/lib/types/auth';
+import type { DrivePathRef } from '@workspace/lib/types/drive';
 
 function AuthOutlet() {
     return <Outlet />;
@@ -14,17 +17,7 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
     return {
         beforeLoad: ({ context, location }: { context: RouterAppContext; location: { href: string } }) => {
             const { user } = context.auth;
-            if (!user) {
-                // Widened like login-route's `to`: this file compiles in every app's Register,
-                // including apps without a /login route of their own (the index app).
-                const loginPath: string = '/login';
-                throw redirect({
-                    to: loginPath,
-                    search: {
-                        redirect: location.href,
-                    },
-                });
-            }
+            if (!user) throw loginRedirect(location);
             if (redirectGuests && user.role === 'guest') {
                 window.location.href = getDriveAppUrl();
             }
@@ -32,4 +25,28 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
         },
         component: AuthOutlet,
     };
+}
+
+// The item is the one the URL names, or null where it names none, such as Drive's root alias. A failed answer, such
+// as the 404 of an unknown owner, sends the visitor to log in as a closed item does.
+export async function guardLinkRoute(
+    { auth }: RouterAppContext,
+    location: { href: string },
+    item: DrivePathRef | null,
+): Promise<void> {
+    if (auth.user) return;
+    const canRead = item
+        ? await fetchPathPermissions(item).then(
+              (permissions) => permissions.canRead,
+              () => false,
+          )
+        : false;
+    if (!canRead) throw loginRedirect(location);
+}
+
+function loginRedirect(location: { href: string }) {
+    // Widened like login-route's `to`: this file compiles in every app's Register,
+    // including apps without a /login route of their own (the index app).
+    const loginPath: string = '/login';
+    return redirect({ to: loginPath, search: { redirect: location.href } });
 }
