@@ -84,7 +84,8 @@ const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
 
 // Every request answers empty, but the chat folder, which lists one thread, the thread's own path, which an open card
-// reads for its name, and an upload, which answers when the test lets it.
+// reads for its name, the thread's permissions, which let the writer reply, and an upload, which answers when the test
+// lets it.
 const thread = { ...path, id: 'chat-a', name: 'thread-1.eigenchat', parentId: 'chat', mimeType: DRIVE_MIME_CHAT };
 const finishUpload = answerUploads(path);
 let commentRows: object[] = [];
@@ -93,6 +94,7 @@ spyOn(globalThis, 'fetch').mockImplementation(
         async (input: RequestInfo | URL) => {
             if (String(input).endsWith('/folder/chat')) return Response.json([thread]);
             if (String(input).endsWith('/path/chat-a')) return Response.json(thread);
+            if (String(input).endsWith('/path/chat-a/permissions')) return Response.json({ canWrite: true });
             if (String(input).endsWith('/comments')) return Response.json(commentRows);
             return Response.json([]);
         },
@@ -149,8 +151,8 @@ async function render({
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
-        // The route reads ?chat=, as the doc route does.
-        const search: { chat?: string } = useSearch({ strict: false });
+        // The route reads ?panel= and ?chat=, as the doc route does.
+        const search: { panel?: 'comments' | 'activity'; chat?: string } = useSearch({ strict: false });
         // The editor route provides the document's media resolver.
         return createElement(MediaResolverProvider, {
             ownerId: path.ownerId,
@@ -163,6 +165,7 @@ async function render({
                 mediaFolderId,
                 chatFolderId,
                 onAccessDialogOpen: () => {},
+                panel: search.panel,
                 chat: search.chat,
             }),
         });
@@ -592,38 +595,37 @@ test('a link to a comment whose text was deleted opens it as deleted, its thread
     doc.getMap('comments').set('c1', stored);
     write('default', 'Hello');
     await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
-    await waitUntil(
-        () => document.body.textContent?.includes('This comment was deleted') === true,
-        'the deleted state',
-    );
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Check this');
-    expect(document.querySelector('[role="dialog"] [contenteditable="true"]')).toBeNull();
+    await waitUntil(() => threadText().includes('This comment was deleted'), 'the deleted state');
+    expect(threadText()).toContain('Check this');
+    expect(document.querySelector('[data-slot="detail-column"] [contenteditable="true"]')).toBeNull();
 });
 
-// The open thread is the URL's ?chat=, so closing the card takes it out, and a reload no longer opens it again. A
-// ?chat= that names no comment is dropped the same way, without a history entry.
-test('a link opens its comment, and closing the card takes ?chat= out of the URL', async () => {
-    const stored = new Y.Map<unknown>();
-    stored.set('title', 'Check this');
-    stored.set('chatName', 'thread-1.eigenchat');
-    doc.getMap('comments').set('c1', stored);
+// The open thread is the URL's ?chat=, so closing the column takes it out, and a reload no longer opens it again. A
+// link is no push of ours, so the close replaces. The landing selects the comment's text, once it has loaded.
+test("a link opens its comment's thread and selects its text, and closing the column takes ?chat= out", async () => {
+    writeCard();
+    write('default', 'Intro');
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
-    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
-    const close = document.querySelector<HTMLElement>('button[aria-label="Close"]');
-    if (!close) throw new Error('no Close button');
-    await act(async () => close.click());
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
+    expect(detailColumn()?.style.width).toBe('400px');
+    await waitUntil(() => bodyEditor().state.selection.from === 8, 'the anchor selected');
+    await act(async () => columnButton('Close')?.click());
     await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(panelParam()).toBeNull();
     expect(routerHistory.location.state.__TSR_index).toBe(1);
-    await waitUntil(() => document.querySelector('[role="dialog"]') === null, 'the card to close');
+    await waitUntil(() => detailColumn() === null, 'the column to close');
 });
 
-test('a link to a comment that does not exist is dropped by replace', async () => {
+test('a link to a comment that does not exist lands on the list by replace', async () => {
     write('default', 'Hello');
     await render({ ...WRITER, chatFolderId: 'chats', chat: 'nothing' });
     await waitUntil(() => chatParam() === null, 'the URL without ?chat=');
+    expect(panelParam()).toBe('comments');
     expect(routerHistory.location.state.__TSR_index).toBe(1);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(detailColumn()?.style.width).toBe('256px');
+    expect(threadLayer()).toBeNull();
 });
 
 test('word count from a band counts the body, and gives focus back to the band', async () => {
@@ -1504,15 +1506,25 @@ function writeCard() {
     doc.getMap('comments').set('c1', card);
 }
 
-const commentsPanelShown = () =>
-    [...document.querySelectorAll('.eigen-toolbar-title')].some((title) => title.textContent === 'Comments');
-const cardDialogText = () => document.querySelector('[role="dialog"]')?.textContent ?? '';
+// The comments column, its bar's buttons, a row in its list, and the thread it drilled into.
+const detailColumn = () => document.querySelector<HTMLElement>('[data-slot="detail-column"] > div');
+const columnButton = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>('[data-slot="detail-column"] button')].find(
+        (b) => b.getAttribute('aria-label') === name || b.textContent?.trim() === name,
+    );
+const listRow = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-slot="detail-column"] .line-clamp-2')].find(
+        (title) => title.textContent === 'Check this',
+    );
+const threadLayer = () => document.querySelector('[data-slot="detail-column"] .absolute.flex-col');
+const threadText = () => threadLayer()?.textContent ?? '';
+const panelParam = () => new URLSearchParams(routerHistory.location.search).get('panel');
 
 test.each([
     ['an image', writeFigure],
     ['a chart', writeChart],
     ['a text box', writeTextBox],
-])('the comment mark on %s opens its card beside the comments panel', async (_, writeNode) => {
+])('the comment mark on %s opens its thread in the comments column', async (_, writeNode) => {
     writeNode();
     const paragraph = doc.getXmlFragment('default').get(0);
     const node = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
@@ -1523,11 +1535,10 @@ test.each([
     const mark = bodyView()?.querySelector<HTMLElement>('button[aria-label="Open comment"]');
     if (!mark) throw new Error('no comment mark');
     await act(async () => mark.click());
-    expect(commentsPanelShown()).toBe(true);
-    // The click writes ?chat=, and the card opens from the URL.
-    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
+    // The click writes ?chat=, and the thread opens from the URL.
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
     expect(chatParam()).toBe('thread-1.eigenchat');
-    expect(cardDialogText()).not.toContain('This comment was deleted');
+    expect(threadText()).not.toContain('This comment was deleted');
 });
 
 // The image's menu asks before it deletes a comment, as a card's own menu does.
@@ -1549,7 +1560,9 @@ test("Delete comment on an image's menu asks first: Cancel keeps the comment, De
     };
 
     await deleteComment();
-    expect(cardDialogText()).toContain('This deletes the comment and its replies');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+        'This deletes the comment and its replies',
+    );
     expect(figure.getAttribute('commentCardId')).toBe('c1');
     await act(async () => button('Cancel')?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -1624,7 +1637,7 @@ test('a press within the pause shows no card, as for a drag-select that starts o
     expect(hoverCardShown()).toBeFalsy();
 });
 
-test('a click on the hover card opens the card beside the comments panel', async () => {
+test('a click on the hover card opens its thread in the comments column', async () => {
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
     await render({ ...WRITER, chatFolderId: 'chat' });
@@ -1634,9 +1647,8 @@ test('a click on the hover card opens the card beside the comments panel', async
     await waitUntil(() => hoverCardShown() === true, 'the hover card');
     const card = document.querySelector<HTMLElement>('[data-slot="popover-content"] .line-clamp-2');
     await act(async () => card?.click());
-    expect(commentsPanelShown()).toBe(true);
-    expect(cardDialogText()).toContain('Check this');
-    expect(cardDialogText()).not.toContain('This comment was deleted');
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
     expect(hoverCardShown()).toBeFalsy();
 });
 
@@ -1903,22 +1915,152 @@ test("a viewer's right-click on a table of contents opens no menu and leaves the
     expect(event.defaultPrevented).toBe(false);
 });
 
-// The palette's comment search reveals a thread by its chat name: the card opens over the comments panel, and on a
-// desktop the caret goes to its anchor in the body. On a phone the comments pane takes the screen.
+// The palette's comment search reveals a thread by its chat name: it opens in the comments column, and on a desktop
+// the caret goes to its anchor in the body. On a phone the column takes the screen.
 test.each([
     ['a desktop', WRITER],
     ['a phone', PHONE],
-])('on %s a comment search hit opens its card over the comments panel', async (_, as) => {
+])('on %s a comment search hit opens its thread in the comments column', async (_, as) => {
     write('default', 'Intro');
     write('default', 'Hello', { comment: { cardId: 'c1' } });
     writeCard();
     await render({ ...as, chatFolderId: 'chat' });
     await waitUntil(() => palette?.docCommentSearch != null, 'the comment search');
     await act(async () => palette?.docCommentSearch?.reveal('thread-1.eigenchat'));
-    expect(commentsPanelShown()).toBe(true);
-    await waitUntil(() => cardDialogText().includes('Check this'), 'the card');
-    expect(cardDialogText()).not.toContain('This comment was deleted');
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(threadText()).not.toContain('This comment was deleted');
     // The caret goes to the anchor, at the start of the second paragraph, only where the body shows.
     expect(bodyEditor().state.selection.from).toBe(as.isMobile ? 1 : 8);
     expect(bodyView()?.closest('.hidden') != null).toBe(as.isMobile);
+});
+
+const pressEscapeOnPage = () =>
+    act(async () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+
+// A click on a comment's highlighted text, as ProseMirror hands it to the comment mark after the browser placed the
+// caret.
+async function clickCommentText() {
+    const span = bodyView()?.querySelector('.comment-highlight');
+    if (!span) throw new Error('no highlight');
+    const click = new MouseEvent('click', { bubbles: true });
+    span.dispatchEvent(click);
+    const { view } = bodyEditor();
+    await act(async () => void view.someProp('handleClick', (handle) => handle(view, 9, click)));
+}
+
+// The toolbar's toggles open the comments column at its list, 256 wide like the properties panel it takes turns with,
+// pushing ?panel=, so X, Esc and back close it.
+test.each([
+    ['Comments', 'comments'],
+    ['Activity', 'activity'],
+])(
+    '%s in the toolbar pushes ?panel=%s and opens its list in the column, which X and Esc close',
+    async (label, panel) => {
+        write('default', 'Hello');
+        await render({ ...WRITER, chatFolderId: 'chat' });
+        await act(async () => button(label)?.click());
+        expect(panelParam()).toBe(panel);
+        expect(routerHistory.location.state.__TSR_index).toBe(1);
+        expect(detailColumn()?.style.width).toBe('256px');
+        expect(detailColumn()?.querySelector('.eigen-toolbar-title')?.textContent).toBe(label);
+
+        await act(async () => columnButton('Close')?.click());
+        await waitUntil(() => panelParam() === null, 'the URL without ?panel=');
+        expect(routerHistory.location.state.__TSR_index).toBe(0);
+        await waitUntil(() => detailColumn() === null, 'the column to close');
+
+        await act(async () => button(label)?.click());
+        expect(panelParam()).toBe(panel);
+        await pressEscapeOnPage();
+        await waitUntil(() => panelParam() === null, 'Esc to close it');
+        await waitUntil(() => detailColumn() === null, 'the column to close');
+    },
+);
+
+// A selected anchor would make the next keystroke replace the commented text, so the text's own click leaves the caret
+// where it landed; the list, which is away from the page, selects the anchor to show where the comment is.
+test("a click on a comment's text opens its thread and leaves the caret; a list row opens it and selects the text", async () => {
+    write('default', 'Intro');
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await act(async () => void bodyEditor().commands.setTextSelection(3));
+    await clickCommentText();
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(chatParam()).toBe('thread-1.eigenchat');
+    expect(detailColumn()?.style.width).toBe('400px');
+    expect(bodyEditor().state.selection.from).toBe(3);
+    expect(bodyEditor().state.selection.empty).toBe(true);
+
+    await act(async () => columnButton('Comments')?.click());
+    await waitUntil(() => chatParam() === null, 'back to the list');
+    expect(panelParam()).toBe('comments');
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    await act(async () => listRow()?.click());
+    await waitUntil(() => chatParam() === 'thread-1.eigenchat', 'the thread from the list');
+    expect(bodyEditor().state.selection.from).toBe(8);
+});
+
+test('the editor is never rebuilt or remounted as the column opens, drills into a thread, goes back and closes', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    const editor = bodyEditor();
+    const view = bodyView();
+    const same = () => bodyEditor() === editor && bodyView() === view;
+    await act(async () => button('Comments')?.click());
+    expect(same()).toBe(true);
+    await waitUntil(() => listRow() !== undefined, 'the list row');
+    await act(async () => listRow()?.click());
+    await waitUntil(() => threadText().includes('Check this'), 'the thread');
+    expect(same()).toBe(true);
+    await act(async () => columnButton('Comments')?.click());
+    await waitUntil(() => chatParam() === null, 'back to the list');
+    expect(same()).toBe(true);
+    await act(async () => columnButton('Close')?.click());
+    await waitUntil(() => detailColumn() === null, 'the column to close');
+    expect(same()).toBe(true);
+});
+
+// The find bar floats clear of whatever holds the right slot, plus its own 16px gutter.
+test("the find bar keeps clear of the right slot: none empty, a panel's or the list's 256, a thread's 400", async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat' });
+    await inBrowserFrames(() => button(`Find in document (${formatForDisplay('Mod+F')})`)?.click());
+    const bar = () => document.querySelector<HTMLElement>('.top-14');
+    expect(bar()?.style.right).toBe('');
+    await act(async () => button('Comments')?.click());
+    expect(bar()?.style.right).toBe('272px');
+    await clickCommentText();
+    await waitUntil(() => chatParam() === 'thread-1.eigenchat', 'the thread');
+    expect(bar()?.style.right).toBe('416px');
+    await act(async () => columnButton('Close')?.click());
+    await waitUntil(() => detailColumn() === null, 'the column to close');
+    expect(bar()?.style.right).toBe('');
+    await act(async () => void bodyEditor().commands.insertTable({ rows: 2, cols: 2 }));
+    expect(bar()?.style.right).toBe('272px');
+});
+
+// The editor's undo is its own keymap, so a ⌘Z in the thread's reply box never reaches the document.
+test('⌘Z in the reply box leaves the document as it is', async () => {
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await act(async () => void bodyEditor().chain().focus('end').insertContent(' world').run());
+    expect(bodyEditor().getText()).toBe('Hello world');
+    const replyBox = () => document.querySelector<HTMLTextAreaElement>('[data-slot="detail-column"] textarea');
+    await waitUntil(() => replyBox() !== null, 'the reply box');
+    await act(async () => replyBox()?.focus());
+    expect(document.activeElement).toBe(replyBox());
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+        await act(async () => {
+            replyBox()?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'z', bubbles: true, cancelable: true, ...modifier }),
+            );
+        });
+    }
+    expect(bodyEditor().getText()).toBe('Hello world');
 });
