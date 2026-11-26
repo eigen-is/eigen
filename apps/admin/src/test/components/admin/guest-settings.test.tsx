@@ -101,7 +101,7 @@ test('Allow public links shows the saved value, saves what changed with the gues
     await openPage();
     const toggle = field(PUBLIC_LINKS);
     expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(document.getElementById(toggle.getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+    expect(document.body.textContent).toContain(
         'Members can share a file, folder or document with anyone who has its link. No account needed.',
     );
 

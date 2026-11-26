@@ -65,21 +65,21 @@ function GuestSettingsForm(loaded: GuestAccessSettings) {
                     />
                     <Label htmlFor={`${fieldId}-open-signup`}>Allow open guest signup</Label>
                 </div>
-                <div className="space-y-1.5">
-                    <div className="flex items-center gap-3">
-                        <Switch
-                            id={`${fieldId}-public-links`}
-                            aria-describedby={`${fieldId}-public-links-description`}
-                            checked={current.sharing.publicLinks}
-                            onCheckedChange={(publicLinks) =>
-                                setDraft((prev) => ({ ...prev, sharing: { publicLinks } }))
-                            }
-                        />
-                        <Label htmlFor={`${fieldId}-public-links`}>Allow public links</Label>
-                    </div>
-                    <p id={`${fieldId}-public-links-description`} className="pl-11 text-xs text-muted-foreground">
-                        Members can share a file, folder or document with anyone who has its link. No account needed.
-                    </p>
+            </SettingsSection>
+
+            <Separator />
+
+            <SettingsSection
+                title="Public links"
+                description="Members can share a file, folder or document with anyone who has its link. No account needed."
+            >
+                <div className="flex items-center gap-3">
+                    <Switch
+                        id={`${fieldId}-public-links`}
+                        checked={current.sharing.publicLinks}
+                        onCheckedChange={(publicLinks) => setDraft((prev) => ({ ...prev, sharing: { publicLinks } }))}
+                    />
+                    <Label htmlFor={`${fieldId}-public-links`}>Allow public links</Label>
                 </div>
             </SettingsSection>
 
