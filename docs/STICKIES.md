@@ -15,7 +15,7 @@ Each comment, and so each card, gets its own chat for its replies. That chat is 
 Every change goes into the Yjs doc first. Observers then rebuild the React state (`hooks/use-board.ts` for columns, the shared comment hooks for cards), so a local edit and a peer's edit take the same path to the screen. The doc has three roots:
 
 ```
-Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName?, creator?, createdAt?, attachments? }
+Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName, creator?, createdAt?, attachments? }
 Y.Map            "columns"      columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator }
 Y.Array<string>  "columnOrder"  ordered column ids
 ```
@@ -26,11 +26,11 @@ The undo manager tracks all three roots. So a card and its column reference undo
 
 Stickies follow the format policy in [ROADMAP.md](ROADMAP.md) like every other document. The `tasks` root holds the cards. Any collaborator can write any value into the Yjs doc, so a reader's checks are the boundary for that edit, and each one stops a crash or an injection:
 
-- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). The description is sanitized, because every viewer renders it as HTML. A field of the wrong type reads as '' or absent, because the renderers call string and date methods on it. `chatName`, `creator` and `createdAt` are optional. An `attachments` list keeps only its string and object elements.
+- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). The description is sanitized, because every viewer renders it as HTML. A field of the wrong type reads as '' or absent, because the renderers call string and date methods on it. `creator` and `createdAt` are optional. A card without a string `chatName` is no card (`isCommentCard`), so it shows nowhere while it stays in the Y.Doc. An `attachments` list keeps only its string and object elements.
 - A column is read by `readBoard` (`hooks/use-board.ts`). A `title` that isn't a string reads as '', and a `taskIds` that isn't a list as an empty one. A new card has no list to land in on such a column, so it stays off the board until the ref repair places it.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
 - An entry of `tasks` or `columns` that isn't a map is skipped by every reader and by the ref repair (`normalizeParentChildRefs`).
-- `readBoard` drops an id from `columnOrder` or a column's `taskIds` when it names no readable entry, because the board looks up every id it lists. A peer's concurrent delete leaves such an id normally.
+- `readBoard` drops an id from `columnOrder` or a column's `taskIds` when it names no readable entry, a task by the same `isCommentCard` the card read uses, because the board looks up every id it lists. It observes the tasks deeply, so a card a peer strips of its `chatName` leaves at once. A peer's concurrent delete leaves such an id normally.
 
 The server's search reader keeps the map check and takes each field as stored. A wrong type can't crash it: at worst the board's search text stops early.
 
