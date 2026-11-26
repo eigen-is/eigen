@@ -31,9 +31,8 @@ import { CardBody } from './card-body';
 import { CardDialogActions } from './card-dialog-actions';
 import { CardForm } from './card-form';
 
-// What the frame around the edit form gives it: the frame's own save lifecycle, which ends the edit once a save lands,
-// an ear for whether the form changed, so the frame's closes can ask "Discard changes?", and the title a dialog of its
-// own names the form with.
+// What the frame around the edit form gives it: its save lifecycle, which ends the edit once a save lands, an ear for
+// whether the form changed, so its closes can ask "Discard changes?", and the title its dialog names the form with.
 export type CardEditFrame = {
     pending: boolean;
     run: (action: DialogAction) => Promise<false | undefined>;

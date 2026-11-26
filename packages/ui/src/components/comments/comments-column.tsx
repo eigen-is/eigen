@@ -1,8 +1,7 @@
 // A document's comments column: the comments or activity list, which drills into one comment's thread in the same
-// column, with "‹ Comments" back to the list. The list is medium and a thread large, so the column grows as a thread
-// opens. The list stays mounted under the thread, hidden at the list's own width, so back finds it scrolled where it
-// was. The thread scrolls over its own reply box, its actions sit in the bar, and Edit opens the card's form in a
-// dialog. useCommentsColumn holds what it shows; an editor's shell puts it in its right slot, or full screen on a phone.
+// column, with "‹ Comments" back to the list. The column grows as a thread opens, and the list stays mounted under it
+// at its own width, so back finds it scrolled where it was. The thread's actions sit in the bar, and Edit opens the
+// card's form in a dialog. useCommentsColumn holds what it shows; a shell puts it at the right, or over a phone.
 
 import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import type { ActiveComments } from '@workspace/lib/types/comments';

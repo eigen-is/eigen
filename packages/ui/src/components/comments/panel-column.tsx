@@ -1,8 +1,7 @@
-// A document's comments or activity pane where the comments column hasn't come yet, such as Docs' or a sheet's, one
-// component for every viewport: a Column whose toolbar carries the title, the filter and the close button, over the
-// list it scrolls. Column gives the back on mobile and the fixed-width sibling on desktop. Mount it outside any
-// <ColumnLayout mobileColumn="…">: a Column whose id doesn't match hides itself, so a host that wraps this one silently
-// gets no pane at all.
+// The comments or activity pane of Docs, Sheets and Stickies, one component for every viewport: a Column whose toolbar
+// carries the title, the filter and the close button, over the list it scrolls. Column gives the back on mobile and
+// the fixed-width sibling on desktop. Mount it outside any <ColumnLayout mobileColumn="…">: a Column whose id doesn't
+// match hides itself, so a host that wraps this one gets no pane at all.
 
 import type { useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';

@@ -1,8 +1,7 @@
 // The column a page opens at its right to show one thing the user opened, such as a calendar event or a document's
-// comments. Its bar names a list, never an item: a list's title, a "‹" back to the list once it drilled into one item,
-// the item's actions, and the X that closes it, which a phone swaps for a lone "‹" at the left. Esc closes it too,
-// unless a dialog, a menu or a field has the key, or a handler that heard it first, such as a canvas cancelling a drag,
-// used it.
+// comments. Its bar names a list, never an item: a list's title, a "‹" back once it drilled into one item, the
+// item's actions, and the X that closes it, which a phone swaps for a lone "‹" at the left. Esc closes it too, unless
+// a dialog, a menu or a field has the key, or a handler that heard it first used it, such as a canvas canceling a drag.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';

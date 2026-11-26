@@ -18,26 +18,23 @@ type ActivityPanelProps = {
 export function ActivityPanel({ path, onOpenCard, onOpenChat }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
-    return (
-        <>
-            {/* Nothing shows while the first fetch runs, so "No activity yet" never flashes. */}
-            {isPending ? null : events.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                    <Activity className="h-8 w-8 mb-2 opacity-40" />
-                    <p className="text-xs">No activity yet</p>
-                </div>
-            ) : (
-                <div className="py-1">
-                    <ActivityEventList
-                        path={path}
-                        events={events}
-                        onOpenCard={({ cardId, chatName }) => {
-                            if (cardId) onOpenCard(cardId);
-                            else if (chatName) onOpenChat(chatName);
-                        }}
-                    />
-                </div>
-            )}
-        </>
+    // Nothing shows while the first fetch runs, so "No activity yet" never flashes.
+    if (isPending) return null;
+    return events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+            <Activity className="h-8 w-8 mb-2 opacity-40" />
+            <p className="text-xs">No activity yet</p>
+        </div>
+    ) : (
+        <div className="py-1">
+            <ActivityEventList
+                path={path}
+                events={events}
+                onOpenCard={({ cardId, chatName }) => {
+                    if (cardId) onOpenCard(cardId);
+                    else if (chatName) onOpenChat(chatName);
+                }}
+            />
+        </div>
     );
 }

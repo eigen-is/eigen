@@ -120,9 +120,8 @@ export function CanvasPropertiesPanel({
     // An elbow arrow's route lives in its unturned frame, so its angle stays 0. A selection of only elbow arrows
     // disables the Angle input, while its width and height stay editable.
     const allElbow = all((el) => el.type === 'arrow' && el.elbow);
-    // The Edges row is a shaft's curvature, a round curve or a sharp polyline, which the `edges` capability answers. A
-    // freehand stroke stores a roundness but offers none. A selection of only arrows asks it in the arrow's own section
-    // instead, where it is the elbow's corner style.
+    // The Edges row is a shaft's curvature, which the `edges` capability answers. A selection of only arrows asks it in
+    // the arrow's own section instead, where it is the elbow's corner style.
     const showEdges = soleKind !== 'arrow' && all((el) => capabilitiesOf(el).edges);
     const showShape = showCorners || showEdges;
 
@@ -132,8 +131,8 @@ export function CanvasPropertiesPanel({
         sealed(undoManager, () => updateElements(selectedIds.map((id) => ({ id, fields }))));
     };
 
-    // A control that writes as the user goes takes this hold, and `sealed` stands down inside it. So an opacity drag and
-    // a typed number are each one undo step, not one per frame or per digit.
+    // A control that writes as the user goes takes this hold, and `sealed` stands down inside it, so an opacity drag
+    // and a typed number are each one undo step.
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
 
     // A patch computed per element, for the writes one patch for all cannot express, such as a font size one step up
@@ -228,7 +227,7 @@ export function CanvasPropertiesPanel({
           ? elementLabel(selectedElements[0])
           : `${selectedElements.length} elements`;
 
-    // The sections follow PropertiesPanel's order: geometry, content, paint, appearance, actions.
+    // The sections come in the order every properties panel shares: geometry, content, paint, appearance, actions.
     return (
         <PropertyGestureContext.Provider value={beginGesture}>
             <PropertiesPanel title={title}>
