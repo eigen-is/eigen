@@ -1,7 +1,7 @@
 // A canvas beside a detail column, such as a comment thread: while the focus sits in the column, the canvas's keys stand
-// down, so Delete on its button keeps the selected element and ⌘Z in its reply box undoes nothing on the canvas. Esc
-// goes to the canvas first: one it uses to deselect leaves the column open for the next, and with nothing to cancel the
-// column closes at once.
+// down, so Delete on its button keeps the selected element or point, ⌘Z in its reply box undoes nothing on the canvas,
+// and Esc closes the column at once. Otherwise Esc goes to the canvas first: one it uses to deselect leaves the column
+// open for the next, and with nothing to cancel the column closes at once.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -13,7 +13,9 @@ const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, Fragment, useEffect, useRef, useState } = await import('react');
 const realCollab = await import('@workspace/lib/collab');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
-const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
+const { generateNKeysBetween, parsePoints, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import(
+    '@workspace/lib/vector'
+);
 type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
 
 let doc = new Y.Doc();
@@ -146,6 +148,40 @@ test("Delete on the column's button keeps the selected element", async () => {
     expect(elementCount()).toBe(1);
 });
 
+// A line through three points, its middle one selected by a press on its handle.
+async function renderLineWithPointSelected() {
+    const [, key] = generateNKeysBetween(null, null, 2);
+    writeElementInDoc(
+        doc,
+        { type: 'line', x: 0, y: 0, width: 100, height: 50, points: '[[0,0],[50,50],[100,0]]' },
+        key,
+        VECTOR_STYLE_DEFAULTS,
+        'line',
+    );
+    await render(['line']);
+    const middle = document.querySelectorAll<HTMLElement>('.eigen-vertex-handle')[1];
+    await act(async () => {
+        middle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1, button: 0 }));
+    });
+    expect(middle.classList.contains('eigen-vertex-handle-selected')).toBe(true);
+}
+
+const linePointCount = () => {
+    const line = doc.getMap('elements').get('line');
+    return line instanceof Y.Map ? parsePoints(String(line.get('points'))).length : 0;
+};
+
+test("Delete on the column's button keeps a selected point of a line", async () => {
+    await renderLineWithPointSelected();
+    const resolve = await focus('[data-slot="detail-column"] button');
+    await press(resolve, { key: 'Delete', code: 'Delete' });
+    expect(linePointCount()).toBe(3);
+    await act(async () => resolve.blur());
+    await press(document.body, { key: 'Delete', code: 'Delete' });
+    expect(linePointCount()).toBe(2);
+});
+
 test('⌘Z in the reply box undoes nothing on the canvas', async () => {
     await render([]);
     await act(async () => doc.getMap('elements').delete('box'));
@@ -162,6 +198,15 @@ test('an Esc that deselects keeps the column open, and the next one closes it', 
     expect(closes).toBe(0);
     await press(document.body, { key: 'Escape' });
     expect(closes).toBe(1);
+});
+
+test('with the focus in the column Esc closes it at once and keeps the selection', async () => {
+    await render(['box']);
+    // Resolve, which has no tooltip to take the Esc first.
+    const resolve = await focus('[data-slot="detail-column"] button:not([data-slot="tooltip-trigger"])');
+    await press(resolve, { key: 'Escape' });
+    expect(closes).toBe(1);
+    expect(selection).toEqual(['box']);
 });
 
 test('with nothing selected Esc closes the column at once', async () => {

@@ -421,6 +421,8 @@ export function CanvasEditor({
         return m;
     }, [ordered, committedById]);
 
+    const dialogOpen = useDialogOpen();
+    const focusInDetail = useFocusInDetail();
     // `busy` hides the point handles while any canvas gesture or overlay owns the surface.
     const drawing = useDrawingTools({
         tool,
@@ -444,6 +446,7 @@ export function CanvasEditor({
         deleteElements,
         setSelectedIds,
         undoManager,
+        focusInDetail,
     });
 
     // The elements with their live preview boxes: the map a bound arrow follows while its shape is dragged. It is built
@@ -477,11 +480,8 @@ export function CanvasEditor({
         return out;
     };
 
-    // Hotkeys stand down for a text editor (ignoreInputs misses a ProseMirror contenteditable), an open dialog (Delete
-    // on its button would delete the selection), the focus in a detail column beside the canvas, which has no focus
-    // trap, and an open menu, except undo and redo.
-    const dialogOpen = useDialogOpen();
-    const focusInDetail = useFocusInDetail();
+    // Hotkeys stand down for a text editor, which ignoreInputs misses, a dialog or the detail column, neither of which
+    // traps Delete, and a menu, except undo and redo.
     const menuOpen = useMenuOpen();
     useCanvasKeyboard({
         enabled: canEdit && !textEditing && !dialogOpen && !focusInDetail,
@@ -553,13 +553,14 @@ export function CanvasEditor({
 
     // ObjectTransform claims Escape during a resize or rotate in the capture phase, so this never fires during a grip
     // drag.
-    const escRef = useRef({ hasSelection: false, tool, toolLocked, dialogOpen });
-    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
+    const escRef = useRef({ hasSelection: false, tool, toolLocked });
+    escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked };
     useEffect(() => {
+        if (dialogOpen || focusInDetail) return;
         const onKeyDown = (e: KeyboardEvent) => {
-            // A dialog, a menu or a palette input owns its own Escape. A menu closes in the capture phase and is gone
-            // before this runs, but Radix marks the Escape it handled as prevented.
-            if (e.key !== 'Escape' || e.defaultPrevented || isTypingTarget() || escRef.current.dialogOpen) return;
+            // A menu or a palette input owns its own Escape. A menu closes in the capture phase and is gone before
+            // this runs, but Radix marks the Escape it handled as prevented.
+            if (e.key !== 'Escape' || e.defaultPrevented || isTypingTarget()) return;
             const g = gestureRef.current;
             const s = escRef.current;
             if (g) {
@@ -588,7 +589,7 @@ export function CanvasEditor({
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [frozenRef, setTool, setSelectedIds]);
+    }, [frozenRef, setTool, setSelectedIds, dialogOpen, focusInDetail]);
 
     // Opens the label editor on an arrow's label, the one plain-text editor on the canvas. arrowLabelEditing shapes the
     // session, and the canvas only selects and opens.
