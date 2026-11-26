@@ -1,19 +1,26 @@
-// The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
-// copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
-// the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
-// embedded too. Callers include the screen preview cache, and a sweep keeps what the inliner would read.
+// The serve-time inliner for the SVGs in a document's media folder, such as a canvas selection pasted into a doc. Such
+// an SVG names each image by its media file, never by its bytes, so a copied container resolves against its own media.
+// An SVG drawn through <img> fetches nothing, so on the way out of the preview each name becomes a data: URI of the
+// image's bytes, and the font slices its text draws with are embedded too, in any SVG. Callers include the screen
+// preview cache, and a sweep keeps what the inliner would read.
 
+import { CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FOLDER, isCollabType } from '@workspace/lib/types/drive';
+import { isImageMime } from '@workspace/lib/types/file-kinds';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
 import { foldName } from '../mount/names';
 
-// The raw SVG is hostile bytes, and three rails keep it safe:
+// The raw SVG is hostile bytes, and its author picks the names, so five rails keep it safe:
+//   - Only an svg in a collab document's media folder resolves names. Anywhere else, a link to the svg alone would
+//     hand out the files beside it.
 //   - A name resolves in the svg's own folder only, through mount.getChildByName. The codec behind listEigenMediaRefs
 //     has already dropped every ref whose decoded name holds `/`, `\` or a control character, so no lookup leaves the
 //     container.
+//   - Only a sibling whose stored type is an image is inlined. Any other ref is stripped.
 //   - A sibling that is itself an svg with name refs is inlined first, at most MAX_SVG_INLINE_DEPTH deep.
 //   - The output is capped at SVG_INLINE_MAX_BYTES. Past it the refs are stripped, never a 500.
 //
@@ -49,7 +56,7 @@ type Budget = { remaining: number };
 // With nothing to inline the original buffer comes back unchanged. Past the output ceiling the svg comes back with
 // every media ref stripped.
 export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgBytes: Buffer): Promise<Buffer> {
-    const hasMedia = svgBytes.includes(MEDIA_SNIFF);
+    const hasMedia = svgBytes.includes(MEDIA_SNIFF) && (await isDocumentMedia(mount, parentId));
     const needsFonts = svgBytes.includes(FONT_FAMILY_SNIFF) && !svgBytes.includes(FONT_FACE_SNIFF);
     // Nothing to inline or inject: serve the bytes untouched, without a utf8 round-trip.
     if (!hasMedia && !needsFonts) return svgBytes;
@@ -97,6 +104,16 @@ export async function withSvgSiblings(
     return kept;
 }
 
+async function isDocumentMedia(mount: Mount, folderId: string): Promise<boolean> {
+    const [document, media] = (await mount.getBreadcrumb(folderId)).slice(-2);
+    return (
+        document !== undefined &&
+        isCollabType(document.type) &&
+        media?.type === DRIVE_TYPE_FOLDER &&
+        media.name === CONTAINER_MEDIA_FOLDER
+    );
+}
+
 async function resolveSvgRefs(
     mount: Mount,
     parentId: string,
@@ -130,8 +147,8 @@ async function resolveSvgRefs(
     return strip.length > 0 ? stripEigenMediaRefs(out, strip) : out;
 }
 
-// One media name as a `data:` URI, or null to strip the ref: a missing sibling, a match that is no file, a sibling svg
-// too deep or an unreadable object. It charges the budget for `occurrences` copies of the URI, less the token each
+// One media name as a `data:` URI, or null to strip the ref: a missing sibling, a match that is no image file, a sibling
+// svg too deep or an unreadable object. It charges the budget for `occurrences` copies of the URI, less the token each
 // replaces. A breach throws OutputTooLargeError, which the top level turns into a stripped svg.
 async function resolveRef(
     mount: Mount,
@@ -143,7 +160,7 @@ async function resolveRef(
     tokenLength: number,
 ): Promise<string | null> {
     const child = await mount.getChildByName(parentId, name);
-    if (child?.type !== 'file') return null;
+    if (child?.type !== 'file' || !isImageMime(child.mimeType)) return null;
 
     if (child.mimeType === 'image/svg+xml') {
         // A sibling svg may name media of its own, which is inlined first, and then the whole svg is embedded. The

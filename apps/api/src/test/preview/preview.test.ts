@@ -119,6 +119,7 @@ describe('Preview', () => {
         expect(res.headers.get('content-type')).toBe('image/webp');
         // Rasterised previews carry no sandbox CSP — it exists only for the scriptable SVG case.
         expect(res.headers.get('content-security-policy')).toBeNull();
+        expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     });
 
     test('svg preview is served as-is under a sandbox CSP', async () => {

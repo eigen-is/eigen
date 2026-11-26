@@ -13,7 +13,7 @@ import { Mount } from '../../lib/mount/mount';
 import { inlineSvgMediaRefs, SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
 import { createTestMountConfig, seedFile } from '../mount-test-helpers';
-import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
+import { authedRequest, driveGet, drivePost, driveUpload, findOrFail, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-svg-inline-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -58,7 +58,8 @@ describe('inlineSvgMediaRefs', () => {
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        folderId = await mount.createFolder(rootId, 'media');
+        const drawingId = await mount.createFolder(rootId, 'drawing.eigenvector', 'vector');
+        folderId = await mount.createFolder(drawingId, 'media');
         await seedFile(mount, folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
     });
 
@@ -146,6 +147,68 @@ describe('inlineSvgMediaRefs', () => {
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
         expect(out).not.toContain('data:');
         expect(out).not.toContain('eigen-media:');
+    });
+
+    test('a sibling that is no image by its stored type is stripped, never inlined', async () => {
+        const secret = Buffer.from('SECRET-TEXT-SIBLING');
+        const keys = Buffer.from('%PDF-1.4 KEYS-PDF-SIBLING');
+        await seedFile(mount, folderId, 'secret.txt', 'text/plain', secret.length, secret);
+        await seedFile(mount, folderId, 'keys.pdf', 'application/pdf', keys.length, keys);
+        const svg = svgReferencing('pic.png', 'secret.txt', 'keys.pdf');
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
+        expect(out).toContain(`data:image/png;base64,${pngBase64}`);
+        expect(out).not.toContain(secret.toString('base64'));
+        expect(out).not.toContain(keys.toString('base64'));
+        expect(out).not.toContain('eigen-media:');
+        expect(occurrences(out, 'data:')).toBe(1);
+    });
+});
+
+// Outside a document's media folder the names are whoever authored the svg's choice, so nothing is read.
+describe('inlineSvgMediaRefs outside a document', () => {
+    let mount: Mount;
+    const dir = join(import.meta.dir, `../../../../../data-test/test-svg-loose-${Date.now()}`);
+    const svg = Buffer.from(svgReferencing('pic.png', 'secret.txt', 'keys.pdf'));
+
+    async function seedSiblings(folderId: string): Promise<void> {
+        const png = Buffer.from(TEST_PNG_BYTES);
+        const secret = Buffer.from('SECRET-TEXT-SIBLING');
+        const keys = Buffer.from('%PDF-1.4 KEYS-PDF-SIBLING');
+        await seedFile(mount, folderId, 'pic.png', 'image/png', png.length, png);
+        await seedFile(mount, folderId, 'secret.txt', 'text/plain', secret.length, secret);
+        await seedFile(mount, folderId, 'keys.pdf', 'application/pdf', keys.length, keys);
+    }
+
+    beforeAll(async () => {
+        mkdirSync(dir, { recursive: true });
+        const config = createTestMountConfig('test-svg-loose', 'local-key');
+        mount = new Mount(OWNER_ID, dir, config, createGetLocalDatabase(dir));
+        await mount.init();
+    });
+
+    afterAll(() => {
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch {}
+    });
+
+    test('a loose svg naming a sibling image, text and PDF is served as stored', async () => {
+        const folderId = await mount.createFolder((await mount.getRootFolder())!.id, 'loose');
+        await seedSiblings(folderId);
+        expect((await inlineSvgMediaRefs(mount, folderId, svg)).equals(svg)).toBe(true);
+    });
+
+    test('a plain folder named media is no document media folder', async () => {
+        const folderId = await mount.createFolder((await mount.getRootFolder())!.id, 'media');
+        await seedSiblings(folderId);
+        expect((await inlineSvgMediaRefs(mount, folderId, svg)).equals(svg)).toBe(true);
+    });
+
+    test("a document's other folders inline nothing either", async () => {
+        const docId = await mount.createFolder((await mount.getRootFolder())!.id, 'notes.eigendoc', 'doc');
+        const folderId = await mount.createFolder(docId, 'chat');
+        await seedSiblings(folderId);
+        expect((await inlineSvgMediaRefs(mount, folderId, svg)).equals(svg)).toBe(true);
     });
 });
 
@@ -268,11 +331,13 @@ describe('inlineSvgMediaRefs font injection', () => {
 
     test('media inlining and font injection compose in one pass', async () => {
         const pngBytes = Buffer.from(TEST_PNG_BYTES);
-        await seedFile(mount, folderId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
+        const drawingId = await mount.createFolder(folderId, 'composed.eigenvector', 'vector');
+        const mediaId = await mount.createFolder(drawingId, 'media');
+        await seedFile(mount, mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
         const svg =
             `<svg xmlns="http://www.w3.org/2000/svg"><image href="${eigenMediaHref('pic.png')}"/>` +
             `<text font-family="&apos;Excalifont&apos;, cursive">hi</text></svg>`;
-        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
+        const out = (await inlineSvgMediaRefs(mount, mediaId, Buffer.from(svg))).toString('utf8');
         expect(out).toContain(`data:image/png;base64,${pngBytes.toString('base64')}`);
         expect(out).toContain('font-family: "Excalifont"');
         expect(out).not.toContain('eigen-media:');
@@ -303,7 +368,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         mount = new Mount(OWNER_ID, dir, config, createGetLocalDatabase(dir));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
-        containerId = await mount.createFolder(rootId, 'doc.eigendoc');
+        containerId = await mount.createFolder(rootId, 'doc.eigendoc', 'doc');
         const mediaId = await mount.createFolder(containerId, 'media');
         await seedFile(mount, mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
         await seedFile(mount, mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
@@ -375,13 +440,30 @@ describe('svg media inlining over the preview route', () => {
         ownerId = ctx.alice.user.id;
     });
 
-    test('a name-referencing svg served from a folder inlines the sibling, under the sandbox CSP', async () => {
-        const root = await driveGet(token, ownerId, mountId, 'root');
-        const folder = await drivePost(token, ownerId, mountId, `folder/${root.id}`, { folderName: 'media' });
-        const png = new File([TEST_PNG_BYTES], 'pic.png', { type: 'image/png' });
-        await driveUpload(token, ownerId, mountId, folder.id, png);
-        const svg = new File([svgReferencing('pic.png')], 'drawing.svg', { type: SVG_MIME });
-        const uploaded = await driveUpload(token, ownerId, mountId, folder.id, svg);
+    test("an svg in a document's media inlines a sibling image and no sibling text, under the sandbox CSP", async () => {
+        const root = await driveGet<DrivePath>(token, ownerId, mountId, 'root');
+        const doc = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${root.id}/create/doc`, {
+            fileName: `svg-inline-${crypto.randomUUID()}`,
+        });
+        const media = findOrFail(await driveGet<DrivePath[]>(token, ownerId, mountId, `folder/${doc.id}`), (c) => {
+            return c.name === 'media';
+        });
+        await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            media.id,
+            new File([TEST_PNG_BYTES], 'pic.png', { type: 'image/png' }),
+        );
+        await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            media.id,
+            new File(['SECRET'], 'secret.txt', { type: 'text/plain' }),
+        );
+        const svg = new File([svgReferencing('pic.png', 'secret.txt')], 'drawing.svg', { type: SVG_MIME });
+        const uploaded = await driveUpload(token, ownerId, mountId, media.id, svg);
 
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(200);
@@ -389,7 +471,42 @@ describe('svg media inlining over the preview route', () => {
         expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
         const body = await res.text();
         expect(body).toContain(`data:image/png;base64,${Buffer.from(TEST_PNG_BYTES).toString('base64')}`);
+        expect(body).not.toContain(Buffer.from('SECRET').toString('base64'));
         expect(body).not.toContain('eigen-media:');
+    });
+
+    test('a loose svg naming its siblings previews as stored, under the sandbox CSP', async () => {
+        const root = await driveGet<DrivePath>(token, ownerId, mountId, 'root');
+        const folder = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${root.id}`, {
+            folderName: `loose-${crypto.randomUUID()}`,
+        });
+        await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            folder.id,
+            new File([TEST_PNG_BYTES], 'pic.png', { type: 'image/png' }),
+        );
+        await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            folder.id,
+            new File(['SECRET'], 'secret.txt', { type: 'text/plain' }),
+        );
+        const stored = svgReferencing('pic.png', 'secret.txt');
+        const uploaded = await driveUpload(
+            token,
+            ownerId,
+            mountId,
+            folder.id,
+            new File([stored], 'drawing.svg', { type: SVG_MIME }),
+        );
+
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+        expect(await res.text()).toBe(stored);
     });
 
     test('a text svg served from the route carries its @font-face under the sandbox CSP', async () => {

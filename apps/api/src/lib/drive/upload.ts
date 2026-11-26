@@ -6,6 +6,7 @@
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { cleanMediaType } from '../core/http';
 import type { Mount } from '../mount';
 import { cleanName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
@@ -88,7 +89,8 @@ export async function finalizeNamedUpload(
     originalName?: string,
 ): Promise<DrivePath> {
     const { parentId, name, mimeType, size, hash, tempId, user } = file;
-    const pathId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+    // The type is the client's or the sender's word, and every served file is judged by it.
+    const pathId = await mount.createFileFromTemp(parentId, name, cleanMediaType(mimeType), size, hash, tempId);
     const uploaded = originalName
         ? await mount.updatePath(pathId, { details: { originalName } })
         : await mount.getActivePath(pathId);

@@ -17,7 +17,7 @@ import {
     answerPreview,
     contentDisposition,
     readBoundedBodyBytes,
-    scriptableInlineHeaders,
+    servedFileHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
 import { getReadDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
@@ -196,9 +196,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             }
             setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = result.contentType;
-            // An SVG preview is the user's own bytes, shown inline on the API origin. So a payload that can
-            // run script gets the same sandbox CSP as /embed.
-            Object.assign(set.headers, scriptableInlineHeaders(result.contentType));
+            // An SVG preview is the user's own bytes, so it goes out as /embed would serve it.
+            Object.assign(set.headers, servedFileHeaders(result.contentType, 'inline'));
             return result.data;
         },
         { linkAuth: true },
@@ -257,6 +256,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             if (!file) throw new ApiError(404, 'No thumbnail available');
             setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = 'image/webp';
+            Object.assign(set.headers, servedFileHeaders('image/webp', 'inline'));
             return file;
         },
         { linkAuth: true },

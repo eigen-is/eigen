@@ -5,13 +5,7 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import {
-    computeEtag,
-    contentDisposition,
-    matchesIfNoneMatch,
-    rangeResponse,
-    scriptableInlineHeaders,
-} from '../core/http';
+import { computeEtag, contentDisposition, matchesIfNoneMatch, rangeResponse, servedFileHeaders } from '../core/http';
 import type { Mount } from '../mount';
 import { isInsideDocument } from './acl';
 
@@ -30,13 +24,10 @@ export async function serveFile(
         // The client asks again on every use, and the ETag makes that a cheap 304.
         'Cache-Control': 'private, no-cache',
         ETag: etag,
-        // The stored type is the upload's own claim, so the browser must not sniff a disguised payload into HTML.
-        'X-Content-Type-Options': 'nosniff',
         // A media player seeks by byte range instead of downloading the whole file again.
         'Accept-Ranges': 'bytes',
+        ...servedFileHeaders(path.mimeType, disposition),
     };
-    // An inline body comes from the API's own origin, so a scriptable upload gets a sandbox CSP.
-    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(path.mimeType));
 
     // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
     if (ifNoneMatch && matchesIfNoneMatch(ifNoneMatch, etag)) {

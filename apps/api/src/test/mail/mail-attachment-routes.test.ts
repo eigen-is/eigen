@@ -215,6 +215,21 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         expect(embed.headers.get('content-security-policy')).toBeNull();
     });
 
+    test('the embed route sandboxes every part that is not an inert type', async () => {
+        // readme.md (text/markdown), spoof.txt (application/eigendoc) and typeless.bin (no type).
+        for (const [index, name] of [
+            [6, 'readme.md'],
+            [8, 'spoof.txt'],
+            [9, 'typeless.bin'],
+        ] as const) {
+            const res = await authedRequest(ctx.alice.user.sessionToken, embedUrl(index, name));
+            expect(res.status).toBe(200);
+            expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+        }
+        const plain = await authedRequest(ctx.alice.user.sessionToken, embedUrl(5, 'notes.txt'));
+        expect(plain.headers.get('content-security-policy')).toBeNull();
+    });
+
     test('a range request returns 206 with the matching slice', async () => {
         const full = await authedRequest(ctx.alice.user.sessionToken, embedUrl(2, 'ranged.txt'));
         expect(await full.text()).toBe(RANGED_BODY);
