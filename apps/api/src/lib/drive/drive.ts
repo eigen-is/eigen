@@ -29,7 +29,7 @@ import type {
     EffectiveMember,
     InviteResult,
 } from '@workspace/lib/types/drive-access';
-import { aclGrants, holdsByName } from '@workspace/lib/types/drive-access';
+import { aclGrants } from '@workspace/lib/types/drive-access';
 import type {
     ClientFileEventRecord,
     FileEvent,
@@ -64,6 +64,7 @@ import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
+import type { ReaderAccess } from './acl';
 import {
     canReadFromAncestors,
     canWriteFromAncestors,
@@ -73,6 +74,7 @@ import {
     isTrashedChain,
     mergeACLDelta,
     normalizeACL,
+    readerAccess,
     refuseDocumentWrite,
 } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
@@ -856,16 +858,13 @@ export class Drive {
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
     }
 
-    // Whether the user syncs the path over the collab socket: they read it by name or may write it. Whoever reads only
-    // through a link or "Anyone signed in" loads the stored state over HTTP, so the socket's work stays with members.
-    public async isLiveReader(mountId: string, pathId: string, user: User): Promise<boolean> {
-        const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
-        const memberships = await getMemberships(user.id);
-        return (
-            holdsByName(ancestors, user, memberships.teamIds, 'read') ||
-            (canWriteFromAncestors(ancestors, user, memberships) &&
-                canReadFromAncestors(ancestors, user, memberships, this.publicLinks))
-        );
+    // One read of the chain and the memberships answers everything a route asks about one reader of a path.
+    public async readerAccess(mountId: string, pathId: string, user: User): Promise<ReaderAccess> {
+        const [chain, memberships] = await Promise.all([
+            this.getMount(mountId).getBreadcrumb(pathId),
+            getMemberships(user.id),
+        ]);
+        return readerAccess(chain, user, memberships, this.publicLinks);
     }
 
     // Merged onto the ACL as it is now, one change per path at a time, or the later write would drop the other's

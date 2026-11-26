@@ -25,6 +25,7 @@ import type { Mount } from '../mount';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
+import type { ReaderAccess } from './acl';
 import { canonicalACLId, canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
@@ -79,8 +80,8 @@ export class SharedDrive {
         return this.drive.canWrite(mountId, pathId, user, memberships);
     }
 
-    public async isLiveReader(mountId: string, pathId: string, user: User): Promise<boolean> {
-        return this.drive.isLiveReader(mountId, pathId, user);
+    public async readerAccess(mountId: string, pathId: string, user: User): Promise<ReaderAccess> {
+        return this.drive.readerAccess(mountId, pathId, user);
     }
 
     // A method that makes more than one check looks up the memberships once and passes them to each.

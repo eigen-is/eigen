@@ -101,10 +101,13 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'permission predicate',
             call: (sd) => sd.canWrite(mountId, fileId, charlie),
         },
-        isLiveReader: {
+        readerAccess: {
             gate: 'returns-false',
             reason: 'permission predicate',
-            call: (sd) => sd.isLiveReader(mountId, fileId, charlie),
+            call: async (sd) => {
+                const { canRead, canWrite, live } = await sd.readerAccess(mountId, fileId, charlie);
+                return canRead || canWrite || live;
+            },
         },
 
         // Deny-by-shape rather than throw — routes treat the result as absent/filtered.

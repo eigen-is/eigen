@@ -17,7 +17,7 @@ import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import type { Static } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest } from '../lib/auth/access';
-import { getSharedDrive, readPermissions } from '../lib/drive';
+import { getReaderAccess, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
@@ -162,7 +162,8 @@ export const driveSharingRouter = new Elysia({ name: 'drive-sharing' })
     .get(
         '/drive/:ownerId/:mountId/path/:pathId/permissions',
         async ({ params, user }): Promise<DrivePathPermissions> => {
-            return readPermissions(params.ownerId, params.mountId, params.pathId, user);
+            const { canRead, canWrite } = await getReaderAccess(params.ownerId, params.mountId, params.pathId, user);
+            return { canRead, canWrite };
         },
         { linkAuth: true },
     )

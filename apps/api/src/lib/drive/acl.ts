@@ -12,12 +12,15 @@ import {
     isCollabType,
     isDocumentType,
 } from '@workspace/lib/types/drive';
-import type { DriveACL, DriveACLDelta, DriveVisibility } from '@workspace/lib/types/drive-access';
+import type { DriveACL, DriveACLDelta, DrivePathPermissions, DriveVisibility } from '@workspace/lib/types/drive-access';
 import { holdsByName } from '@workspace/lib/types/drive-access';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Memberships, User } from '../user';
+
+export type ReaderAccess = DrivePathPermissions & { live: boolean; priority: TransformPriority };
 
 // While public links are off a link is private to everyone. Its value stays, so turning them on opens it again.
 export function grantsPublicRead(visibility: DriveVisibility, publicLinks: boolean): boolean {
@@ -93,6 +96,26 @@ export function canReadFromAncestors(
 export function canWriteFromAncestors(chain: readonly DrivePath[], user: User, memberships: Memberships): boolean {
     if (holdsByName(chain, user, memberships.teamIds, 'write')) return true;
     return !isTrashedChain(chain) && chain.some((path) => path.visibility === 'public-write');
+}
+
+// What a signed-in reader may do with a path. Live readers sync it over the collab socket: they read it by name, or may
+// both write and read it, as an ACL entry can grant write alone. Only a reader by name runs its transforms at
+// foreground priority, so a burst of link views can't take the one transform queue from the people it is shared with.
+export function readerAccess(
+    chain: readonly DrivePath[],
+    user: User,
+    memberships: Memberships,
+    publicLinks: boolean,
+): ReaderAccess {
+    const readsByName = holdsByName(chain, user, memberships.teamIds, 'read');
+    const canRead = canReadFromAncestors(chain, user, memberships, publicLinks);
+    const canWrite = canWriteFromAncestors(chain, user, memberships);
+    return {
+        canRead,
+        canWrite,
+        live: readsByName || (canWrite && canRead),
+        priority: readsByName ? 'foreground' : 'background',
+    };
 }
 
 // The merge runs on the server, so two people who share at once keep each other's entries. An added entry
