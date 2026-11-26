@@ -58,7 +58,9 @@ export function useAllWatches() {
     });
 }
 
+// A visitor, with no login, watches nothing.
 function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
+    const { user } = useAuth();
     return useQuery({
         queryKey: driveKeys.pathWatched(ownerId, mountId, pathId),
         queryFn: async () => {
@@ -66,7 +68,7 @@ function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId && !!mountId && !!pathId,
+        enabled: !!user && !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.ONE_MINUTE,
     });
 }

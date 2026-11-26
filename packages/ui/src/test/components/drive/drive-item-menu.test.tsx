@@ -14,7 +14,9 @@ import { clickRow, menuRows, openSubmenu, renderOpenMenu } from '../../menu-rows
 
 installHappyDom();
 
-// The Watch row reads the item's watch state from the server; nothing is watched here.
+// The viewer is signed in, and the Watch row reads the item's watch state from the server; nothing is watched here.
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: { id: 'owner-1' } }) }));
 const realDrive = await import('@workspace/lib/drive');
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,

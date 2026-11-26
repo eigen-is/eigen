@@ -1,8 +1,10 @@
 // The detail column of a Drive view: the selected item's preview, its Open, Download, Share and Watch
 // buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. A layout such
-// as DriveLayout draws it beside the list.
+// as DriveLayout draws it beside the list. A visitor without a login, who may not read who has access,
+// gets no sharing section.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { formatDateTime } from '@workspace/lib/date';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
@@ -51,6 +53,7 @@ type DriveDetailProps = {
 };
 
 export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
+    const { user } = useAuth();
     const runner = useDriveFileActionRunner(path, siblings, actions.capabilities.canWrite);
 
     if (!path) return null;
@@ -109,8 +112,12 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                     </div>
                 </div>
                 <DetailsSection path={path} actions={actions} />
-                <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
-                <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
+                {user && (
+                    <>
+                        <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
+                        <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
+                    </>
+                )}
                 <RecentActivity path={path} />
             </div>
             {runner.dialogs}
@@ -126,12 +133,13 @@ function DetailsSection({ path, actions }: { path: DrivePath; actions: DriveActi
     const extraEntries = details ? Object.entries(details).filter(([key]) => !EXTRA_DETAIL_HIDDEN_KEYS.has(key)) : [];
 
     // The item's own chain, which its sharing list reads too, less the item. Cut short above the viewer's reach, it
-    // no longer starts at the drive, so the owner stands in for it.
+    // no longer starts at the drive, so the owner stands in for it. A visitor's chain starts at the public folder.
+    const { user } = useAuth();
     const { data: itemChain = [], isPending, isError } = useBreadcrumb(path.ownerId, path.mountId, path.id);
     const chain = itemChain.slice(0, -1);
     const mountLabel = useMountLabel(path.ownerId, path.mountId);
     const { displayName: ownerName } = useResolvedUser({ userId: path.ownerId });
-    const fromRoot = chain.length > 0 && !sharedChainHead(chain);
+    const fromRoot = !!user && chain.length > 0 && !sharedChainHead(chain);
     const location = [
         fromRoot ? mountLabel : ownerName,
         ...chain.slice(fromRoot ? 1 : 0).map((folder) => stripEigenExtension(folder.name)),

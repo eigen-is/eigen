@@ -1,7 +1,9 @@
 // Watch for one Drive item, drawn from useWatchToggle: a bell that rings while the viewer watches the item
 // directly. The button sits on a toolbar, such as a document's or the Drive detail column's; the menu row
-// sits in a menu, such as the Drive item menu.
+// sits in a menu, such as the Drive item menu. A visitor without a login has nothing to watch with, so
+// neither draws for them.
 
+import { useAuth } from '@workspace/lib/auth';
 import { useWatchToggle } from '@workspace/lib/drive';
 import { Bell, BellRing } from 'lucide-react';
 import { DropdownMenuItem } from '../../dropdown-menu';
@@ -14,7 +16,9 @@ type WatchToggleButtonProps = {
 };
 
 export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+    const { user } = useAuth();
     const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
+    if (!user) return null;
     return (
         <TooltipButton
             icon={direct ? BellRing : Bell}
@@ -27,7 +31,9 @@ export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButto
 }
 
 export function WatchMenuItem({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
+    const { user } = useAuth();
     const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
+    if (!user) return null;
     return (
         <DropdownMenuItem disabled={isPending} onClick={toggle}>
             {direct ? <BellRing /> : <Bell />}

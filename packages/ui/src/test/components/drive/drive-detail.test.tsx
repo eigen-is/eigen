@@ -1,7 +1,7 @@
 // The Location row of the Drive details panel: the drive and the folders down to the item's parent, read from the
 // item's own breadcrumb, the one its sharing list reads, as a link to that folder. A plain click opens the folder
 // the way a row does, and a modified click is the browser's. A sharee who can't read the folders above sees the
-// owner as the drive, as plain text.
+// owner as the drive, as plain text, and so does a visitor without a login, who sees no sharing section either.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -30,6 +30,15 @@ const brief = drivePath({
     ownerId: teamOwnerId('t1'),
     mountId: 'm1',
 });
+// Public, and a visitor's chain is cut at the public folder, which the server gives no parent.
+const holiday = folder('holiday', 'Holiday', null, 'alice');
+const beach = drivePath({
+    id: 'beach',
+    name: 'beach.jpg',
+    mimeType: 'image/jpeg',
+    parentId: 'holiday',
+    ownerId: 'alice',
+});
 const memo = drivePath({ id: 'memo', name: 'memo.txt', mimeType: 'text/plain', parentId: 'hidden', ownerId: 'alice' });
 
 // The breadcrumb of each item, as the server trims it for this viewer, and the ids the panel asked for.
@@ -37,9 +46,12 @@ const chains = new Map<string, DrivePath[]>([
     ['plan', [root, projects, year, plan]],
     ['brief', [teamRoot, brief]],
     ['memo', [memo]],
+    ['beach', [holiday, beach]],
 ]);
 const breadcrumbReads: (string | undefined)[] = [];
 
+const session: { user: { id: string } | null } = { user: { id: 'owner-1' } };
+const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realHome = { ...(await import('@workspace/lib/home')) };
 const realPublic = { ...(await import('@workspace/lib/public')) };
@@ -51,6 +63,7 @@ const panelParts = [
     '../../../components/drive/use-drive-file-action-runner',
 ];
 const realParts = await Promise.all(panelParts.map(async (part) => ({ ...(await import(part)) })));
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useBreadcrumb: (_ownerId: string, _mountId: string, pathId: string | undefined) => {
@@ -76,6 +89,7 @@ mock.module(panelParts[4], () => ({
     useDriveFileActionRunner: () => ({ actions: [], run: () => {}, dialogs: null }),
 }));
 afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('@workspace/lib/home', () => realHome);
     mock.module('@workspace/lib/public', () => realPublic);
@@ -142,4 +156,12 @@ test('a file shared without its folders shows its owner as the drive, and no lin
     const value = await location(memo);
     expect(value.textContent).toBe('Alice Example');
     expect(value.querySelector('a')).toBeNull();
+});
+
+test('a visitor sees the public folder below its owner, and no sharing section', async () => {
+    session.user = null;
+    const value = await location(beach);
+    expect(value.textContent).toBe('Alice Example › Holiday');
+    expect([...document.querySelectorAll('h3')].map((label) => label.textContent)).toEqual(['Details']);
+    session.user = { id: 'owner-1' };
 });

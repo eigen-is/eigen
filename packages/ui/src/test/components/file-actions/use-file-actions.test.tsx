@@ -1,16 +1,23 @@
 // The one place the user reaches the registry: an import route refuses a guest (requireNonGuest), and
 // `applies` is handed the file, never who is asking — so the hook every menu and the quick-look footer
-// read their rows from is where the guest rule lives.
+// read their rows from is where the guest rule lives, and the visitor's: no login, so only reading.
 import { expect, mock, test } from 'bun:test';
-import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
+import { subjectFromMailAttachment, subjectFromPath } from '@workspace/lib/file-subject';
+import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
 const guest = { is: false };
+const visitor = { is: false };
 const mail = { enabled: true };
 const realAuth = await import('@workspace/lib/auth');
-mock.module('@workspace/lib/auth', () => ({ ...realAuth, useIsGuest: () => guest.is }));
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ user: visitor.is ? null : { id: 'owner-1', email: 'me@test.eigen.is' } }),
+    useIsGuest: () => guest.is,
+}));
 const realPublic = await import('@workspace/lib/public');
 mock.module('@workspace/lib/public', () => ({ ...realPublic, useMailEnabled: () => mail.enabled }));
 
@@ -28,6 +35,9 @@ const message = subjectFromMailAttachment('owner-1', 'message-1', 1, {
     filename: 'fwd.eml',
     size: 2048,
 });
+
+const vcard = subjectFromPath(drivePath({ name: 'team.vcf', mimeType: 'text/vcard', size: 2048 }));
+const doc = subjectFromPath(drivePath({ name: 'Plan.eigendoc', type: 'doc', mimeType: DRIVE_MIME_DOC }));
 
 async function idsFor(...args: Parameters<typeof useFileActions>): Promise<string[]> {
     const seen: { ids: string[] } = { ids: [] };
@@ -69,6 +79,16 @@ test('the host’s own exclusions still apply, guest or not', async () => {
     expect(await idsFor(subject, ['quick-look'])).toEqual(['download', 'save-to-drive', 'import-contacts']);
     guest.is = true;
     expect(await idsFor(subject, ['quick-look'])).toEqual(['download', 'save-to-drive']);
+});
+
+test('a visitor gets Quick preview, and Download for a plain file, and nothing else', async () => {
+    guest.is = false;
+    visitor.is = true;
+    expect(await idsFor(vcard)).toEqual(['quick-look', 'download']);
+    expect(await idsFor(doc)).toEqual(['quick-look']);
+    expect(await idsFor(subject)).toEqual(['quick-look', 'download']);
+    visitor.is = false;
+    expect(await idsFor(vcard)).toEqual(['quick-look', 'download', 'import-contacts']);
 });
 
 // A host whose subject is state (the right-clicked chip) mounts the hook before anything is picked.
