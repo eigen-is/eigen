@@ -1,18 +1,20 @@
 // A fake API for the editors' route tests. It answers a visitor, someone without a login, only on the routes a public
 // link opens, as the API's linkAuth lists them, and 401s the rest; a signed-in user gets every route. Every request is
-// recorded, so a test can say that a visitor asked for nothing more. The collab socket never opens: open() marks the
-// editor's providers connected and synced. editorVisitorTests are the tests every editor's route runs on it.
+// recorded, so a test can say that a visitor asked for nothing more. The collab socket never opens: open() marks a
+// signed-in editor's providers connected and synced, and a visitor's editor, which opens none, loads the document from
+// the state route. editorVisitorTests are the tests every editor's route runs on it.
 
 import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
 import type { AnyRoute } from '@tanstack/react-router';
 import type * as Auth from '@workspace/lib/auth';
 import type * as Collab from '@workspace/lib/collab';
+import { encodeCollabState } from '@workspace/lib/collab/collab-state';
 import { CONTAINER_MEDIA_FOLDER } from '@workspace/lib/constants/container';
 import type { AuthContextType, AuthUser } from '@workspace/lib/types/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import type { WebsocketProvider } from 'y-websocket';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import { stubCanvasImageFonts } from './canvas-image';
 import { drivePath } from './drive-path';
 import { installHappyDom } from './happy-dom';
@@ -52,7 +54,7 @@ export function withSession(auth: typeof Auth): typeof Auth {
     return { ...auth, useAuth: sessionAuth, useIsGuest: () => session.user?.role === 'guest' };
 }
 
-// The editor's own providers, kept so open() can mark them synced and a test can read the awareness they would send.
+// A signed-in editor's own providers, kept so open() can mark them synced and a test can read the awareness they send.
 const providers = new Set<WebsocketProvider>();
 
 // The collab module with every provider an editor opens kept in `providers`.
@@ -83,6 +85,8 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
         parentId: 'pub',
     });
     const requested: string[] = [];
+    // The stored document, as the state route answers it.
+    let stored = new Y.Doc();
 
     function serve(pathname: string): Response {
         if (!session.user && !isVisitorRoute(pathname))
@@ -96,6 +100,9 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
             // A visitor and a guest read; the owner's colleague, the test's other user, writes.
             const canWrite = !!session.user && session.user.role !== 'guest';
             return Response.json({ canRead: true, canWrite, path: doc, folderContents: [media] });
+        }
+        if (/^\/collab\/[^/]+\/[^/]+\/pub\/state$/.test(pathname)) {
+            return new Response(encodeCollabState([Y.encodeStateAsUpdate(stored)]), { headers: { ETag: '"stored"' } });
         }
         if (pathname.startsWith('/p/')) return Response.json({});
         if (pathname.endsWith('/unread-count')) return Response.json({ count: 0 });
@@ -125,9 +132,11 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
         g.WebSocket = realWebSocket;
     });
 
-    // The app's route tree at `url`, rendered once the document's info arrives and loaded once its providers sync.
-    // `seed` writes the stored document into each provider's doc before it syncs.
+    // The app's route tree at `url`, rendered once the document's info arrives and loaded once its providers sync or
+    // its stored state arrives. `seed` writes the stored document, and into each provider's doc before it syncs.
     async function open(routeTree: AnyRoute, url: string, seed?: (doc: Y.Doc) => void) {
+        stored = new Y.Doc();
+        seed?.(stored);
         const { act, createElement } = await import('react');
         const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
         const { CommandPaletteProvider } = await import('../components/layout/app');
@@ -201,8 +210,9 @@ export function editorVisitorTests({
         expect(labelled('Share')).toBeNull();
         expect(labelled('Activity')).toBeNull();
         expect(server.outsideTheLink()).toEqual([]);
-        // No presence: with no local state y-websocket sends no awareness, and a cursor set later does nothing.
-        expect([...providers].map((provider) => provider.awareness.getLocalState())).toEqual([null]);
+        // No socket, so no presence: the document came from the state route.
+        expect(providers.size).toBe(0);
+        expect(server.requested).toContain(`/collab/${OWNER}/default/pub/state`);
         // The guard's read, and none from a share dialog.
         expect(server.permissionReads()).toEqual([`/drive/${OWNER}/default/path/pub/permissions`]);
     });
