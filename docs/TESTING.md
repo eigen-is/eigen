@@ -71,6 +71,7 @@ Globals and the DOM:
 - Enter in a form field is `pressEnter(field)`, which clicks the form's first submit button, so nothing submits while it is disabled.
 - A form's test renders the real form and calls `expectFormContract` (`@workspace/ui/test/form-contract`) once, then tests only what is special about that form ([FORMS.md § Each rule is tested at its shell](FORMS.md#each-rule-is-tested-at-its-shell-and-every-form-proves-it-uses-it)).
 - An `await act(async …)` ends on a `setImmediate`, and on a slow runner a `setTimeout(0)` set inside it, such as `FormShell`'s deferred Mod+Enter submit, runs first. A check that must read the form before that submit's save lands holds the save with `hold` (`form-contract.ts`) and releases it after.
+- An editor route's view for a visitor without a login is tested on `visitorServer` (`packages/ui/src/test/visitor-server.ts`, imported as `@workspace/ui/test/visitor-server`): a fake API that answers a visitor only on the routes a public link opens, 401s the rest and records every request, so a test can say the visitor asked for nothing more. Each editor app's `src/test/routes/visitor.test.tsx` runs its shared `editorVisitorTests`.
 - A failed `toBeNull()` on an element prints its whole tree, which takes seconds: assert on labels or titles.
 
 ## Resource bounds measure the child, and scale rather than time

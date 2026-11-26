@@ -124,6 +124,14 @@ A delete from the edit form or `CommentContextMenu` asks first, in the `DeleteCo
 
 Adding a comment opens the form client-side; the server is touched only on Save. `CardForm` creates with concrete values (a trimmed title, a seeded color) and edits with a patch of the changed fields only, so an unchanged save writes nothing to the Y.Doc. Editing happens in place inside `CardDialog`, never in a stacked dialog. Edit mode is pinned to a card id in the bundle, so opening another card lands in view mode with no reset effect.
 
+## A visitor sees the cards as stored and nothing from the server
+
+A visitor, someone with no login on a document a public link opens ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)), syncs the Y.Doc and so reads every card as it is stored: its title, description, color, attachments, time and `creator`, the author's email address. The server's side is closed to them: the thread routes, the comment index and the member list all need a login. So `useCommentLifecycle` runs no index or member query when `useAuth()` has no user, `CommentThread` finds no chat for a card's name and shows the card without its replies, and `useDocumentPanels` offers no Activity.
+
+The deleted rule bends for the same reason. A visitor's listing has no `chat/` folder, so `useIsCardDeleted` counts only the host's use for them: otherwise every card would read as deleted, its thread missing.
+
+The address in the card is accepted, since a card lives in the Y.Doc and a visitor gets the Y.Doc; [ROADMAP.md](ROADMAP.md) has the row for a card's author and content in the document.
+
 ## The pane hides the editor, never unmounts it
 
 `PanelColumn` is the comments and activity pane on every viewport: one `Column` with id `panel` whose toolbar carries the title, the filter and the close control. `useDocumentPanels` holds the open panel in one slot, so comments and activity are never both open. A pane row is a `CommentCardTile`, as the hover card and a board's drag overlay are, and shows the card's title. A host may add a prefix (`titlePrefixes`), which sheets uses for another sheet's name, as the only location left in the row. A card on several sheets counts as being on its first cell in tab order, so the prefix names where a click goes, even when the card is also on the open sheet. A title seeded from an anchor, such as `Cell B2`, stays as written when the anchor moves. `SortableCard` in stickies maps a card onto `CardTile` itself, because it takes flat props it can memoize. Mount the pane outside any `<ColumnLayout mobileColumn="…">`. A `Column` whose id does not match hides itself, so a wrapped pane never shows, silently.

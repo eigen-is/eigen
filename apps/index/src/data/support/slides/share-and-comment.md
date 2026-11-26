@@ -6,7 +6,7 @@ category: Sharing
 tags: [slides, sharing, permissions, comments, collaboration]
 related: [slides/get-started, drive/share-a-file]
 order: 80
-updated: 2026-11-11
+updated: 2026-11-26
 ---
 
 Presentations are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you have editor access, you can also leave comments tied to specific objects on a slide.
@@ -34,11 +34,16 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a presentation starts as **Restricted**: only the people you have added can open it.
 
-To share more widely, click the lock icon to switch it to **Unrestricted**, then choose **Can edit** or **Can view** from the dropdown. Use the copy-link button (the chain-link icon) in the **People with access** header to copy the link and send it to whoever you like.
+To share more widely, pick another choice from the dropdown under **General access**:
+
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the presentation. Choose **Can view** or **Can edit** beside it.
+- **Anyone with the link**: anyone who has the link can view the presentation, with no account and no sign-in ([Share with a public link](/support/drive/share-with-a-public-link)).
+
+Use the copy-link button (the chain-link icon) in the **People with access** header to copy the link. Then click **Save**, and send the link to whoever you like.
 
 <div class="eigen-callout">
 
-An **Unrestricted** link still requires the other person to sign in to Eigen. It isn't open to the public web.
+With **Anyone signed in with the link**, the other person still signs in to Eigen. Only **Anyone with the link** opens the presentation to someone without an account, and only to view it.
 
 </div>
 

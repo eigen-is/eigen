@@ -5,7 +5,7 @@ type: how-to
 tags: [chat, rooms, sharing, permissions, access]
 related: [chat/create-room, chat/personal-and-team-chats]
 order: 90
-updated: 2026-11-11
+updated: 2026-11-26
 ---
 
 You can share a room with specific people, with a whole team, or with anyone on your Eigen server who has the link.
@@ -31,11 +31,11 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a room starts as **Restricted**: only people you have added can open it.
 
-To let anyone on your Eigen server join, click the lock icon to switch it to **Unrestricted**, then choose **Can view** or **Can edit** from the dropdown that appears. Copy the link using the copy-link icon next to **People with access** and send it to whoever you like.
+To let anyone on your Eigen server join, choose **Anyone signed in with the link** from the dropdown under **General access**, then choose **Can view** or **Can edit** beside it, and click **Save**. Copy the link using the copy-link icon next to **People with access** and send it to whoever you like.
 
 <div class="eigen-callout">
 
-An **Unrestricted** room still requires the other person to sign in to Eigen. It is not open to the public web.
+A room always asks the other person to sign in to Eigen. Unlike a file or a document, it can't be opened with a public link.
 
 </div>
 

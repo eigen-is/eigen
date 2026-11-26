@@ -13,6 +13,7 @@ The branches are few, and each is inert when the var is unset:
 - `sendMail` (`apps/api/src/lib/mailer/mailer.ts`) skips delivery. A demo box runs no MTA, so a real send would fail on every share, invite and iMIP.
 - `messageSend` (`apps/api/src/lib/mail/mail-domain.ts`) throws a 403 that says outgoing email is off, and the message stays in Drafts. The guard is not in `sendMail`, because `sendMail` serves every fire-and-forget notification, where a throw only becomes a logged error. Compose is the one send a person waits on.
 - `isMailAppEnabled()` keeps the Mail app on without hosted mail, so the seeded mailboxes show.
+- `arePublicLinksEnabled()` (`apps/api/src/lib/config/server-settings.ts`) answers false whatever the setting says, so nothing anyone uploads to the demo can be opened by a public link ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#public-links-are-never-on-a-demo-server)).
 - `/p/config` carries `demoMode`, the one flag the frontend reads. The login card and the landing page swap sign-in for an **Enter demo** button, and `DemoBanner` says the workspace is shared and resets every hour.
 - The auth guard and the entry route below.
 

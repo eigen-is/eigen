@@ -2,23 +2,23 @@
 
 > **TLDR:** Sharing in Drive works with access lists (ACLs). Any file or folder can carry a list of who may read it and who may write it, and a folder's list also counts for everything inside it. An entry names a user by email or a team by its `team_` id. Every access check runs on the owner's side, against the owner's data. A recipient only gets a pointer in their own database, so the item shows under **Shared with me**. The check is `apps/api/src/lib/drive/acl.ts`, and the push to recipients is `apps/api/src/lib/drive/acl-propagation.ts`.
 
-Everything a user stores lives in their Home, the data folder of one user or one team ([STORAGE.md](STORAGE.md)). Drive keeps files in mounts, and each file or folder is a path: a row in the mount's database. A path's owner always has full access. Everyone else gets in through one of three things: an entry in the path's own ACL, an entry on any folder above it, or the visibility of the path or any folder above it, which can open it to every signed-in user for reading or for writing. A team drive adds one rule: every member of the team counts as an owner.
+Everything a user stores lives in their Home, the data folder of one user or one team ([STORAGE.md](STORAGE.md)). Drive keeps files in mounts, and each file or folder is a path: a row in the mount's database. A path's owner always has full access. Everyone else gets in through one of three things: an entry in the path's own ACL, an entry on any folder above it, or the visibility of the path or any folder above it, which can open it to every signed-in user for reading or for writing, or to anyone with its link for reading, with no login at all. A team drive adds one rule: every member of the team counts as an owner.
 
 Access only adds up. A child can grant more than its parent and can never take away what the parent gave. There is no deny entry, and no entry for the whole organization: a team covers that. This keeps the check to one walk over the path's breadcrumb, the chain of folders from the mount's root down to the path itself, stopping at the first one that lets the user in. A user's memberships, the list of teams they are in, decide whether a team entry matches.
 
-When a user opens someone else's file, the route hands them the owner's drive wrapped in `SharedDrive`, which asks "may this user read or write this path" before every operation. The owner gets their own drive with no wrapper.
+When a user opens someone else's file, the route hands them the owner's drive wrapped in `SharedDrive`, which asks "may this user read or write this path" before every operation. The owner gets their own drive with no wrapper. A visitor, someone with no login who opens a public link, is no user at all and gets `LinkDrive`, which serves only the reads a link opens ([§ A public link opens a path to anyone without a login](#a-public-link-opens-a-path-to-anyone-without-a-login)).
 
 The recipient still needs to find what was shared. So when an ACL changes, the owner's side pushes a small record into each recipient's own `shared.db`. This push is called propagation, and it is asynchronous: the save answers before every record has landed. The record never grants anything. A recipient who has no account yet, or a team whose members change, is covered by the share registry: a server-wide list of "this owner shared something with this address". It is read when the account or the membership appears, which is called reconciliation.
 
 Three rules sit on top. A client never sends a whole ACL: the route takes a delta, the entries to add and the ids to remove, and the server merges it, so two people sharing at once can't undo each other ([ACL Route](#acl-route)). An editor can share onward, unless the path has `sharingRestricted` set, which keeps sharing to the owner ([Re-Share Prevention](#re-share-prevention)). And a chat inside a document has no list of its own, so inviting someone to it shares the document ([Chat Invite Bubbling](#chat-invite-bubbling)).
 
-The sections run in this order: the types and the check, the rules, visibility, who has access in effect, propagation and the registry, chat invites, and restricted sharing with the ACL route.
+The sections run in this order: the types and the check, the rules, visibility and public links, who has access in effect, propagation and the registry, chat invites, and restricted sharing with the ACL route.
 
 ## Types
 
 ```typescript
 type DriveACL = { id: string; read: boolean; write: boolean }  // id = email or team_{id}
-type DriveVisibility = 'private' | 'public-read' | 'public-write'
+type DriveVisibility = 'private' | 'public-read' | 'public-write' | 'link'
 ```
 
 Defined in `packages/lib/src/types/drive-access.ts`.
@@ -33,7 +33,7 @@ Walks a pre-fetched breadcrumb (root-first, ending at the path itself) and retur
 
 1. Owner → true
 2. Team member (path owned by user's team) → true
-3. Visibility `public-read` or `public-write` → true
+3. Visibility `public-read` or `public-write`, or `link` while public links are on (`grantsPublicRead`) → true
 4. User in local `acl` with `read: true` (by email or team membership) → true
 5. Default → false
 
@@ -74,8 +74,23 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 | `private`      | Only named users + owner  |
 | `public-read`  | Every signed-in user can read |
 | `public-write` | Every signed-in user can read and write |
+| `link`         | Anyone with the URL can read, signed in or not, while public links are on |
 
-Every drive route needs a session, so "public" never reaches a visitor who is not signed in.
+`public-read` and `public-write` need a session: every route that serves them asks for one, so they never reach a visitor.
+
+## A public link opens a path to anyone without a login
+
+The link is the item's ordinary URL: the path id is a random UUID, so the URL is the secret, and choosing another General access closes it. The design and its accepted risks are in [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md).
+
+**Signed in, `link` reads as `public-read`.** `grantsPublicRead` answers true for it, so `canFromAncestors` and `checkAccessForEmails` (`lib/drive/sharing.ts`) need no case of their own, and no write follows from it.
+
+**A visitor is checked by `canReadByLink(chain)`**, a pure function beside `canFromAncestors`. It answers the index of the highest path in the breadcrumb with `link`, or null. It refuses a chain in the trash, and it holds an allow-list rather than a deny-list: from the public path down every step is a folder, and the last may be a file or a collab document; past a collab document only its `media/` folder and a file in it. So a folder's link covers everything below it, a private subfolder included, and a chat, a document's databases and any path type added later stay closed. There is no write variant, because no route a visitor reaches writes.
+
+**`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) is the third drive a route can hold, beside the owner's `Drive` and `SharedDrive`.** It runs the rule before each read and refuses every path alike, with a 403 or `canRead`'s false, so a visitor can't tell a private path from a missing one. It hands out every path with `acl: null`, starts a breadcrumb at the public path and filters a listing by the rule. A route opts in with the `linkAuth` macro (`routes/auth.ts`) and gets its drive from `getReadDrive`; [ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture) has all three.
+
+**The server switch closes every link for everyone.** `sharing.publicLinks` is on by default and never on a demo server: `arePublicLinksEnabled()` in `lib/config/server-settings.ts` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). `LinkDrive` refuses every path while it is off, and `grantsPublicRead` counts `link` only while it is on, so a signed-in non-member or a guest loses the read too. People with an ACL entry, the owner and the team keep theirs. The stored value stays, so turning the switch on opens the same URLs again.
+
+**`Drive.updateACLDelta` is the one place that refuses a new link**: 403 while public links are off, and 400 on anything but a file, a folder or a collab document (`canHaveLink`) or on a path inside a document. A path that already has `link` saves as before, so its people can still be changed, or the link closed, while the switch is off. The editor and `sharingRestricted` rules are those of any visibility change ([Re-Share Prevention](#re-share-prevention)).
 
 ## Effective Members
 
@@ -203,11 +218,11 @@ An embedded chat usually has no ACL of its own; it inherits from the container. 
 
 ### findContainerFromAncestors()
 
-In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) and returns the **outermost** `DrivePath` whose type passes `isCollabType()` (doc, stickies, slides, sheets, vector), or `null` for a standalone chat. `Drive.findContainerPath()` fetches the breadcrumb and delegates. Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
+In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) and returns the **nearest** `DrivePath` above or at the path whose type passes `isCollabType()` (doc, stickies, slides, sheets, vector), the last such path in the chain (`findLast`), or `null` for a standalone chat. `Drive.findContainerPath()` fetches the breadcrumb and delegates. Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
 
 ### Rules
 
-- Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
+- Standalone chat → ACL lands on the chat itself; embedded or nested → on the nearest container above it
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
 - The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
@@ -238,7 +253,7 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 
 The server merges onto the path's current ACL (`mergeACLDelta` in `acl.ts`): removals first (matched on `canonicalACLId`, so emails match case-insensitively), then upserts. Re-adding an existing id replaces its entry, which is how permission changes travel. `Drive.updateACLDelta` serializes the read-merge-write per path, then validates, saves and propagates the merged ACL. Full-array replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert entries a concurrent sharer just added. The FE share dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta. Defined in `apps/api/src/routes/drive-sharing.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is an email or a `team_` id, the same bound the chat invite route uses); `add` holds at most `MAX_SEND_RECIPIENTS` (100) entries, the cap the access-check route puts on its email list.
 
-`GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403. A stranger gets `{ false, false }`, which is what the request-access view keys off.
+`GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403, a visitor without a login included, from `readPermissions` (`lib/drive/get-drive.ts`). A stranger gets `{ false, false }`, which is what the request-access view keys off, and a visitor gets `canWrite: false` with the link rule's read.
 
 Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's own ACL names the caller by email (and the caller isn't an effective owner) and, if so, removes only that entry through `Drive.updateACLDelta`. There is no write check: a read-only recipient can always leave, restricted or not. The owner's file and every other recipient are untouched, and the recipient's own home skips the "removed your access" notification for it. Access through a shared folder, a team drive or a team ACL entry is not a direct share: a delete there trashes the owner's copy like any delete, write-gated. The FE mirrors the same test with `useIsSharedWithMe()` so `DriveDeleteItem` can say **Remove shared item** instead of **Move to trash**, and the Drive action runner (`useDriveActionRunner`) confirms every delete in a drive the caller doesn't own (`useIsEffectiveOwnerOf()`).
 
@@ -252,7 +267,7 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 **Self-removal is a delete, not an ACL edit.** A restricted editor cannot touch the ACL at all; the only thing they can do is leave, and that rides on `deletePath` so the ACL route keeps one rule.
 
-**Visibility blocked too.** An editor cannot flip a restricted file to `public-read`: same route, same check.
+**Visibility blocked too.** An editor cannot flip a restricted file to `public-read` or `link`: same route, same check.
 
 **Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwner()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
 

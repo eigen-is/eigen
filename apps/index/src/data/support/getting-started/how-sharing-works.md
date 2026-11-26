@@ -6,7 +6,7 @@ category: Sharing
 tags: [sharing, permissions, collaboration, getting-started, guests]
 related: [drive/share-a-file, drive/get-started, admin/guests]
 order: 4
-updated: 2026-06-08
+updated: 2026-11-26
 ---
 
 Sharing in Eigen works the same way wherever you are. The same controls cover your files in Drive and the documents, spreadsheets, presentations, boards, and chats you create. This page explains the ideas behind it, so you know what you're giving away before you share. For the click-by-click steps, see [Share a file or folder](/support/drive/share-a-file).
@@ -36,19 +36,22 @@ You can give access to specific people, to a whole team, or to anyone with the l
 
 - **People**: type a name or email address. You can choose someone from the suggestions or enter any email address, including one that doesn't have an Eigen account yet. They appear under **People with access** with their own Viewer or Editor setting. This is the most precise way to share, and the right choice most of the time.
 - **A team**: if you belong to a team, you can share with the team in one step. Everyone in that team gets access, and people who join the team later get it too. It saves adding members one by one.
-- **A link**: under **General access** you can open a file up so that anyone with the link can get in, as a viewer or an editor. Use the **Copy link** button to copy it and send it however you like.
+- **A link**: under **General access** you can open a file up so that anyone with the link can get in. Use the **Copy link** button to copy it and send it however you like.
 
-A file's general access starts as **Restricted**, which means only the people you've added can open it. Switching it to **Unrestricted** is what turns the link on.
+A file's general access starts as **Restricted**, which means only the people you've added can open it. The dropdown under **General access** offers two wider choices:
+
+- **Anyone signed in with the link**: whoever has the link and signs in to Eigen gets in, as a viewer or an editor, whichever you pick.
+- **Anyone with the link**: whoever has the link can view it without signing in, even with no account ([Share with a public link](/support/drive/share-with-a-public-link)).
 
 ## Signing in to open a share
 
-A shared link is a shortcut to the item inside Eigen, not a public web page. Whoever opens it has to sign in first, so there's no anonymous, sign-in-free access.
+A shared link is a shortcut to the item inside Eigen. Unless you chose **Anyone with the link**, whoever opens it has to sign in first.
 
 They don't need an account set up for them in advance, though. Anyone you share with can sign in as a guest using a one-time code sent to their email address, then see only the things that have been shared with them. That's how you share with someone outside your organization. How guests sign in, and the control an administrator has over it, are covered in [guest access](/support/admin/guests).
 
 <div class="eigen-callout">
 
-An **Unrestricted** link can be opened by anyone who has the link and signs in, including someone signing in as a guest. It isn't open to the public internet, but it is wider than naming people one by one. Share specific people when you want to keep the circle tight.
+**Anyone signed in with the link** lets in anyone who has the link and signs in, including someone signing in as a guest. **Anyone with the link** goes further: it is open to anyone on the internet who has the link. Both are wider than naming people one by one. Share with specific people when you want to keep the circle tight.
 
 </div>
 
