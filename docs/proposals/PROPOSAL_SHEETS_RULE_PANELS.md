@@ -131,7 +131,7 @@ The chart panel writes every keystroke inside a gesture, and peers see the title
 
 ## The rule store comes first
 
-Finding F9 of [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md#f9) proposes one keyed, ordered store for both rule kinds: `Record<id, { ranges, order, … }>` with `order` a fractional key, as images and charts have. It sizes itself at about 400 lines rewritten for about 130 fewer, high risk.
+Finding F9 of [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md) proposes one keyed, ordered store for both rule kinds: `Record<id, { ranges, order, … }>` with `order` a fractional key, as images and charts have. It sizes itself at about 400 lines rewritten for about 130 fewer, high risk.
 
 What each part of this proposal needs from it:
 
@@ -189,7 +189,7 @@ Phases 2 and 3 can ship without phase 4. Phase 3 before 4 leaves conditional for
 ## Related
 
 - [SHEETS.md](../SHEETS.md): the dialog slot, the chart panel, how each rule kind is stored
-- [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md#f9): F9, the keyed rule store
+- [SHEETS-SIMPLIFICATION-AUDIT.md](../SHEETS-SIMPLIFICATION-AUDIT.md): F9, the keyed rule store
 - [SHEETS-TODO.md](../SHEETS-TODO.md#sync-and-undo): the rows F9 closes
 - [COMMENTS.md](../COMMENTS.md#on-a-phone-the-column-hides-the-editor-never-unmounts-it): the pane on a phone
 - [LAYOUT.md](../LAYOUT.md) and [MOBILE.md](../MOBILE.md): `Column`, the phone's one column
