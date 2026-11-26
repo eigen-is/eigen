@@ -23,7 +23,7 @@ The toolbar is the `toolbar` prop of a `Column`, never part of the page content.
 </ColumnLayout>
 ```
 
-A list whose items open a detail is `ListDetailLayout`, as on the contacts and admin users and teams pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`), keeping every other param.
+A list whose items open a detail is `ListDetailLayout`, as on the contacts, admin users, teams and waitlist pages. The page passes `detail` only while its URL names a selection, so with nothing selected the list fills the page. The detail is a `flex` `DetailColumn` beside the `large` list, so its X, Esc and phone back close it, and the page opens and closes it through `useDetailHistory` over its own search param (`?contactId=`, `?userId=`, `?teamId=`, `?entryId=`), keeping every other param. Mail lays out its own list, which scrolls itself, beside the same `flex` `DetailColumn` ([MAIL.md](MAIL.md#the-open-message-and-the-composer-share-one-detail-column)).
 
 ## A side column is small, medium or large
 

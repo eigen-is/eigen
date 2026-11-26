@@ -7,7 +7,7 @@ tags: [mail, getting-started, email, inbox]
 related: [mail/read-and-reply, mail/compose-and-send, drive/get-started]
 crossSections: [getting-started]
 order: 10
-updated: 2026-11-17
+updated: 2026-11-26
 ---
 
 Mail is your email in Eigen. You read, write, and organize messages without leaving the browser.
@@ -48,7 +48,7 @@ To find a message, type in the **Search emails...** box at the top of the list. 
 
 ## The reading pane
 
-Click a message to open it in the reading pane on the right. You see the subject, who it's from and to, the date, any attachments, and the full message. Opening a message marks it as read.
+Click a message to open it in the reading pane on the right. You see the subject, who it's from and to, the date, any attachments, and the full message. Opening a message marks it as read. To close it and go back to the full list, click **Close** (the **X**) at the right of the toolbar above the message, or press **Esc**.
 
 The toolbar above the message has the actions you'll use most:
 
