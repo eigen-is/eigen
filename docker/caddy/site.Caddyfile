@@ -4,7 +4,7 @@
 (app) {
     redir /{args[0]} /{args[0]}/ 308
     handle_path /{args[0]}/* {
-        # An app page is never for a search engine, a public link's page included; the API says the same.
+        # An app page is never for a search engine, a public link's page included.
         header X-Robots-Tag noindex
         root * /www/{args[0]}
         try_files {path} /index.html
