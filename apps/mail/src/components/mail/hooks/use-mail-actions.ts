@@ -80,6 +80,7 @@ type MailActions = {
 
 export function useMailActions(): MailActions {
     const { filterType, filterId } = Route.useParams();
+    const { mailId } = Route.useSearch();
     const navigate = useNavigate();
     const { user } = useAuth();
     const deleteMail = useDeleteEmail();
@@ -146,6 +147,10 @@ export function useMailActions(): MailActions {
     };
 
     const detail = useMailDetail();
+    // A batch closes the open message only when it is among the emails that went.
+    const closeIfAmong = (emails: readonly Email[]) => {
+        if (emails.some((e) => e.id === mailId)) detail.close();
+    };
     const openCompose = () => detail.open({});
 
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
@@ -198,7 +203,7 @@ export function useMailActions(): MailActions {
     // Its mutation already toasted it, so the dialog shows no second message.
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
-        if (results.some((r) => r.status === 'fulfilled')) detail.close();
+        closeIfAmong(pendingEmails.filter((_, i) => results[i].status === 'fulfilled'));
         const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
         if (failures.length === 0) return;
         // A refused email, such as one already gone, gets the same no again, so only the others stay for a retry. A
@@ -235,9 +240,7 @@ export function useMailActions(): MailActions {
         if (trashEmails.length > 0) {
             return { needsConfirmation: true, emails: trashEmails };
         }
-        if (moved.length > 0) {
-            detail.close();
-        }
+        closeIfAmong(moved);
         return { needsConfirmation: false };
     };
 
@@ -251,7 +254,7 @@ export function useMailActions(): MailActions {
         const results = await Promise.allSettled(
             emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: folderId })),
         );
-        if (results.some((r) => r.status === 'fulfilled')) detail.close();
+        closeIfAmong(emails.filter((_, i) => results[i].status === 'fulfilled'));
     };
 
     // An archive or a spam report: one toast and one Undoable for every message that moved.
@@ -267,8 +270,8 @@ export function useMailActions(): MailActions {
             };
             lastAction.current = action;
             undoToast(`${moved.length} ${toastWording}`, action);
-            detail.close();
         }
+        closeIfAmong(moved);
     };
 
     const handleArchiveEmailsByIds = (emailIds: string[]) =>

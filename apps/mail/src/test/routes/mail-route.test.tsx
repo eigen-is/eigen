@@ -2,7 +2,8 @@
 // and X or Esc closes it: back on the entry the row pushed, by replace on one a link opened, so back after a close
 // never reopens the message. Closing keeps the search's ?q=. A message opened from the composer leaves the compose
 // session's history state behind. Compose follows the same rule: from the list it pushes, over a message it replaces,
-// and an archive or a delete of the open message closes it the same way.
+// and an archive or a delete of the open message closes it the same way. Archiving another row from the list leaves
+// the open message open.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { Email } from '@workspace/lib/types/mail';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -216,6 +217,31 @@ test('archiving or deleting the open message closes it by going back', async () 
     expect(page.index()).toBe(0);
     await clickRow(1);
     await settle(() => button('Delete')?.click());
+    expect(page.search()).toEqual({});
+    expect(page.index()).toBe(0);
+});
+
+// The row's menu, as a right-click opens it, then its item by label.
+const menuItem = async (index: number, label: string) => {
+    await settle(() =>
+        row(index)?.dispatchEvent(
+            new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }),
+        ),
+    );
+    return [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === label);
+};
+
+test("archiving another row from the list leaves the open message open, and the open message's own row closes it", async () => {
+    const page = await open('/box/inbox');
+    await clickRow(0);
+    expect(page.search()).toEqual({ mailId: 'm1' });
+    const archiveOther = await menuItem(1, 'Archive');
+    expect(archiveOther).toBeDefined();
+    await settle(() => archiveOther?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(page.search()).toEqual({ mailId: 'm1' });
+    expect(page.index()).toBe(1);
+    const archiveOpen = await menuItem(0, 'Archive');
+    await settle(() => archiveOpen?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(page.search()).toEqual({});
     expect(page.index()).toBe(0);
 });
