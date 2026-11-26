@@ -148,11 +148,11 @@ export function VectorEditor({
                     createLabel="New vector"
                     createIcon={Diamond}
                     createType="vector"
-                    onToggleCommentPanel={comments.column.toggleComments}
-                    commentPanelOpen={comments.column.commentPanelOpen}
+                    onToggleComments={comments.column.toggleComments}
+                    commentsOpen={comments.column.commentsOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.column.toggleActivity}
-                    activityPanelOpen={comments.column.activityPanelOpen}
+                    onToggleActivity={comments.column.toggleActivity}
+                    activityOpen={comments.column.activityOpen}
                 />
             }
             propertiesPanel={

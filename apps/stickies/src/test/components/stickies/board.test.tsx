@@ -15,7 +15,7 @@ import * as Y from 'yjs';
 
 installHappyDom();
 
-type ToolbarProps = { onToggleActivityPanel?: () => void; activityPanelOpen?: boolean };
+type ToolbarProps = { onToggleActivity?: () => void; activityOpen?: boolean };
 
 // The props the toolbar, the find bar's provider and the first column were last rendered with.
 const seen: {
@@ -375,7 +375,7 @@ const columnButton = (name: string) =>
     document.querySelector<HTMLElement>(`[data-slot="detail-column"] button[aria-label="${name}"]`);
 const boardHidden = () => document.querySelector('[data-testid="board-column"]')?.closest('.hidden') != null;
 const toggleActivity = async () => {
-    await act(async () => seen.toolbar?.onToggleActivityPanel?.());
+    await act(async () => seen.toolbar?.onToggleActivity?.());
     await settle();
 };
 const pressEscape = async () => {
@@ -390,7 +390,7 @@ test("the toolbar's Activity pushes ?panel=activity and shows the list at 256 un
     await toggleActivity();
     expect(param('panel')).toBe('activity');
     expect(history.location.state.__TSR_index).toBe(1);
-    expect(seen.toolbar?.activityPanelOpen).toBe(true);
+    expect(seen.toolbar?.activityOpen).toBe(true);
     expect(column()?.style.width).toBe('256px');
     expect(column()?.querySelector('.eigen-toolbar-title')?.textContent).toBe('Activity');
     expect(slotRow()?.querySelector('[data-testid="board-column"]')).not.toBeNull();
@@ -465,7 +465,7 @@ test("a card deleted from the activity keeps the entry's flag, so the column's X
 
 test('on a phone the activity covers the board, which never remounts, and ‹ closes it', async () => {
     await openBoard(['/'], { isMobile: true });
-    expect(seen.toolbar?.onToggleActivityPanel).toBeDefined();
+    expect(seen.toolbar?.onToggleActivity).toBeDefined();
     await toggleActivity();
     expect(boardHidden()).toBe(true);
     expect(column()?.closest('.hidden')).toBeNull();

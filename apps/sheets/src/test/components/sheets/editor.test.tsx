@@ -112,9 +112,9 @@ mock.module('@workspace/ui/components/layout/app', () => ({
 }));
 mock.module('@workspace/ui/components/layout/toolbar', () => ({
     ...realToolbar,
-    DocumentShareCluster: (props: { onToggleCommentPanel: () => void; onToggleActivityPanel: () => void }) => {
-        seen.toggleComments = props.onToggleCommentPanel;
-        seen.toggleActivity = props.onToggleActivityPanel;
+    DocumentShareCluster: (props: { onToggleComments: () => void; onToggleActivity: () => void }) => {
+        seen.toggleComments = props.onToggleComments;
+        seen.toggleActivity = props.onToggleActivity;
         return null;
     },
 }));

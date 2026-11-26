@@ -32,8 +32,8 @@ export type CommentsColumnState = {
     listPanel: DocumentPanel;
     threadOpen: boolean;
     width: 'small' | 'large';
-    commentPanelOpen: boolean;
-    activityPanelOpen: boolean;
+    commentsOpen: boolean;
+    activityOpen: boolean;
     toggleComments: () => void;
     toggleActivity: () => void;
     // A list row's and an activity row's open, which reveal the anchor first.
@@ -118,8 +118,8 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
             listPanel,
             threadOpen,
             width,
-            commentPanelOpen: open && listPanel === 'comments',
-            activityPanelOpen: open && listPanel === 'activity',
+            commentsOpen: open && listPanel === 'comments',
+            activityOpen: open && listPanel === 'activity',
             toggleComments: () => toggle('comments'),
             toggleActivity: () => toggle('activity'),
             openThread,

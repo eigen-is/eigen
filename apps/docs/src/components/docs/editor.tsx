@@ -339,7 +339,7 @@ const TiptapEditor = ({
                     },
                     onSelectionContextMenu: (event) => selectionContextMenuRef.current(event),
                     onAddComment: () => handleAddCommentRef.current?.(),
-                    onToggleCommentPanel: () => toggleCommentsRef.current(),
+                    onToggleComments: () => toggleCommentsRef.current(),
                 }),
             ],
         },
@@ -524,7 +524,7 @@ const TiptapEditor = ({
     const lastPanelRef = useRef<Exclude<SelectionPanel, 'document'>>('figure');
     if (selectionPanel !== 'document') lastPanelRef.current = selectionPanel;
 
-    // The page owns the filter, so it survives when the comments panel closes and opens again.
+    // The page owns the filter, so it survives when the comments column closes and opens again.
     const commentFilter = useCommentFilter();
     const commentHover = useCommentHover();
     allCommentsRef.current = allComments;
@@ -741,7 +741,7 @@ const TiptapEditor = ({
         );
 
     const tableOfContentsItem = tableOfContentsContextMenu.item;
-    // An open comments or activity panel holds the slot the table of contents panel needs.
+    // An open comments or activity column holds the slot the table of contents panel needs.
     const tableOfContentsRows =
         tableOfContentsItem && tableOfContentsMenuSections(tableOfContentsItem, isMobile ? undefined : column.close);
 
@@ -812,11 +812,11 @@ const TiptapEditor = ({
                                     }
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: the column lies over the page on a desktop and fills a phone.
-                                    onToggleCommentPanel={column.toggleComments}
-                                    commentPanelOpen={column.commentPanelOpen}
-                                    closePanels={column.close}
-                                    onToggleActivityPanel={column.toggleActivity}
-                                    activityPanelOpen={column.activityPanelOpen}
+                                    onToggleComments={column.toggleComments}
+                                    commentsOpen={column.commentsOpen}
+                                    closeColumn={column.close}
+                                    onToggleActivity={column.toggleActivity}
+                                    activityOpen={column.activityOpen}
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={
                                         mediaFolderId

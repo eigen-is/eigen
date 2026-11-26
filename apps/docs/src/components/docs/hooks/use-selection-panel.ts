@@ -22,7 +22,7 @@ type SelectionPanelState = {
 // its panel, sliding the page each time, so a click on it, Insert › Equation or Enter on it opens its panel, which
 // stays while the equation is selected. `editor` is the one that has the selection, a band's or an open story's, and
 // is read again when it changes, so a panel another editor's selection opened closes.
-export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels: () => void): SelectionPanelState {
+export function useSelectionPanel(editor: Editor, isMobile: boolean, closeColumn: () => void): SelectionPanelState {
     const [selectionPanel, setSelectionPanel] = useState<SelectionPanel>('document');
     const equationFieldRef = useRef<HTMLTextAreaElement>(null);
     // A new equation's panel mounts in the render its selection causes, so its field takes focus after that render.
@@ -60,10 +60,10 @@ export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels
         setFocusEquationField(true);
     };
 
-    // The comments panel would hold the slot the new equation's panel needs. No editor focus: Tiptap's comes a frame
+    // The comments column would hold the slot the new equation's panel needs. No editor focus: Tiptap's comes a frame
     // after the field's.
     const insertEquation = () => {
-        closePanels();
+        closeColumn();
         editor.commands.insertEquation();
         editEquation();
     };

@@ -327,10 +327,10 @@ export function StickiesBoard({
                                         filter={commentFilter}
                                         members={members}
                                         currentUserEmail={currentUserEmail}
-                                        onToggleActivityPanel={() =>
+                                        onToggleActivity={() =>
                                             activityOpen ? activity.close() : activity.open('activity')
                                         }
-                                        activityPanelOpen={activityOpen}
+                                        activityOpen={activityOpen}
                                     />
                                 }
                             >

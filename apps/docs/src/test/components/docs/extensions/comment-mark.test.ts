@@ -99,7 +99,7 @@ test('⌘⌥M adds a comment on selected text and otherwise toggles the panel', 
             ...getDocExtensions({ exclude: ['comment'] }),
             CommentMark.configure({
                 onAddComment: () => calls.push('add'),
-                onToggleCommentPanel: () => calls.push('panel'),
+                onToggleComments: () => calls.push('panel'),
             }),
         ],
         content: docOf(text('words')),

@@ -326,10 +326,10 @@ export function SheetEditor({
             offline={offline}
             storageUnavailable={storageUnavailable}
             onAccessDialogOpen={onAccessDialogOpen}
-            onToggleCommentPanel={column.toggleComments}
-            commentPanelOpen={column.commentPanelOpen}
-            onToggleActivityPanel={column.toggleActivity}
-            activityPanelOpen={column.activityPanelOpen}
+            onToggleComments={column.toggleComments}
+            commentsOpen={column.commentsOpen}
+            onToggleActivity={column.toggleActivity}
+            activityOpen={column.activityOpen}
             assignedCommentCount={assignedCount}
             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
         />

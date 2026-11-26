@@ -32,7 +32,7 @@ type CommentMarkOptions = {
     // A right-click off a card's anchor. True when it opened a menu; false leaves the browser's own.
     onSelectionContextMenu?: (event: MouseEvent) => boolean;
     onAddComment?: () => void;
-    onToggleCommentPanel?: () => void;
+    onToggleComments?: () => void;
 };
 
 type CommentColors = {
@@ -168,7 +168,7 @@ function buildDecorations(state: EditorState, colors: CommentColors): Decoration
             // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
             // from this spec, resolved or not, like a commented canvas element.
             if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
-            // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
+            // Text, and an equation among it, is highlighted until resolved; the comments column shows a resolved one.
             if (!isFigureFrameNode(node.type.name) && !colors.resolvedIds.has(cardId) && color) {
                 decorations.push(
                     Decoration.inline(pos, end, {
@@ -198,8 +198,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentC
                     this.options.onAddComment();
                     return true;
                 }
-                if (this.options.onToggleCommentPanel) {
-                    this.options.onToggleCommentPanel();
+                if (this.options.onToggleComments) {
+                    this.options.onToggleComments();
                     return true;
                 }
                 return false;

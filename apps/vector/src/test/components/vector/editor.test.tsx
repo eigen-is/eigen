@@ -42,9 +42,9 @@ const doc = {
 const comments = {
     column: {
         toggleComments: () => {},
-        commentPanelOpen: false,
+        commentsOpen: false,
         toggleActivity: () => {},
-        activityPanelOpen: false,
+        activityOpen: false,
     },
     assignedCount: 0,
     openCard: () => {},

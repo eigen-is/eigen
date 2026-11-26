@@ -374,11 +374,11 @@ export function SlideEditor({
                             className="bg-[var(--app-current-color-soft)] text-[var(--app-current-color)] hover:bg-[var(--app-current-color-soft)] hover:text-[var(--app-current-color)]"
                         />
                     }
-                    onToggleCommentPanel={comments.column.toggleComments}
-                    commentPanelOpen={comments.column.commentPanelOpen}
+                    onToggleComments={comments.column.toggleComments}
+                    commentsOpen={comments.column.commentsOpen}
                     assignedCommentCount={comments.assignedCount}
-                    onToggleActivityPanel={comments.column.toggleActivity}
-                    activityPanelOpen={comments.column.activityPanelOpen}
+                    onToggleActivity={comments.column.toggleActivity}
+                    activityOpen={comments.column.activityOpen}
                 />
             }
             propertiesPanel={
