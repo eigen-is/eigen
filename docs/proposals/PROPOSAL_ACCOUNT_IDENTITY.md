@@ -10,7 +10,7 @@ The document has two parts. **Part A** is the identity change, the work for 0.5.
 - Where Eigen stores "this person", it stores the member's id. An outside person (a guest) is stored as a plain email address.
 - **Members and guests never mix.** A member's address is always on one of the server's own domains. Every other address is a guest address. A guest never becomes a member.
 - An address is translated to an id **once, at the border** (the share dialog, a mention, a calendar save). A new account with an old address gets a new id, so it inherits nothing.
-- The product gets **no backward compatibility**. eigen.is is converted once, by a throwaway script. SSO (Tobias) goes on in parallel and merges after it.
+- The product gets **no backward compatibility**. eigen.is is converted once, by a throwaway script. SSO comes after the identity change is done.
 
 # Part A: the identity change (0.5.0)
 
@@ -179,18 +179,19 @@ SSO means: sign in with your company account (authentik, Keycloak).
 
 **The honest limit.** Guard 1 only protects accounts that already used SSO. Old Anna has a password account. She left before SSO was turned on and nobody deleted her. If linking by address is allowed, new Anna's first SSO sign-in is linked to old Anna's whole account. And when a guard refuses a link, the new person cannot sign in at all, because the address is taken. An admin must first delete the old account.
 
-**The choice** (Tobias asked for this; it is in section 8):
+**The choice** (it is in section 8):
 
 - **(a) Allow linking by address** (`requireLocalEmailVerified` off). Every existing member can use SSO at once. When the owner adds a provider, Eigen shows the list of accounts that can now be linked, so the owner can delete the people who left.
 - **(b) Keep the default and let an admin mark each account "may use SSO"** (this sets `emailVerified`, which members do not use for anything else). One button can mark all current members. An account nobody marked cannot be taken over.
 - **Recommendation: (b).** When something is forgotten, the result is "cannot sign in", not "wrong person signed in".
 
-**The order. Recommendation: run in parallel. Tobias builds SSO. We build the id change.**
+**The order: first the identity change, then SSO.**
 
-- Do not build SSO ourselves. Tobias runs authentik, tests against it, and has read the code well.
-- Phase 1 touches the plugin list, `auth-schema.ts`, the boot DDL, one hook and a test. The id change touches shares, chats, comments and calendar. The only shared spot is the hooks in `auth.ts`.
-- The id change lands before 0.5.0. SSO merges in a 0.5.x, after it. So SSO never runs on a server whose shares still say addresses.
-- Tobias does not need to wait to start. The "deleted address list" is dropped.
+- SSO's guards build on Part A: a provider's domain becomes a member domain, the second-`sub` refusal, and no link to a guest. Built first, SSO would be built on the email model and have to be redone.
+- The identity change moves the code SSO touches (the hooks in `auth.ts`, shares, chats, calendar). Building both at once means conflicts and rebases.
+- SSO creates accounts with nobody watching. It should never run on a server whose shares still match by address.
+- The identity change lands before 0.5.0. SSO starts after it is done, built by Tobias (issue #16) or by us.
+- The "deleted address list" from the earlier plan is dropped.
 
 ## 6. Migration
 
@@ -301,39 +302,7 @@ SSO choices:
 - [ ] The owner route reads the provider's settings page itself, public addresses only (Tobias's proposal). Recommended: yes.
 - [ ] 2FA required for the owner and admins (Tobias's suggestion). A separate change.
 - [ ] `/admin/update-user` can change an address today. Refuse that in `user.update.before` until the address-change feature exists? Recommended: yes.
-- [ ] The order: id change before 0.5.0, SSO in 0.5.x, Tobias builds SSO.
-
-## 9. Reply to Tobias on issue #16 (draft)
-
-**Not posted. Do not post before section 8 is ticked.** The draft only says what is already decided. The lines in square brackets are filled in after the ticks.
-
-> Hi Tobias, I thought about it, longer than planned. You're right. A share with an account should name the account, not the address. We'll go further than you asked: the user id becomes the way Eigen names a member everywhere. Shares, calendar shares, chat and comment authors, assignments, mentions. The address is only a property that can change. Calendar attendees stay `mailto:`, with the id next to it for members.
->
-> One rule keeps it simple: members and guests never mix. A member's address is always on one of the server's own domains. Every other address is a guest, stored as a plain address, and a guest never becomes a member. So there are no invitations that turn into accounts, and nothing to rewrite.
->
-> So the deleted-address list is dropped. No proposal needed. Thanks for offering, and for the question. It changed the plan.
->
-> We build that part ourselves, because it touches stored data everywhere. It has to be in before SSO merges. One warning for your own test server: this change has no upgrade path. Data from before it will not open, so plan to start fresh.
->
-> What you can do now: go on with phase 1. Nothing in it waits for us. Five things for it:
->
-> 1. better-auth already stores the provider's `sub` (`accountId` on the account row) and looks a sign-in up by it first. Only when it finds none does it link by address. Please refuse that link when the user already has a login from the same provider. Same address, other `sub`, is a new person. Your `account.create.before` hook is the right place.
-> 2. In the same hook: no link to the owner or an admin, via `getOrgRole` as you propose.
-> 3. A provider's domain becomes a member domain. Please refuse a sign-in whose address is not on that provider's own domain. That also means an SSO login can never land on a guest.
-> 4. Leave `overrideUserInfo` off in v1.
-> 5. Don't allow editing a provider's issuer. Delete and add again.
->
-> For the admin page later: a guest with an address on the provider's domain blocks that domain. Adding the provider has to show those guests to the owner and remove them first. [details]
->
-> What waits:
->
-> - Your question about accounts that existed before SSO. Please keep `requireLocalEmailVerified` at its default for now. With it off, the first SSO sign-in with an address takes over the password account with that address, also when that account belongs to someone who left and was never deleted. I'm choosing between two ways to handle that. [the answer]
-> - A member who is made an admin later and keeps SSO. [the answer]
-> - Reading the provider's settings in the owner route. [the answer]
-> - 2FA for the owner and admins: a good idea, I'll decide separately.
-> - The merge, until the id change is in.
->
-> The full design will be in `docs/proposals/PROPOSAL_ACCOUNT_IDENTITY.md` on `develop`. Tell me if you see a hole.
+- [ ] The order: the identity change first, before 0.5.0. SSO starts after it, built by Tobias or by us.
 
 # Part B: built on top, later
 
