@@ -39,6 +39,7 @@ import {
     CONTACTS,
     DEMO_TIME_ZONE,
     DOCS,
+    demoTime,
     HEIN_KLARENBEEK,
     KANBAN,
     MAILS,
@@ -781,12 +782,8 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 expect(stored).toEqual(stored.toSorted((a, b) => a - b));
                 for (const time of stored) expect(time).toBeLessThan(unixSeconds(seedStart));
             };
-            const daysBefore = (daysAgo: number, hour: number, minute: number) => {
-                const time = new Date(seedStart);
-                time.setDate(time.getDate() - daysAgo);
-                time.setHours(hour, minute, 0, 0);
-                return unixSeconds(time);
-            };
+            const daysBefore = (daysAgo: number, hour: number, minute: number) =>
+                unixSeconds(demoTime(seedStart, { daysAgo, hour, minute }));
             for (const channel of CHATS) {
                 expectThreadTimes(
                     messagesOf(channel.name),
@@ -795,6 +792,9 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             }
             const productionRows = messagesOf('production');
             expect(productionRows[0].createdAt).toBe(daysBefore(8, 9, 12));
+            // On the demo's Amsterdam clock, whatever zone the seed runs in.
+            const firstPost = utcToLocal(new Date(productionRows[0].createdAt * 1000), DEMO_TIME_ZONE);
+            expect([firstPost.hour, firstPost.minute]).toEqual([9, 12]);
             expect(productionRows.at(-1)?.createdAt).toBe(daysBefore(2, 16, 30));
             expect(messagesOf('volunteers').at(-1)?.createdAt).toBe(daysBefore(1, 9, 21));
             for (const comment of DOCS.flatMap((doc) => doc.comments)) {

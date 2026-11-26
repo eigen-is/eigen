@@ -4,6 +4,7 @@
 // workspace through the real product surfaces, so a richer pass changes data here, not mechanics. Personas resolve
 // by `<key>@<MAIL_DOMAIN>`, so ids may differ per rebuild. All names, acts and vendors are fictional.
 
+import { localToUtc, utcToLocal } from '@workspace/lib/calendar/calendar-utils';
 import { CHART_DEFAULT_SIZE, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { escapeHtml } from '@workspace/lib/html';
 import type { FillPaint } from '@workspace/lib/types/background';
@@ -2623,15 +2624,17 @@ export function personaByKey(key: string): Persona {
     return persona;
 }
 
-// The time of every message of a thread, the first at `start` and each later one by its `gap` or `at`. A day counts
-// back on the calendar from `now`, so a clock change in between moves no message to another day.
+// A seeded time on the demo's own clock: its day counts back on the Amsterdam calendar from `now`, so a clock change
+// in between moves nothing to another day, and a UTC server dates it as a Dutch visitor reads it.
+export function demoTime(now: Date, { daysAgo, hour, minute }: SeededTime): Date {
+    const today = utcToLocal(now, DEMO_TIME_ZONE);
+    const day = new Date(Date.UTC(today.year, today.month - 1, today.day - daysAgo));
+    return localToUtc(DEMO_TIME_ZONE, day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), hour, minute, 0);
+}
+
+// The time of every message of a thread, the first at `start` and each later one by its `gap` or `at`.
 export function threadTimes(now: Date, start: SeededTime | Date, later: readonly ChatLine[]): Date[] {
-    const timeOf = ({ daysAgo, hour, minute }: SeededTime): Date => {
-        const time = new Date(now);
-        time.setDate(time.getDate() - daysAgo);
-        time.setHours(hour, minute, 0, 0);
-        return time;
-    };
+    const timeOf = (time: SeededTime) => demoTime(now, time);
     let previous = start instanceof Date ? start : timeOf(start);
     const times = [previous];
     for (const { text, gap = 2, at } of later) {

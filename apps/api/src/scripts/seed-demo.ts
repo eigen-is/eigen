@@ -65,6 +65,7 @@ import {
     DEMO_MAIL_DOMAIN,
     DEMO_TIME_ZONE,
     DOCS,
+    demoTime,
     EVENTS,
     emailFor,
     HEIN_KLARENBEEK,
@@ -933,8 +934,7 @@ async function main(): Promise<void> {
                 headers?: Record<string, string>;
             },
         ): Promise<Buffer> => {
-            const date = new Date(now.getTime() - message.daysAgo * 86_400_000);
-            date.setHours(message.hour, 0, 0, 0);
+            const date = demoTime(now, { daysAgo: message.daysAgo, hour: message.hour, minute: 0 });
             const messageId = `${crypto.randomUUID()}@${MAIL_DOMAIN}`;
             const from = senderOf(message);
             const ownHtml = parts.html ?? textToHtml(message.text);
