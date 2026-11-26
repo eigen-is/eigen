@@ -462,6 +462,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
+                // Text selected in the right slot, such as a comment thread, copies itself.
+                const inSlot = (node: Node | null | undefined) => !!node && !!slot.current?.contains(node);
+                if (inSlot(document.getSelection()?.anchorNode) || inSlot(document.activeElement)) return;
                 // A text field beside a selected chart or image (the chart panel's title, the image panel's
                 // width) copies its own text.
                 const floating = !isTypingTarget();

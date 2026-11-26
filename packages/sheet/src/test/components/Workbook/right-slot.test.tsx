@@ -1,7 +1,9 @@
 // A host's pane, such as its comments column, sits in the workbook's right slot: under the menu bar, which keeps the
 // full width, and beside the formula bar, the grid and the tabs, whose canvas the grid measures. The pane's keys are
-// its own: a letter, Delete, Enter or ⌘Z in a field there never reaches the selected cell, and neither does a paste.
+// its own: a letter, Delete, Enter or ⌘Z in a field there never reaches the selected cell, and neither does a paste,
+// nor a cut or copy of text selected there while a chart is selected.
 import { afterEach, expect, test } from 'bun:test';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 const resizes: (() => void)[] = [];
@@ -24,10 +26,25 @@ async function mount() {
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
+    const chart = { id: 'c1', index: 'a0', x: 300, y: 10, width: 200, height: 100 };
+    const charts = { c1: { ...chart, ...newChartSpecParts(sampleChartSpec('column')) } };
     const data: Sheet[] = [
-        { id: 's1', name: 'One', order: 0, row: 10, column: 5, celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x' } }] },
+        {
+            id: 's1',
+            name: 'One',
+            order: 0,
+            row: 10,
+            column: 5,
+            celldata: [{ r: 0, c: 0, v: { v: 'x', m: 'x' } }],
+            charts,
+        },
     ];
-    const pane = createElement('aside', { 'data-testid': 'pane' }, createElement('textarea'));
+    const pane = createElement(
+        'aside',
+        { 'data-testid': 'pane' },
+        createElement('textarea'),
+        createElement('p', null, 'A reply'),
+    );
     const selections: unknown[] = [];
     const hooks = { afterSelectionChange: (_id: string, selection: unknown) => selections.push(selection) };
     await act(async () => {
@@ -41,7 +58,8 @@ async function mount() {
     const field = container.querySelector<HTMLTextAreaElement>('[data-testid="pane"] textarea');
     if (!input || !field) throw new Error('no cell editor or pane');
     const a1 = () => workbook.current?.getAllSheets()[0]?.data?.[0]?.[0]?.v ?? null;
-    return { container, input, field, a1, selections };
+    const chartCount = () => Object.keys(workbook.current?.getAllSheets()[0]?.charts ?? {}).length;
+    return { container, input, field, a1, selections, chartCount };
 }
 
 const press = (target: HTMLElement, key: string, init: KeyboardEventInit = {}) =>
@@ -125,4 +143,22 @@ test('a paste in the slot does not paste into the sheet', async () => {
     await act(async () => field.dispatchEvent(paste));
     expect(paste.defaultPrevented).toBe(false);
     expect(a1()).toBe('x');
+});
+
+test.each(['copy', 'cut'])('a %s of text selected in the slot leaves the selected chart alone', async (type) => {
+    const { container, chartCount } = await mount();
+    const box = container.querySelector<HTMLElement>('[data-floating-id="c1"] > *');
+    const text = container.querySelector('[data-testid="pane"] p')?.firstChild;
+    if (!box || !text) throw new Error('no chart or pane text');
+    await act(async () => {
+        box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        box.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+    });
+    // A press on the pane's text takes the focus off the chart and selects there.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    document.getSelection()?.selectAllChildren(text.parentNode ?? text);
+    const event = new ClipboardEvent(type, { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    await act(async () => document.body.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(chartCount()).toBe(1);
 });
