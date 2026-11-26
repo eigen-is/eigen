@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
+import type { DrivePathRef } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
@@ -18,8 +19,6 @@ type WatchToggle = {
     isPending: boolean;
     toggle: () => void;
 };
-
-type WatchTarget = { ownerId: string; mountId: string; pathId: string };
 
 // An empty pathId reads nothing, for a host that has no single item to show. A visitor, with no login,
 // watches nothing, so the hook answers null for them and reads nothing.
@@ -79,7 +78,7 @@ function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
 function useWatchPath() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ ownerId, mountId, pathId }: WatchTarget) => {
+        mutationFn: async ({ ownerId, mountId, pathId }: DrivePathRef) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).watch.post();
             if (response.error) throw new AppError(response);
             return response.data;
@@ -92,7 +91,7 @@ function useWatchPath() {
 function useUnwatchPath() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ ownerId, mountId, pathId }: WatchTarget) => {
+        mutationFn: async ({ ownerId, mountId, pathId }: DrivePathRef) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).watch.delete();
             if (response.error) throw new AppError(response);
             return response.data;
@@ -102,7 +101,7 @@ function useUnwatchPath() {
     });
 }
 
-function invalidateWatches(queryClient: QueryClient, { ownerId, mountId, pathId }: WatchTarget): void {
+function invalidateWatches(queryClient: QueryClient, { ownerId, mountId, pathId }: DrivePathRef): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.watches(ownerId) });
     queryClient.invalidateQueries({ queryKey: driveKeys.watchesAll() });
     queryClient.invalidateQueries({ queryKey: driveKeys.pathWatched(ownerId, mountId, pathId) });
