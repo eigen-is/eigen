@@ -14,7 +14,7 @@ import { FindReplaceBar } from '@workspace/ui/components/search/find-replace-bar
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 // The find bar's own shortcuts, which the Edit menus show next to Find and Find and replace.
 export const FIND_HOTKEY = 'Mod+F';
@@ -154,9 +154,12 @@ export function DocSearchProvider({
         [],
     );
 
+    const reportOpen = useEffectEvent((isOpen: boolean) => {
+        onOpenChange?.(isOpen);
+    });
     useEffect(() => {
-        onOpenChange?.(open);
-    }, [open, onOpenChange]);
+        reportOpen(open);
+    }, [open]);
 
     // The field exists only once the bar has mounted, after the render that opens it.
     useEffect(() => {

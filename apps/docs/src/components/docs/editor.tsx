@@ -618,13 +618,11 @@ const TiptapEditor = ({
     }, [editor, cards, allComments, activeComments.ids]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
-    // Find searches the body, so ⌘F leaves a band. Stable, as the find bar reports its state again on every new one.
-    const searchOpenChangeRef = useRef(column.onSearchOpenChange);
-    searchOpenChangeRef.current = column.onSearchOpenChange;
-    const handleSearchOpenChange = useCallback((open: boolean) => {
+    // Find searches the body, so ⌘F leaves a band.
+    const handleSearchOpenChange = (open: boolean) => {
         if (open) setEditingBand(null);
-        searchOpenChangeRef.current(open);
-    }, []);
+        column.onSearchOpenChange(open);
+    };
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     // The properties panels follow the editor that has the selection. A chart's edits its data through the body's undo
