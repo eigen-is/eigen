@@ -4,6 +4,7 @@
 // at an end and is the one whose video plays. An autoplay carousel steps on by itself until the reader moves it. A
 // click on a slide or its corner button, or Enter on the strip, opens the slide in the page's lightbox.
 
+import { prefersReducedMotion } from '@workspace/ui/hooks/prefers-reduced-motion';
 import { useDragScroll } from '@workspace/ui/hooks/use-drag-scroll';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
@@ -27,10 +28,9 @@ export function MediaCarousel({ slides, autoplay, caption, onOpen }: MediaCarous
         const figure = carousel.current;
         const scroller = strip.current;
         if (!autoplay || !figure || !scroller) return;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
         let shown = 0;
         const timer = setInterval(() => {
-            if (reduceMotion.matches || document.hidden || figure.matches(':hover, :focus-within')) return;
+            if (prefersReducedMotion() || document.hidden || figure.matches(':hover, :focus-within')) return;
             const { pitch, inView } = stripPosition(scroller);
             if (inView !== shown) return clearInterval(timer);
             shown = (inView + 1) % scroller.children.length;

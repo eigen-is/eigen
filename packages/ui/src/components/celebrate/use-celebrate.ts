@@ -6,6 +6,7 @@
 
 import { useSpaceSettings } from '@workspace/lib/space';
 import { celebrationsOn } from '@workspace/lib/types/settings';
+import { prefersReducedMotion } from '../../hooks/prefers-reduced-motion';
 import { burstConfetti } from './confetti-burst';
 
 const CHANCE = 1 / 3;
@@ -16,7 +17,7 @@ export function useCelebrate(): (origin: HTMLElement) => void {
 
     return (origin) => {
         if (!enabled || Math.random() >= CHANCE) return;
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (prefersReducedMotion()) {
             origin.animate(
                 [
                     { outline: '4px solid color-mix(in oklab, var(--success) 70%, transparent)' },

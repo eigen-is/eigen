@@ -66,6 +66,7 @@ import {
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
+import { prefersReducedMotion } from '@workspace/ui/hooks/prefers-reduced-motion';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
@@ -500,10 +501,9 @@ const TiptapEditor = ({
             const scroller = scrollContainerRef.current;
             if (scroller) {
                 const top = editor.view.coordsAtPos(editor.state.selection.from).top;
-                const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                 scroller.scrollTo({
                     top: scroller.scrollTop + top - scroller.getBoundingClientRect().top - THREAD_BLOCK_TOP_PX,
-                    behavior: reduceMotion ? 'auto' : 'smooth',
+                    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
                 });
             }
             return true;
