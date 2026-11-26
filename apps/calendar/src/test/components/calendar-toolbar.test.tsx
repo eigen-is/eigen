@@ -1,10 +1,19 @@
 // The toolbar puts the previous and next arrows after the title, beside the view choice, on a computer and a phone
 // alike, so on a phone they sit away from the column's back arrow.
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
+
+// A guest, so a view switch saves to this browser alone and reaches no server.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ user: { id: 'u1', role: 'guest' } }),
+    useIsGuest: () => true,
+}));
+afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
 
 const { createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');

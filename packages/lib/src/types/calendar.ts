@@ -1,8 +1,13 @@
 // The calendar types the API and the Calendar app share: calendars, events and their occurrences, guests,
-// reminders, sharing and the inputs that create or change them.
+// reminders, sharing, the views a user picks from and the inputs that create or change them.
 
 export const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
 export type ImipMethod = (typeof IMIP_METHODS)[number];
+
+// The views a user picks from, in the order every picker lists them. The bare list is what the settings route
+// validates against.
+export const CALENDAR_VIEW_MODES = ['day', '3day', 'week', 'month', 'schedule'] as const;
+export type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 
 export type Reminder = {
     type: 'notification' | 'email';

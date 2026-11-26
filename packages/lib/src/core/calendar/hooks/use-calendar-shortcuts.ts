@@ -4,7 +4,7 @@
 // browser.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
-import type { CalendarViewMode } from '../calendar-view';
+import type { CalendarViewMode } from '@workspace/lib/types/calendar';
 import { stepFocus } from '../calendar-view';
 
 type CalendarShortcuts = {

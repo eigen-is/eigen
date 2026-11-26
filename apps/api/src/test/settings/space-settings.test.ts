@@ -41,6 +41,17 @@ describe('Space settings', () => {
         expect((await putSettings({ docsView: { textWidth: 'huge' } })).status).toBe(422);
     });
 
+    test("a phone's calendar view and a computer's are kept apart, and an unknown view is refused", async () => {
+        expect((await putSettings({ calendarView: { desktop: 'month' } })).status).toBe(200);
+        expect((await putSettings({ calendarView: { phone: 'schedule' } })).status).toBe(200);
+        const settings = await assertJson<UserSettings>(
+            await authedRequest(ctx.charlie.user.sessionToken, `/space/${ctx.charlie.user.id}/settings`),
+        );
+        expect(settings.calendarView).toEqual({ desktop: 'month', phone: 'schedule' });
+
+        expect((await putSettings({ calendarView: { desktop: 'year' } })).status).toBe(422);
+    });
+
     test('a save of one drive view field keeps the stored sort key', async () => {
         expect((await putSettings({ driveView: { mode: 'grid', sortKey: 'size' } })).status).toBe(200);
         expect((await putSettings({ driveView: { mode: 'list' } })).status).toBe(200);
