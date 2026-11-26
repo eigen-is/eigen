@@ -62,9 +62,10 @@ type SheetEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    // The route's ?panel= and ?chat=: the comments column's list and its open thread.
+    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -76,6 +77,7 @@ export function SheetEditor({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
 }: SheetEditorProps) {
     const { ownerId } = path;
@@ -138,12 +140,12 @@ export function SheetEditor({
         ready: sheets.length > 0 && !loadFailed,
         panel,
         chat,
+        card,
         // A list row, an activity row and a landing jump to the comment's first cell. The jump centers the cell, so it
         // stays in view as a thread narrows the grid.
         reveal: (cardId) => {
             const cell = activeComments.firstCells.get(cardId);
             if (cell) workbookRef.current?.revealSearchMatch(cell);
-            return !!cell;
         },
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount } = lifecycle;

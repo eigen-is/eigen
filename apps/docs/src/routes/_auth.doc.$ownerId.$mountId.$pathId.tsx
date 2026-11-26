@@ -14,13 +14,19 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
 
 function CollaborativeTextEditor() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { chat, panel, q } = Route.useSearch();
+    const { chat, card, panel, q } = Route.useSearch();
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     return (
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
             {(props) => (
                 <div className="flex-1 overflow-hidden">
-                    <CollaborativeEditor {...props} panel={panel} chat={chat} initialSearchTerm={initialSearchTerm} />
+                    <CollaborativeEditor
+                        {...props}
+                        panel={panel}
+                        chat={chat}
+                        card={card}
+                        initialSearchTerm={initialSearchTerm}
+                    />
                 </div>
             )}
         </EigenDocEditorRoute>

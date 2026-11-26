@@ -1,10 +1,11 @@
 // A delete from the card's edit form or the comment menu asks first, in every host, and only then runs the host's delete
-// and closes the open comment: a thread the URL names drops its ?chat= by replace.
+// and closes the open comment: a thread a link opened drops its ?chat= by replace.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
 import type { CommentContextMenuItem } from '../../../components/comments/comment-menu-items';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
@@ -35,13 +36,13 @@ const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
 afterAll(() => fetchSpy.mockRestore());
 
 const { act, createElement } = await import('react');
-const { createRoot } = await import('react-dom/client');
+const router = await import('@tanstack/react-router');
 const { QueryClientProvider } = await import('@tanstack/react-query');
 const { commentKeys } = await import('@workspace/lib/chat');
 const { driveKeys } = await import('@workspace/lib/drive');
-const { useCommentLifecycle } = await import('@workspace/lib/comments');
 const { useContextMenu } = await import('../../../components/context-menu');
 const { CommentLifecycleDialogs } = await import('../../../components/comments/comment-lifecycle-dialogs');
+const { useCommentHost } = await import('../../../components/comments/use-comment-host');
 
 function addCard(doc: Y.Doc): void {
     const card = new Y.Map<unknown>();
@@ -54,7 +55,7 @@ function addCard(doc: Y.Doc): void {
 let unmount = async () => {};
 afterEach(() => unmount());
 
-// A board whose card's thread the URL names, as a click on it leaves it.
+// A board whose card's thread a link names.
 async function mountBoard() {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     queryClient.setQueryData(commentKeys.list('owner-1', 'm1', 'board-1'), []);
@@ -62,11 +63,10 @@ async function mountBoard() {
     const doc = new Y.Doc();
     addCard(doc);
     const onDelete = mock((_cardId: string) => {});
-    const onCloseChat = mock(() => {});
-    const onClearChat = mock(() => {});
     const handle: { requestDelete?: (cardId: string) => void; openCard?: boolean } = {};
     function Harness() {
-        const lifecycle = useCommentLifecycle({
+        const { chat } = router.useSearch({ strict: false });
+        const { lifecycle } = useCommentHost({
             ownerId: 'owner-1',
             mountId: 'm1',
             pathId: 'board-1',
@@ -74,10 +74,10 @@ async function mountBoard() {
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1']),
-            chat: 'ship.eigenchat',
-            onOpenChat: () => {},
-            onCloseChat,
-            onClearChat,
+            panel: undefined,
+            chat,
+            card: undefined,
+            listPanel: undefined,
             mapName: 'tasks',
             ready: true,
         });
@@ -92,13 +92,30 @@ async function mountBoard() {
             noun: 'card',
         });
     }
-    const root = createRoot(document.createElement('div'));
-    await act(async () => {
-        root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Harness)));
+    const root = router.createRootRoute({ component: router.Outlet });
+    const page = router.createRoute({
+        getParentRoute: () => root,
+        path: '/',
+        validateSearch: (search: Record<string, unknown>): { chat?: string } =>
+            typeof search.chat === 'string' ? { chat: search.chat } : {},
+        component: Harness,
     });
-    unmount = async () => act(() => root.unmount());
-    return { onDelete, onCloseChat, onClearChat, handle };
+    const history = router.createMemoryHistory({ initialEntries: ['/', '/?chat=ship.eigenchat'] });
+    const memory = router.createRouter({ routeTree: root.addChildren([page]), history });
+    await memory.load();
+    ({ unmount } = await renderInDocument(
+        createElement(
+            QueryClientProvider,
+            { client: queryClient },
+            createElement(router.RouterProvider, { router: memory }),
+        ),
+    ));
+    const chat = () => new URLSearchParams(history.location.search).get('chat');
+    return { onDelete, handle, chat, index: () => history.location.state.__TSR_index };
 }
+
+// A navigate commits a tick later.
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
 
 const confirmDialog = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
 const dialogButton = (name: string) => {
@@ -108,7 +125,7 @@ const dialogButton = (name: string) => {
 };
 
 test('a delete asks first, then runs the delete and drops the open thread from the URL', async () => {
-    const { onDelete, onCloseChat, onClearChat, handle } = await mountBoard();
+    const { onDelete, handle, chat, index } = await mountBoard();
     expect(handle.openCard).toBe(true);
     await act(async () => handle.requestDelete?.('card-1'));
     expect(onDelete).not.toHaveBeenCalled();
@@ -117,20 +134,22 @@ test('a delete asks first, then runs the delete and drops the open thread from t
     expect(dialogButton('Delete').getAttribute('data-variant')).toBe('destructive');
 
     await act(async () => dialogButton('Delete').click());
+    await settle();
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onDelete).toHaveBeenCalledWith('card-1');
-    expect(onClearChat).toHaveBeenCalledTimes(1);
-    expect(onCloseChat).not.toHaveBeenCalled();
+    expect(chat()).toBeNull();
+    expect(index()).toBe(1);
     expect(confirmDialog()).toBeNull();
 });
 
 test('cancelling keeps the card and its thread, and the menu asks the same way', async () => {
-    const { onDelete, onClearChat } = await mountBoard();
+    const { onDelete, chat } = await mountBoard();
     await act(async () => seen.menuDelete?.('card-1'));
     expect(confirmDialog()?.textContent).toContain('Delete card');
 
     await act(async () => dialogButton('Cancel').click());
+    await settle();
     expect(onDelete).not.toHaveBeenCalled();
-    expect(onClearChat).not.toHaveBeenCalled();
+    expect(chat()).toBe('ship.eigenchat');
     expect(confirmDialog()).toBeNull();
 });

@@ -34,6 +34,7 @@ type VectorEditorProps = {
     onAccessDialogOpen: () => void;
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -46,6 +47,7 @@ export function VectorEditor({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
@@ -92,6 +94,7 @@ export function VectorEditor({
         chatFolderId,
         panel,
         chat,
+        card,
         doc,
         onReveal: revealElement,
     });

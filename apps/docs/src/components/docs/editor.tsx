@@ -141,6 +141,7 @@ export const CollaborativeEditor = ({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
 }: {
     path: DrivePath;
@@ -148,9 +149,10 @@ export const CollaborativeEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    // The route's ?panel= and ?chat=: the comments column's list and its open thread.
+    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
 }) => {
     // No undoScope: the editor builds its own UndoManager for y-prosemirror's history plugin.
@@ -186,6 +188,7 @@ export const CollaborativeEditor = ({
                         onAccessDialogOpen={onAccessDialogOpen}
                         panel={panel}
                         chat={chat}
+                        card={card}
                         initialSearchTerm={initialSearchTerm}
                     />
                 </>
@@ -207,6 +210,7 @@ const TiptapEditor = ({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
 }: {
     yDoc: Y.Doc;
@@ -221,6 +225,7 @@ const TiptapEditor = ({
     onAccessDialogOpen: () => void;
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
 }) => {
     const auth = useAuth();
@@ -493,10 +498,11 @@ const TiptapEditor = ({
         ready: activeComments.ready,
         panel,
         chat,
+        card,
         // A list row, an activity row and a landing select the comment's anchor in the body, and scroll it level with
         // the comment's block in the thread beside it, whose top is the scroller's.
         reveal: (cardId) => {
-            if (!selectCommentAnchor(editor, cardId)) return false;
+            if (!selectCommentAnchor(editor, cardId)) return;
             setEditingBand(null);
             const scroller = scrollContainerRef.current;
             if (scroller) {
@@ -506,7 +512,6 @@ const TiptapEditor = ({
                     behavior: prefersReducedMotion() ? 'auto' : 'smooth',
                 });
             }
-            return true;
         },
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount } = lifecycle;

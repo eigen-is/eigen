@@ -153,8 +153,8 @@ async function render({
     function Editor() {
         const [writer, setWriter] = useState(canWrite);
         setCanWrite = setWriter;
-        // The route reads ?panel= and ?chat=, as the doc route does.
-        const search: { panel?: 'comments' | 'activity'; chat?: string } = useSearch({ strict: false });
+        // The route reads ?panel=, ?chat= and ?card=, as the doc route does.
+        const search: { panel?: 'comments' | 'activity'; chat?: string; card?: string } = useSearch({ strict: false });
         // The editor route provides the document's media resolver.
         return createElement(MediaResolverProvider, {
             ownerId: path.ownerId,
@@ -169,6 +169,7 @@ async function render({
                 onAccessDialogOpen: () => {},
                 panel: search.panel,
                 chat: search.chat,
+                card: search.card,
             }),
         });
     }
@@ -619,6 +620,19 @@ test("a link opens its comment's thread and selects its text, and closing the co
     expect(panelParam()).toBeNull();
     expect(routerHistory.location.state.__TSR_index).toBe(1);
     await waitUntil(() => detailColumn() === null, 'the column to close');
+});
+
+// The landing reveals once, so text that comes back later, such as through a peer's undo, leaves the caret alone.
+test("a link to a comment whose text is gone reveals nothing, even once a peer's edit brings the text back", async () => {
+    writeCard();
+    write('default', 'Intro');
+    await render({ ...WRITER, chatFolderId: 'chat', chat: 'thread-1.eigenchat' });
+    await waitUntil(() => threadText().includes('This comment was deleted'), 'the deleted state');
+    await act(async () => bodyEditor().commands.setTextSelection(2));
+    await act(async () => write('default', 'Hello', { comment: { cardId: 'c1' } }));
+    await waitUntil(() => threadText().includes('Check this') && !threadText().includes('deleted'), 'the live thread');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(bodyEditor().state.selection.from).toBe(2);
 });
 
 test('a link to a comment that does not exist lands on the list by replace', async () => {

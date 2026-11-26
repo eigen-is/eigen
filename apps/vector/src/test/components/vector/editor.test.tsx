@@ -152,6 +152,7 @@ async function renderEditor(options: {
             onAccessDialogOpen: () => {},
             panel: options.panel,
             chat: options.chat,
+            card: undefined,
         }),
     ));
 }

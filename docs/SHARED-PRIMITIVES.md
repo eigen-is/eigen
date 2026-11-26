@@ -391,7 +391,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (325)
+## Hooks (324)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -509,7 +509,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommentHover` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-hover.ts |
 | `useCommentLifecycle` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-lifecycle.ts |
 | `useCreateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
-| `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
 | `useResolveCardAttachments` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-resolve-card-attachments.ts |
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `useAddContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
@@ -663,7 +662,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAwarenessIdentity` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-identity.ts |
 | `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
 | `useThrottledAwarenessField` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-throttled-awareness-field.ts |
-| `useCommentChatParam` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comment-chat-param.ts |
+| `useCommentHost` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comment-host.ts |
 | `useCommentsColumn` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comments-column.ts |
 | `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
@@ -721,7 +720,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (480)
+## Types (481)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1152,6 +1151,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
 | `CommentContextMenuItem` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
+| `CommentLifecycleBundle` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comment-host.ts |
 | `CommentsColumnState` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/use-comments-column.ts |
 | `ConfirmDialogProps` | `@workspace/ui/components/confirm-dialog` | packages/ui/src/components/confirm-dialog.tsx |
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |

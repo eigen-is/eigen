@@ -3,7 +3,7 @@
 // under it, so back finds it scrolled where it was. The thread's actions sit in the bar, and Edit opens the
 // card's form in a dialog. useCommentsColumn holds what it shows; a shell puts it at the right, or over a phone.
 
-import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import type { useCommentFilter } from '@workspace/lib/comments';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
@@ -26,6 +26,7 @@ import { lifecycleCardDetailProps } from './comment-card-dialog';
 import { CommentFilterButton } from './comment-filter-button';
 import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
+import type { CommentLifecycleBundle } from './use-comment-host';
 import type { CommentsColumnState } from './use-comments-column';
 
 // The open thread's colored block sits this far below the column's top: under the bar's h-12 and the card body's pt-1.
@@ -33,7 +34,7 @@ export const THREAD_BLOCK_TOP_PX = 48 + 4;
 
 type CommentsColumnProps = {
     column: CommentsColumnState;
-    lifecycle: ReturnType<typeof useCommentLifecycle>;
+    lifecycle: CommentLifecycleBundle;
     path: DrivePath;
     canWrite: boolean;
     currentUserEmail: string;

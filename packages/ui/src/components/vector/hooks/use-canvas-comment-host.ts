@@ -5,7 +5,6 @@
 // `onReveal`. A shell such as CanvasDocumentShell renders what this returns.
 
 import { useAuth } from '@workspace/lib/auth';
-import type { useCommentLifecycle } from '@workspace/lib/comments';
 import { useCommentCards, useCommentFilter, useCommentHover } from '@workspace/lib/comments';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CardAttachmentDraft, CardFormPatch, CommentHover, DocumentPanel } from '@workspace/lib/types/comments';
@@ -16,7 +15,13 @@ import type { VectorElement } from '@workspace/lib/vector';
 import { elementForCommentCard, parseIdList, serializeIdList } from '@workspace/lib/vector';
 import type { ComponentProps } from 'react';
 import { useCallback, useState } from 'react';
-import type { CommentContextMenuItem, CommentHoverCard, CommentsColumn, CommentsColumnState } from '../../comments';
+import type {
+    CommentContextMenuItem,
+    CommentHoverCard,
+    CommentLifecycleBundle,
+    CommentsColumn,
+    CommentsColumnState,
+} from '../../comments';
 import { useCommentsColumn } from '../../comments';
 import { useContextMenu } from '../../context-menu';
 import { useCanvasComments } from './use-canvas-comments';
@@ -28,9 +33,10 @@ type CanvasCommentHostArgs = {
     canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
-    // The route's ?panel= and ?chat=: the comments column's list and its open thread.
+    // The route's ?panel=, ?chat= and ?card=: the comments column's list, its open thread and a card link.
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     doc: CanvasDoc;
     // Bring an element into view as a thread opens from a list row or a link, clear of the `growPx` the column is about
     // to grow by over the canvas.
@@ -40,7 +46,7 @@ type CanvasCommentHostArgs = {
 export type CanvasCommentHost = {
     column: CommentsColumnState;
     assignedCount: number;
-    lifecycle: ReturnType<typeof useCommentLifecycle>;
+    lifecycle: CommentLifecycleBundle;
     members: EffectiveMember[];
     currentUserEmail: string | undefined;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
@@ -69,6 +75,7 @@ export function useCanvasCommentHost({
     chatFolderId,
     panel,
     chat,
+    card,
     doc,
     onReveal,
 }: CanvasCommentHostArgs): CanvasCommentHost {
@@ -89,10 +96,10 @@ export function useCanvasCommentHost({
         ready: doc.loaded,
         panel,
         chat,
+        card,
         reveal: (cardId, growPx) => {
             const el = elementForCommentCard(doc.elements, cardId);
             if (el) onReveal(el, growPx);
-            return !!el;
         },
     });
     const { allComments, cards: lifecycleCards, createCard, assignComment, members, assignedCount } = lifecycle;

@@ -17,5 +17,5 @@ export { CommentsColumn, THREAD_BLOCK_TOP_PX } from './comments-column';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
-export { useCommentChatParam } from './use-comment-chat-param';
+export { type CommentLifecycleBundle, useCommentHost } from './use-comment-host';
 export { type CommentsColumnState, useCommentsColumn } from './use-comments-column';

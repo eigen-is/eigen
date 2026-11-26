@@ -1,7 +1,7 @@
 // The board opens a card in its own dialog, and the open thread is the route's ?chat=, as in every editor: a link, an
 // activity row and a click on a card open it through the URL, and closing the dialog takes ?chat= out again. A copied
-// card's ?card= opens the dialog without a thread in the URL, and closing it drops ?card= by replace. The activity is a
-// 256 column under the toolbar at ?panel=activity, which covers the board on a phone without remounting it.
+// card's ?card= becomes its ?chat= by replace. The activity is a 256 column under the toolbar at ?panel=activity, which
+// covers the board on a phone without remounting it, and shares its entry with a card it opens.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
@@ -190,7 +190,6 @@ async function openBoard(entries: string[], { browser = false, isMobile = false 
     queryClient.setQueryData(driveKeys.fileHistory('owner-1', 'm1', 'b1', 50), [cardAdded]);
     function Page() {
         const { chat, card, panel } = router.useSearch({ strict: false });
-        const navigate = router.useNavigate();
         return createElement(StickiesBoard, {
             path,
             canWrite: true,
@@ -199,13 +198,7 @@ async function openBoard(entries: string[], { browser = false, isMobile = false 
             onAccessDialogOpen: () => {},
             panel,
             chat,
-            initialCardId: card,
-            onClearInitialCard: () =>
-                navigate({
-                    to: '.',
-                    search: (prev: { card?: string }) => ({ ...prev, card: undefined }),
-                    replace: true,
-                }),
+            card,
         });
     }
     const root = router.createRootRoute({
@@ -269,12 +262,22 @@ test('a click on a card writes ?chat=, and closing goes back', async () => {
     expect(history.location.state.__TSR_index).toBe(0);
 });
 
-test("a card link's ?card= opens the dialog, and closing it drops ?card= by replace", async () => {
+test("a card link's ?card= becomes the card's ?chat= by replace, and closing it replaces too", async () => {
     await openBoard(['/', '/?card=card-1']);
-    expect(dialogText()).toContain('Ship it');
-    expect(param('chat')).toBeNull();
-    await closeDialog();
     expect(param('card')).toBeNull();
+    expect(param('chat')).toBe('ship.eigenchat');
+    expect(history.location.state.__TSR_index).toBe(1);
+    expect(dialogText()).toContain('Ship it');
+    await closeDialog();
+    expect(param('chat')).toBeNull();
+    expect(history.location.state.__TSR_index).toBe(1);
+    expect(dialogText()).toBeNull();
+});
+
+test('a ?card= that names no card is dropped by replace', async () => {
+    await openBoard(['/', '/?card=card-9']);
+    expect(param('card')).toBeNull();
+    expect(param('chat')).toBeNull();
     expect(history.location.state.__TSR_index).toBe(1);
     expect(dialogText()).toBeNull();
 });
@@ -451,11 +454,13 @@ test("an activity row opens the card's dialog over the column, and closing the d
     expect(column()).not.toBeNull();
 });
 
-test("a card deleted from the activity keeps the entry's flag, so the column's X still goes back", async () => {
-    await openBoard(['/']);
+// The activity and the card it opened share one entry, so a delete leaves only the activity on it.
+test('a card an activity row opened and then deleted leaves one entry: one X closes, and back opens nothing', async () => {
+    await openBoard(['/', '/']);
     await toggleActivity();
-    await act(async () => seen.onCardOpen?.('card-1'));
+    await act(async () => column()?.querySelector<HTMLElement>('[role="button"]')?.click());
     await settle();
+    expect(param('chat')).toBe('ship.eigenchat');
     await act(async () => editButton()?.click());
     await act(async () => document.querySelector<HTMLElement>('[role="dialog"] button[aria-label="Delete"]')?.click());
     await settle();
@@ -469,7 +474,11 @@ test("a card deleted from the activity keeps the entry's flag, so the column's X
 
     await act(async () => columnButton('Close')?.click());
     await settle();
+    expect(column()).toBeNull();
+    expect(param('panel')).toBeNull();
     expect(history.location.state.__TSR_index).toBe(1);
+    await back();
+    expect([param('panel'), param('chat'), column(), dialogText()]).toEqual([null, null, null, null]);
 });
 
 test('on a phone the activity covers the board, which never remounts, and ‹ Activity closes it', async () => {

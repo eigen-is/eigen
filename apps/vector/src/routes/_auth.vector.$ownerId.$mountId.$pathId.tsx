@@ -1,5 +1,6 @@
 // The Vector editor route: one drawing the URL names, opened through EigenDocEditorRoute. Its search names the open
-// comments column (?panel= for its list, ?chat= for a thread) and a find-bar landing (?q=), and the editor takes them.
+// comments column (?panel= for its list, ?chat= for a thread), a card link (?card=) and a find-bar landing (?q=), and
+// the editor takes them.
 
 import { createFileRoute } from '@tanstack/react-router';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
@@ -14,7 +15,7 @@ export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')(
 
 function VectorView() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { chat, panel, q } = Route.useSearch();
+    const { chat, card, panel, q } = Route.useSearch();
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     return (
         <EigenDocEditorRoute ownerId={ownerId} mountId={mountId} pathId={pathId}>
@@ -24,6 +25,7 @@ function VectorView() {
                     {...props}
                     panel={panel}
                     chat={chat}
+                    card={card}
                     initialSearchTerm={initialSearchTerm}
                 />
             )}

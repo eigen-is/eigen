@@ -52,6 +52,7 @@ type SlideEditorProps = {
     onAccessDialogOpen: () => void;
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
 };
 
@@ -66,6 +67,7 @@ export function SlideEditor({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
 }: SlideEditorProps) {
     const { isMobile } = useLayout();
@@ -135,6 +137,7 @@ export function SlideEditor({
         chatFolderId,
         panel,
         chat,
+        card,
         doc,
         onReveal: revealElement,
     });

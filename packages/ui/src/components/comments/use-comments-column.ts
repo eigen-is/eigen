@@ -1,29 +1,20 @@
-// A document's comments column, such as a canvas app's: the comment lifecycle, and the column's open state in the
-// page's URL, the list level as ?panel=comments or ?panel=activity and the thread it drilled into as ?chat=. It follows
-// the detail history rule: opening from closed pushes, a move between the list and a thread replaces, and close goes
-// back over that push or replaces on a link. A card with no chat opens in the lifecycle alone, without a URL. The host
-// draws the toolbar's toggles from it and the shell renders CommentsColumn while it is open.
+// A document's comments column, such as a canvas app's: the comment host, whose URL is the column's open state, the
+// list level as ?panel=comments or ?panel=activity and the thread it drilled into as ?chat=. Opening from closed
+// pushes, a move between the list and a thread replaces, and close goes back over that push or replaces on a link. A
+// thread that closes or goes lands on the list. The host draws the toolbar's toggles from it and the shell renders
+// CommentsColumn while it is open.
 
-import { useNavigate } from '@tanstack/react-router';
-import { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DocumentPanel } from '@workspace/lib/types/comments';
-import { useEffect, useRef, useState } from 'react';
-import { useDetailHistory } from '../../hooks/use-detail-history';
+import { useEffect, useEffectEvent } from 'react';
 import { columnWidthPx } from '../layout/app/column-widths';
 import { useLayout } from '../layout/app/layout-context';
+import type { CommentHostArgs, CommentLifecycleBundle } from './use-comment-host';
+import { useCommentHost } from './use-comment-host';
 
-type CommentsColumnUrl = { panel?: DocumentPanel; chat?: string };
-
-type CommentsColumnArgs = Omit<
-    Parameters<typeof useCommentLifecycle>[0],
-    'chat' | 'onOpenChat' | 'onCloseChat' | 'onClearChat'
-> & {
-    // The route's ?panel= and ?chat=.
-    panel: DocumentPanel | undefined;
-    chat: string | undefined;
-    // Brings a card's anchor into view, and says whether it had one to bring. It hears how far the column is about to
-    // grow over what is beside it: a list or activity row reveals before the thread widens it, a landing after.
-    reveal?: (cardId: string, growPx: number) => boolean;
+type CommentsColumnArgs = Omit<CommentHostArgs, 'listPanel'> & {
+    // Brings a card's anchor into view. It hears how far the column is about to grow over what is beside it: a list or
+    // activity row reveals before the thread widens it, a landing after.
+    reveal?: (cardId: string, growPx: number) => void;
 };
 
 export type CommentsColumnState = {
@@ -46,78 +37,40 @@ export type CommentsColumnState = {
     onSearchOpenChange: (open: boolean) => void;
 };
 
-export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: CommentsColumnArgs): {
-    lifecycle: ReturnType<typeof useCommentLifecycle>;
+export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): {
+    lifecycle: CommentLifecycleBundle;
     column: CommentsColumnState;
 } {
+    const { panel, chat } = hostArgs;
     const { isMobile, isTablet } = useLayout();
-    const navigate = useNavigate();
-    const url = panel || chat ? { panel, chat } : undefined;
-    const history = useDetailHistory<CommentsColumnUrl>(url !== undefined, (next, { replace, state }) =>
-        navigate({
-            to: '.',
-            search: (prev: CommentsColumnUrl) => ({ ...prev, panel: next?.panel, chat: next?.chat }),
-            replace,
-            state,
-        }),
-    );
     const listPanel = panel ?? 'comments';
-    const showList = () => history.open({ panel: listPanel });
-    const [clickedChat, setClickedChat] = useState<string | null>(null);
-
-    // Every open in the app goes through here, so a thread the URL names without one was a landing or a reload.
-    const lifecycle = useCommentLifecycle({
-        ...lifecycleArgs,
-        chat,
-        onOpenChat: (chatName) => {
-            setClickedChat(chatName);
-            history.open({ panel, chat: chatName });
-        },
-        onCloseChat: showList,
-        onClearChat: showList,
-    });
-    const { openCard, setOpenCardId } = lifecycle;
-
-    const unlinked = !chat && !!openCard;
-    const open = !!url || unlinked;
-    const threadOpen = !!chat || unlinked;
-    const width = threadOpen ? 'large' : 'small';
+    const { lifecycle, clicked, showList, close } = useCommentHost({ ...hostArgs, listPanel });
+    const open = !!panel || !!chat;
     // How much wider a thread is than the list.
     const growPx = isMobile ? 0 : columnWidthPx('large', isTablet) - columnWidthPx('small');
 
-    const closeUnlinked = () => {
-        if (unlinked) setOpenCardId(null);
-    };
-    const close = () => {
-        closeUnlinked();
-        if (url) history.close();
-    };
-    const toggle = (next: DocumentPanel) => {
-        if (open && listPanel === next) return close();
-        closeUnlinked();
-        history.open({ panel: next });
-    };
     // A phone's column covers the document, where a reveal would move a view nobody sees.
     const openThread = (cardId: string) => {
         if (!isMobile) reveal?.(cardId, growPx);
-        setOpenCardId(cardId);
+        lifecycle.setOpenCardId(cardId);
     };
 
-    // A thread the URL opened without a click here, such as a link or a reload, reveals its anchor once the anchor
-    // has loaded, which can be after the card. The column is at its thread width by then.
-    const revealedChat = useRef<string | undefined>(undefined);
-    const landedCardId = chat && chat !== clickedChat && !isMobile ? openCard?.id : undefined;
+    // A thread the URL opened without a click here, such as a link or a reload, reveals its anchor once, as soon as its
+    // comment has loaded. The column is at its thread width by then.
+    const landedCardId = chat && !clicked && !isMobile ? lifecycle.openCard?.id : undefined;
+    const revealLanded = useEffectEvent((cardId: string) => reveal?.(cardId, 0));
     useEffect(() => {
-        if (landedCardId && revealedChat.current !== chat && reveal?.(landedCardId, 0)) revealedChat.current = chat;
-    });
+        if (landedCardId) revealLanded(landedCardId);
+    }, [landedCardId]);
 
+    const toggle = (next: DocumentPanel) => (open && listPanel === next ? close() : showList(next));
     return {
         lifecycle,
         column: {
             open,
             listPanel,
-            threadOpen,
-            width,
+            threadOpen: !!chat,
+            width: chat ? 'large' : 'small',
             commentsOpen: open && listPanel === 'comments',
             activityOpen: open && listPanel === 'activity',
             toggleComments: () => toggle('comments'),
@@ -125,12 +78,9 @@ export function useCommentsColumn({ panel, chat, reveal, ...lifecycleArgs }: Com
             openThread,
             // A comment whose card is gone opens as deleted, still named by its chat.
             openChat: (chatName) => lifecycle.openChat(chatName, openThread),
-            back: () => {
-                closeUnlinked();
-                showList();
-            },
+            back: () => showList(listPanel),
             close,
-            focusComposer: !!chat && chat === clickedChat,
+            focusComposer: clicked,
             // The find bar sits in the document, which the column covers on a phone.
             onSearchOpenChange: (searchOpen) => {
                 if (searchOpen && isMobile && open) close();

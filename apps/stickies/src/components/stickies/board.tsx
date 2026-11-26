@@ -4,11 +4,10 @@
 
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
-import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { boardCardIds, getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { matchesCommentFilter, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { matchesCommentFilter, useCommentFilter } from '@workspace/lib/comments';
 import { DRAG_THRESHOLD_PX } from '@workspace/lib/constants/drag';
 import { useRecordHistory } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -24,7 +23,7 @@ import {
     CommentCardDialog,
     CommentCardTile,
     CommentLifecycleDialogs,
-    useCommentChatParam,
+    useCommentHost,
 } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import {
@@ -38,7 +37,6 @@ import {
     useLayout,
 } from '@workspace/ui/components/layout/app';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
-import { useDetailHistory } from '@workspace/ui/hooks/use-detail-history';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { useFocusInDetail } from '@workspace/ui/hooks/use-focus-in-detail';
@@ -62,9 +60,8 @@ type StickiesBoardProps = {
     onAccessDialogOpen: () => void;
     panel: DocumentPanel | undefined;
     chat: string | undefined;
+    card: string | undefined;
     initialSearchTerm?: string;
-    initialCardId?: string;
-    onClearInitialCard?: () => void;
 };
 
 export function StickiesBoard({
@@ -75,9 +72,8 @@ export function StickiesBoard({
     onAccessDialogOpen,
     panel,
     chat,
+    card,
     initialSearchTerm,
-    initialCardId,
-    onClearInitialCard,
 }: StickiesBoardProps) {
     const { ownerId } = path;
     const {
@@ -101,7 +97,8 @@ export function StickiesBoard({
     // whenever a column or the card map does, so they say when to read the doc again.
     const activeCardIds = useMemo(() => (yjsDoc ? boardCardIds(yjsDoc) : NO_CARDS), [yjsDoc, board.columns]);
 
-    const lifecycle = useCommentLifecycle({
+    // A card opens in the board's dialog, so closing it goes back to the activity or closes, never to a list.
+    const { lifecycle, showList, close } = useCommentHost({
         ownerId,
         mountId: path.mountId,
         pathId: path.id,
@@ -109,11 +106,12 @@ export function StickiesBoard({
         mediaFolderId,
         doc: yjsDoc,
         activeCardIds,
-        ...useCommentChatParam(chat),
+        panel,
+        chat,
+        card,
+        listPanel: panel,
         mapName: commentMapName(DRIVE_TYPE_STICKIES),
         ready: loaded,
-        initialCardId,
-        onCardNotFound: onClearInitialCard,
     });
     const { allComments, cards, createCard, assignComment, members, setOpenCardId, openChat, openCard } = lifecycle;
 
@@ -162,13 +160,9 @@ export function StickiesBoard({
         (card: CommentCard) => matchesCommentFilter(card, entryOf(card), commentFilter.filter, currentUserEmail),
         [entryOf, commentFilter.filter, currentUserEmail],
     );
-    const navigate = useNavigate();
     const activityOpen = panel === 'activity';
-    const activity = useDetailHistory<'activity'>(activityOpen, (next, { replace, state }) =>
-        navigate({ to: '.', search: (prev: { panel?: DocumentPanel }) => ({ ...prev, panel: next }), replace, state }),
-    );
     const activityColumn = activityOpen ? (
-        <DetailColumn width="small" title="Activity" onClose={activity.close} fill>
+        <DetailColumn width="small" title="Activity" onClose={close} fill>
             <div className="h-full overflow-y-auto">
                 <ActivityPanel path={path} onOpenCard={setOpenCardId} onOpenChat={openChat} />
             </div>
@@ -300,7 +294,7 @@ export function StickiesBoard({
                             commentSearch={commentSearch}
                             initialSearchTerm={initialSearchTerm}
                             onOpenChange={(open) => {
-                                if (open && isMobile && activityOpen) activity.close();
+                                if (open && isMobile && activityOpen) close();
                             }}
                             barClassName="top-14"
                             rightInsetPx={activityOpen && !isMobile ? columnWidthPx('small') : undefined}
@@ -321,9 +315,7 @@ export function StickiesBoard({
                                         filter={commentFilter}
                                         members={members}
                                         currentUserEmail={currentUserEmail}
-                                        onToggleActivity={() =>
-                                            activityOpen ? activity.close() : activity.open('activity')
-                                        }
+                                        onToggleActivity={() => (activityOpen ? close() : showList('activity'))}
                                         activityOpen={activityOpen}
                                     />
                                 }
@@ -431,12 +423,7 @@ export function StickiesBoard({
                                             />
                                         )}
 
-                                        <CommentCardDialog
-                                            lifecycle={lifecycle}
-                                            path={path}
-                                            canWrite={canWrite}
-                                            onClose={initialCardId ? onClearInitialCard : undefined}
-                                        />
+                                        <CommentCardDialog lifecycle={lifecycle} path={path} canWrite={canWrite} />
 
                                         <CommentLifecycleDialogs
                                             lifecycle={lifecycle}

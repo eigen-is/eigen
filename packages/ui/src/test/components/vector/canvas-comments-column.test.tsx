@@ -2,7 +2,8 @@
 // properties panel, and a thread at ?chat=, 400 wide, with "‹ Comments" back to the list by replace and its scroll
 // kept. The toolbar's toggle pushes, close goes back on that push, and X and Esc close the whole column from a thread
 // too. A ?chat= landing opens at once at 400 and loads; one that names nothing lands on the list, a deleted one opens
-// as deleted. The column eases between the list and a thread, each laid out at its own width. The editor beside it
+// as deleted, and a card link's ?card= becomes its ?chat=. A landing reveals its anchor once, when its comment has
+// loaded. The column eases between the list and a thread, each laid out at its own width. The editor beside it
 // never remounts, on a desktop or a phone, and the find bar keeps clear of the column. The palette's In comments hit
 // opens its thread the way a list row does.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
@@ -177,7 +178,7 @@ async function openCanvas(
         drivePath({ id: 'chat-1', ownerId: 'owner', mountId: 'mount', name: 'thread-1.eigenchat', mimeType: 'x' }),
     ]);
     function Page() {
-        const { chat, panel } = router.useSearch({ strict: false });
+        const { chat, card, panel } = router.useSearch({ strict: false });
         const canvas = useCanvasDoc('owner', 'mount', 'v1', VECTOR_STYLE_DEFAULTS);
         const comments = useCanvasCommentHost({
             ownerId: 'owner',
@@ -187,6 +188,7 @@ async function openCanvas(
             chatFolderId: 'chats',
             panel,
             chat,
+            card,
             doc: canvas,
             onReveal: (el, growPx) => reveal(el.id, growPx),
         });
@@ -257,6 +259,7 @@ async function openCanvas(
         ),
     ));
     await settle();
+    return queryClient;
 }
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 20)));
@@ -327,17 +330,37 @@ test("a list row reveals its anchor with the room the thread grows into, and the
     expect(reveal).not.toHaveBeenCalled();
 });
 
-test('a ?chat= landing reveals its anchor once the shape has loaded, with the column already at its width', async () => {
-    await openCanvas(['/?chat=thread-1.eigenchat']);
-    expect(reveal).not.toHaveBeenCalled();
+test('a ?chat= landing reveals its anchor once its comment has loaded, with the column already at its width', async () => {
     const [key] = generateNKeysBetween(null, null, 1);
     const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
-    await act(async () => writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box'));
+    writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box');
+    const queryClient = await openCanvas(['/?chat=thread-1.eigenchat'], { rows: null });
+    expect(reveal).not.toHaveBeenCalled();
+    await act(async () => queryClient.setQueryData(commentKeys.list('owner', 'mount', 'v1'), []));
     await settle();
     expect(reveal.mock.calls).toEqual([['box', 0]]);
     await act(async () => writeElementInDoc(doc, { ...box, x: 10 }, key, VECTOR_STYLE_DEFAULTS, 'box'));
     await settle();
     expect(reveal).toHaveBeenCalledTimes(1);
+});
+
+// The landing reveals once, so an anchor that comes back later, such as through a peer's undo, moves nothing.
+test('a ?chat= landing whose anchor is missing reveals nothing, even once the anchor comes', async () => {
+    await openCanvas(['/?chat=thread-1.eigenchat']);
+    const [key] = generateNKeysBetween(null, null, 1);
+    const box = { type: 'rectangle' as const, x: 0, y: 0, width: 100, height: 100, commentCardIds: '["card-1"]' };
+    await act(async () => writeElementInDoc(doc, box, key, VECTOR_STYLE_DEFAULTS, 'box'));
+    await settle();
+    expect(reveal).not.toHaveBeenCalled();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+});
+
+test("a card link's ?card= becomes its ?chat= by replace and opens the thread", async () => {
+    await openCanvas(['/', '/?card=card-1']);
+    expect(search().get('card')).toBeNull();
+    expect(search().get('chat')).toBe('thread-1.eigenchat');
+    expect(historyIndex()).toBe(1);
+    expect(thread.chatName).toBe('thread-1.eigenchat');
 });
 
 test('a palette hit in comments opens its thread from a closed column, writes ?chat= and reveals its anchor once', async () => {

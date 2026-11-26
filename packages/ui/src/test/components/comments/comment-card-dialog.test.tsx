@@ -1,12 +1,13 @@
 // The open thread is the page's ?chat=, so a link, a click and the comment menu's Edit all open the card dialog through
 // the URL, and every close takes ?chat= out again: back after a click's push, a replace on a link. A delete and a chat
-// that names nothing drop it by replace.
+// that names nothing close it the same way.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_STICKIES } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import type { CommentContextMenuItem } from '../../../components/comments/comment-menu-items';
+import type { CommentLifecycleBundle } from '../../../components/comments/use-comment-host';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -46,11 +47,10 @@ const router = await import('@tanstack/react-router');
 const { QueryClientProvider } = await import('@tanstack/react-query');
 const { commentKeys } = await import('@workspace/lib/chat');
 const { driveKeys } = await import('@workspace/lib/drive');
-const { useCommentLifecycle } = await import('@workspace/lib/comments');
 const { useContextMenu } = await import('../../../components/context-menu');
 const { CommentCardDialog } = await import('../../../components/comments/comment-card-dialog');
 const { CommentLifecycleDialogs } = await import('../../../components/comments/comment-lifecycle-dialogs');
-const { useCommentChatParam } = await import('../../../components/comments/use-comment-chat-param');
+const { useCommentHost } = await import('../../../components/comments/use-comment-host');
 
 const path = drivePath({
     id: 'board-1',
@@ -95,12 +95,11 @@ async function openBoard(entries: string[]) {
     const doc = new Y.Doc();
     addCard(doc, 'card-1', 'ship.eigenchat');
     addCard(doc, 'card-3', 'fresh.eigenchat');
-    const onClose = mock(() => {});
     const onDelete = mock((_cardId: string) => {});
-    const handle: { lifecycle?: ReturnType<typeof useCommentLifecycle> } = {};
+    const handle: { lifecycle?: CommentLifecycleBundle } = {};
     function Board() {
         const { chat } = router.useSearch({ strict: false });
-        const lifecycle = useCommentLifecycle({
+        const { lifecycle } = useCommentHost({
             ownerId: 'owner-1',
             mountId: 'm1',
             pathId: 'board-1',
@@ -108,7 +107,10 @@ async function openBoard(entries: string[]) {
             mediaFolderId: null,
             doc,
             activeCardIds: new Set(['card-1', 'card-3']),
-            ...useCommentChatParam(chat),
+            panel: undefined,
+            chat,
+            card: undefined,
+            listPanel: undefined,
             mapName: 'tasks',
             ready: true,
         });
@@ -117,7 +119,7 @@ async function openBoard(entries: string[]) {
         return createElement(
             QueryClientProvider,
             { client: queryClient },
-            createElement(CommentCardDialog, { lifecycle, path, canWrite: true, onClose }),
+            createElement(CommentCardDialog, { lifecycle, path, canWrite: true }),
             createElement(CommentLifecycleDialogs, { lifecycle, canWrite: true, commentContextMenu, onDelete }),
         );
     }
@@ -147,7 +149,6 @@ async function openBoard(entries: string[]) {
     return {
         doc,
         lifecycle,
-        onClose,
         onDelete,
         chat: () => new URLSearchParams(history.location.search).get('chat'),
         index: () => history.location.state.__TSR_index,
@@ -176,7 +177,6 @@ test("a link's ?chat= opens the card, and closing it takes ?chat= out by replace
     expect(board.chat()).toBeNull();
     expect(board.index()).toBe(1);
     expect(seen.open).toBe(false);
-    expect(board.onClose).toHaveBeenCalledTimes(1);
 });
 
 test('a click writes ?chat= with a push, and closing goes back', async () => {
@@ -213,23 +213,39 @@ test('a ?chat= that names no comment is dropped by replace', async () => {
     expect(seen.open).toBe(false);
 });
 
-test('a delete runs the host delete and drops ?chat= by replace', async () => {
+test('a delete runs the host delete and closes the card as a close does: back over a click, a replace on a link', async () => {
     const board = await openBoard(['/']);
     await run(() => board.lifecycle().setOpenCardId('card-1'));
     await run(() => board.lifecycle().requestDelete('card-1'));
     await run(() => confirmButton('Delete').click());
     expect(board.onDelete).toHaveBeenCalledWith('card-1');
     expect(board.chat()).toBeNull();
-    expect(board.index()).toBe(1);
+    expect(board.index()).toBe(0);
     expect(seen.open).toBe(false);
+    await unmount();
+
+    const linked = await openBoard(['/', '/?chat=ship.eigenchat']);
+    await run(() => linked.lifecycle().requestDelete('card-1'));
+    await run(() => confirmButton('Delete').click());
+    expect(linked.chat()).toBeNull();
+    expect(linked.index()).toBe(1);
 });
 
-test("a peer's delete of a thread with no row yet drops ?chat= by replace, and nothing goes back", async () => {
+test('a delete of a card that is not open leaves the open one', async () => {
+    const board = await openBoard(['/', '/?chat=ship.eigenchat']);
+    await run(() => board.lifecycle().requestDelete('card-3'));
+    await run(() => confirmButton('Delete').click());
+    expect(board.onDelete).toHaveBeenCalledWith('card-3');
+    expect(board.chat()).toBe('ship.eigenchat');
+    expect(seen.open).toBe(true);
+});
+
+test("a peer's delete of a thread with no row yet closes it as a close does, back over the click", async () => {
     const board = await openBoard(['/']);
     await run(() => board.lifecycle().setOpenCardId('card-3'));
     expect(board.index()).toBe(1);
     await run(() => board.doc.getMap('tasks').delete('card-3'));
     expect(board.chat()).toBeNull();
-    expect(board.index()).toBe(1);
+    expect(board.index()).toBe(0);
     expect(seen.open).toBe(false);
 });
