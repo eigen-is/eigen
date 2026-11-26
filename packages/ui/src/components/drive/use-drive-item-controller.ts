@@ -136,11 +136,13 @@ export function useDriveItemController({
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-    // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets.
+    // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets. A drag
+    // moves what Move to would.
     const isValidFolderDrop = (targetItem: DrivePath) =>
         !!actions?.onMove &&
         targetItem.type === 'folder' &&
-        !drag.draggedItems.some((dragged) => dragged.id === targetItem.id);
+        !drag.draggedItems.some((dragged) => dragged.id === targetItem.id) &&
+        actions.actionsFor(drag.draggedItems).some(({ id }) => id === 'move-to');
 
     // The drop handlers a folder row or tile spreads on its root, next to getDragProps.
     const getDropProps = (item: DrivePath) => ({

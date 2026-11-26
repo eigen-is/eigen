@@ -18,12 +18,14 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { DELETE_HOTKEY } from '../../constants/hotkeys';
+import type { DrivePath } from '../../types/drive';
 import { exportFormatsFor } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
 import { isOpenable } from '../../types/file-kinds';
 import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;
+const byName = ({ capabilities }: DriveActionSubject, item: DrivePath) => capabilities.writesByName?.(item) ?? true;
 
 // A row with a plural label is one a multi-selection offers too; the others act on a single item.
 const DRIVE_ACTIONS: readonly DriveAction[] = [
@@ -62,7 +64,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         pluralLabel: 'Move {n} items to…',
         icon: FolderInput,
         group: 'organize',
-        applies: (s) => s.capabilities.canMove,
+        applies: (s) => s.capabilities.canMove && s.items.every((item) => byName(s, item)),
     },
     // Copy goes anywhere the viewer can write, so reading the items is enough.
     {
@@ -85,7 +87,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         label: 'Share',
         icon: UserRoundPlus,
         group: 'collaborate',
-        applies: (s) => one(s) && s.capabilities.canShare,
+        applies: (s) => one(s) && s.capabilities.canShare && byName(s, s.items[0]),
     },
     {
         id: 'email-collaborators',
@@ -94,7 +96,10 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         group: 'collaborate',
         // Only an item someone else can see has collaborators to mail.
         applies: (s) =>
-            one(s) && s.capabilities.canShare && (!!s.items[0].acl?.length || s.items[0].visibility !== 'private'),
+            one(s) &&
+            s.capabilities.canShare &&
+            byName(s, s.items[0]) &&
+            (!!s.items[0].acl?.length || s.items[0].visibility !== 'private'),
         guestDenied: true,
     },
     // A link or a mail only hands out what the recipient may already open, so reading is enough.

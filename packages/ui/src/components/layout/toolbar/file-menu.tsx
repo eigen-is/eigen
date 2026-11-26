@@ -10,7 +10,7 @@ import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useCanWriteByName, useDriveActionsFor, useMakeCopy, useRecentPaths } from '@workspace/lib/drive';
+import { useDriveActionsFor, useMakeCopy, useRecentPaths, useWritesByName } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -104,7 +104,9 @@ export function FileMenu({
     const navigate = useNavigate();
     // The document stands where Drive's folder browser stands on a folder: the viewer's write access
     // to it gates the writes, and an item shared with the viewer is removed rather than trashed.
-    const actionsFor = useDriveActionsFor(browseCapabilities(canWrite, useCanWriteByName(path)));
+    const actionsFor = useDriveActionsFor(
+        browseCapabilities(canWrite, useWritesByName(path.ownerId, path.mountId, path.id)),
+    );
     const { mutate: makeCopy } = useMakeCopy();
 
     // The Drive rows this menu can run, through the dialogs it owns. Copy link and Mail to go to the palette
