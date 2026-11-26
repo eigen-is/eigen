@@ -1499,9 +1499,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `svgToImageFile` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
-| `applyCollabState` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
 | `boardCardIds` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
-| `encodeCollabState` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
+| `collabStateEpoch` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
+| `collabStateVersion` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
 | `getIdArray` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getIdArrayRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getItemMapRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |

@@ -1,6 +1,5 @@
 import type { Mock } from 'bun:test';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { applyCollabState } from '@workspace/lib/collab/collab-state';
 import { COLLAB_ACCESS_LOST_CLOSE, COLLAB_ACCESS_LOST_REASON } from '@workspace/lib/constants/collab';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -133,7 +132,7 @@ async function textOverHttp(user: TestUser, pathId: string): Promise<string> {
     const res = await authedRequest(user.sessionToken, stateUrl(pathId));
     expect(res.status).toBe(200);
     const doc = new Y.Doc();
-    applyCollabState(doc, await res.bytes(), null);
+    Y.applyUpdate(doc, await res.bytes());
     return doc.getText('probe').toString();
 }
 

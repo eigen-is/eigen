@@ -1,6 +1,7 @@
-// Reads the Yjs state stored in a data.db: the newest snapshot and the updates after it. A live
-// document loads through it when it opens, and readers such as the document transforms capture it to
-// work off the main thread. readYjsStateFromFile reads a data.db nobody serves, such as a saved version.
+// Reads the Yjs state stored in a data.db: the newest snapshot and the updates after it, or only the ids
+// that name them. A live document loads through it when it opens, and readers such as the document
+// transforms capture it to work off the main thread. readYjsStateFromFile reads a data.db nobody serves,
+// such as a saved version.
 
 import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
@@ -34,8 +35,7 @@ function copyBlob(stored: Uint8Array): ArrayBuffer {
 // to be corrupt, replaying the captured updates therefore replays every update. The corrupt-snapshot
 // test pins it.
 function readPayload(db: DocDb): YjsStatePayload {
-    let payload: YjsStatePayload = { snapshot: null, updates: [] };
-    db.transaction((tx) => {
+    return db.transaction((tx) => {
         const snapshot = tx.select().from(schema.docSnapshots).orderBy(desc(schema.docSnapshots.id)).limit(1).get();
         const updates = snapshot
             ? tx
@@ -45,7 +45,7 @@ function readPayload(db: DocDb): YjsStatePayload {
                   .orderBy(asc(schema.docUpdates.id))
                   .all()
             : tx.select().from(schema.docUpdates).orderBy(asc(schema.docUpdates.id)).all();
-        payload = {
+        return {
             snapshot: snapshot
                 ? {
                       id: snapshot.id,
@@ -56,11 +56,32 @@ function readPayload(db: DocDb): YjsStatePayload {
             updates: updates.map((update) => ({ id: update.id, data: copyBlob(update.updateData) })),
         };
     });
-    return payload;
 }
 
 export function readYjsStatePayload(managedDb: ManagedDatabase<typeof schema>): YjsStatePayload {
     return readPayload(managedDb.db);
+}
+
+// The ids that name the stored state, read without a blob. A row id is never used twice in one data.db, so the newest
+// snapshot and the last update name one state.
+export type YjsStateVersion = { snapshotId: number; lastUpdateId: number };
+
+export function readYjsStateVersion(managedDb: ManagedDatabase<typeof schema>): YjsStateVersion {
+    return managedDb.db.transaction((tx) => {
+        const snapshot = tx
+            .select({ id: schema.docSnapshots.id, lastUpdateId: schema.docSnapshots.lastUpdateId })
+            .from(schema.docSnapshots)
+            .orderBy(desc(schema.docSnapshots.id))
+            .limit(1)
+            .get();
+        const update = tx
+            .select({ id: schema.docUpdates.id })
+            .from(schema.docUpdates)
+            .orderBy(desc(schema.docUpdates.id))
+            .limit(1)
+            .get();
+        return { snapshotId: snapshot?.id ?? 0, lastUpdateId: update?.id ?? snapshot?.lastUpdateId ?? 0 };
+    });
 }
 
 // Decompresses and applies a captured payload into `doc`. Returns counters used

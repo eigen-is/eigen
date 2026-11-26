@@ -1,7 +1,8 @@
-// The preview cache: a file's previews, each built once per version and kept in the mount's previewsDir. The drive and
-// mail routes call it, for example through getTextPreview, getScreenPreview and getEmlPreview. A collab document's or
-// a card's preview is built in the transform process, a plain text file's and an image's here. A name stamped with
-// updatedAt and the format lets a new version or renderer write a new file, so a response can be cached long.
+// The preview cache: a file's previews, each built once per version and kept in the mount's previewsDir. The drive,
+// mail and collab routes call it, for example through getTextPreview, getScreenPreview and getCollabState. A collab
+// document's or a card's preview is built in the transform process, a plain text file's and an image's here. A name
+// stamped with the version and the format lets a new version or renderer write a new file, so a response can be
+// cached long.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -9,10 +10,11 @@ import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCollabType, DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/file-kinds';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
+import type { BunFile } from 'bun';
 import { ApiError } from '../core/errors';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
@@ -20,6 +22,7 @@ import type { EmlPreviewJob, IcsPreviewJob, PreviewResult, VCardPreviewJob } fro
 import {
     runBytesTransformToText,
     runFileTransformToText,
+    runTransformToCollabState,
     TransformFailedError,
 } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
@@ -47,6 +50,8 @@ export const VCARD_FORMAT = 'vcard-f1';
 // Bumped on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
 export const EML_FORMAT = 'eml-f6';
 export const ICS_FORMAT = 'ics-f2';
+// A collab document's whole state as one Yjs update.
+export const COLLAB_STATE_FORMAT = 'state-f1';
 
 // The largest side of an image's screen preview.
 const SCREEN_PREVIEW_MAX_SIZE = 2560;
@@ -77,12 +82,16 @@ async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<vo
     await writeCacheFile(failedMarker(cacheFile), '').catch(() => {});
 }
 
+// A path keeps one file of each kind, which is its extension, so a text preview and a collab state live side by side
+// while a format bump prunes the earlier format of its kind. A failed marker counts as the kind of its file.
 async function pruneOldVersions(previewsDir: string, pathId: string, keep: string): Promise<void> {
     const prefix = `${pathId}-`;
+    const kind = path.extname(keep);
     const files = await fs.promises.readdir(previewsDir);
     await Promise.all(
         files
             .filter((name) => name !== keep && name.startsWith(prefix))
+            .filter((name) => path.extname(name.replace(/\.failed$/, '')) === kind)
             .map((name) => fs.promises.unlink(path.join(previewsDir, name)).catch(() => {})),
     );
 }
@@ -102,7 +111,7 @@ async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise
 
 // The generation running for each cache name, so a folder grid of N tiles for one just-added image or
 // just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority.
-const inFlightImages = new Map<string, Promise<Buffer | null>>();
+const inFlightBytes = new Map<string, Promise<Buffer | null>>();
 const inFlightTexts = new Map<string, Promise<PreviewResult | null>>();
 
 function generateOnce<T>(
@@ -126,6 +135,33 @@ function generateOnce<T>(
     return task;
 }
 
+// A body that is bytes, such as an image or a collab state, is written once per version and then sent from its file.
+function getOrCacheBytes(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+    generate: () => Promise<Buffer>,
+): Promise<BunFile>;
+function getOrCacheBytes(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+    generate: () => Promise<Buffer | null>,
+): Promise<BunFile | null>;
+async function getOrCacheBytes(
+    previewsDir: string,
+    pathId: string,
+    cacheName: string,
+    generate: () => Promise<Buffer | null>,
+): Promise<BunFile | null> {
+    const cacheFile = path.join(previewsDir, cacheName);
+    if (!fs.existsSync(cacheFile)) {
+        const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
+        if (data === null) return null;
+    }
+    return Bun.file(cacheFile);
+}
+
 async function getOrCacheImage(
     previewsDir: string,
     pathId: string,
@@ -133,17 +169,8 @@ async function getOrCacheImage(
     contentType: string,
     generate: () => Promise<Buffer | null>,
 ): Promise<ImagePreview | null> {
-    const cacheFile = path.join(previewsDir, cacheName);
-    if (fs.existsSync(cacheFile)) {
-        try {
-            return { type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType };
-        } catch {
-            // File pruned by pruneOldVersions between exists-check and read — regenerate below.
-        }
-    }
-
-    const data = await generateOnce(inFlightImages, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
-    return data === null ? null : { type: 'image', data, contentType };
+    const file = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
+    return file && { type: 'image', data: Buffer.from(await file.arrayBuffer()), contentType };
 }
 
 // A stale value is an earlier version's, served while the current one regenerates.
@@ -318,6 +345,25 @@ export async function getScreenPreview(
     }
 
     return null;
+}
+
+// A collab document's whole state for a reader who gets no socket, garbage-collected as a member's first sync is, so it
+// holds nothing an author deleted. `version` names the stored rows, and the state is cached under it.
+export async function getCollabState(
+    mount: Mount,
+    drivePath: DrivePath,
+    documentType: DriveCollabType,
+    version: string,
+    firstMiss: MissPriority,
+): Promise<BunFile> {
+    return getOrCacheBytes(mount.previewsDir, drivePath.id, `${drivePath.id}-${version}.yjs`, async () =>
+        runTransformToCollabState(
+            mount,
+            drivePath,
+            { kind: 'collab-state', documentType },
+            { priority: await firstMiss() },
+        ),
+    );
 }
 
 // The container type decides, never the mime: an uploader picks the mime, and a plain file wearing an Eigen mime

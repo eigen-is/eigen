@@ -20,11 +20,7 @@ import {
     servedFileHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
-import type { TransformPriority } from '../lib/document/transform/runner';
-import { getReadDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
-import { canReadByNameFromAncestors } from '../lib/drive/acl';
-import type { DriveLike } from '../lib/drive/get-drive';
-import type { LinkDrive } from '../lib/drive/link-drive';
+import { getReadDrive, getSharedDrive, readImportSourceBytes, transformPriorityFor } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -44,28 +40,12 @@ import {
     VCARD_FORMAT,
 } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
-import type { User } from '../lib/user';
-import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import type { TypesEqual } from './shared-schemas';
 import { importFromDriveSchema } from './shared-schemas';
 
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
-
-// An export, or a preview that isn't cached yet, runs at foreground priority only for someone who reads the file by
-// name, such as its owner or a person its ACL names. Whoever reads it only through a link or "Anyone signed in", signed
-// in or not, waits behind them, so a burst of link views can't take the one transform queue from the people the files
-// are shared with.
-async function transformPriorityFor(
-    drive: DriveLike | LinkDrive,
-    user: User | null,
-    path: DrivePath,
-): Promise<TransformPriority> {
-    if (!user) return 'background';
-    const chain = await drive.breadCrumb(path.mountId, path.id);
-    return canReadByNameFromAncestors(chain, user, await getMemberships(user.id)) ? 'foreground' : 'background';
-}
 
 // How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
 const documentImportSchema = t.Object({

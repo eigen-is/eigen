@@ -9,7 +9,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
-import { encodeCollabState } from '../../../../core/collab/collab-state';
+import { collabStateVersion } from '../../../../core/collab/collab-state';
 import type { CollabDoc, useCollabDoc as UseCollabDoc } from '../../../../core/collab/hooks/use-collab-doc';
 import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
@@ -170,6 +170,7 @@ function mount(options: UseCollabDocOptions, live: boolean | 'unloaded' = true) 
             return provider;
         },
         rerender: render,
+        client,
         // TanStack Query tells its observers on a timer.
         setLive: (next: boolean) =>
             act(async () => {
@@ -538,8 +539,8 @@ describe('useCollabDoc connection state', () => {
     });
 });
 
-// The state route as the hook's fetch sees it: the stored document under an ETag that moves with every edit, a 304 for
-// the ETag a request names, or a refusal.
+// The state route as the hook's fetch sees it: the stored document as one update under an ETag that moves with every
+// edit and names the home's epoch, a 304 for the ETag a request names, or a refusal.
 function stateServer() {
     const stored = new Y.Doc();
     const asked: { url: string; ifNoneMatch: string | null }[] = [];
@@ -547,6 +548,7 @@ function stateServer() {
         stored,
         asked,
         refuse: 0,
+        epoch: 'epoch-1',
         write: (text: string) => stored.getText('probe').insert(stored.getText('probe').length, text),
     };
     const realFetch = globalThis.fetch;
@@ -556,9 +558,9 @@ function stateServer() {
         // Only the state route answers: an info the test did not load stays loading.
         if (!String(input).endsWith('/state')) return new Promise(() => {});
         if (server.refuse) return new Response('No read permission', { status: server.refuse });
-        const etag = `"${stored.getText('probe').length}"`;
+        const etag = `"${collabStateVersion(server.epoch, 0, stored.getText('probe').length, 'state-f1')}"`;
         if (ifNoneMatch === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
-        return new Response(encodeCollabState([Y.encodeStateAsUpdate(stored)]), { headers: { ETag: etag } });
+        return new Response(new Uint8Array(Y.encodeStateAsUpdate(stored)), { headers: { ETag: etag } });
     };
     globalThis.fetch = Object.assign(answer, { preconnect: realFetch.preconnect });
     return Object.assign(server, { restore: () => void (globalThis.fetch = realFetch) });
@@ -616,17 +618,55 @@ describe('useCollabDoc for a reader who gets no socket', () => {
 
         server.write(' two');
         await focusWindow();
-        expect(server.asked.at(-1)?.ifNoneMatch).toBe('"3"');
+        expect(server.asked.at(-1)?.ifNoneMatch).toBe('"epoch-1.0.3.state-f1"');
         expect(h.doc).toBe(doc);
         expect(doc.getText('probe').toString()).toBe('one two');
 
         let updates = 0;
         doc.on('update', () => updates++);
         await focusWindow();
-        expect(server.asked.map((ask) => ask.ifNoneMatch)).toEqual([null, '"3"', '"7"']);
+        expect(server.asked.map((ask) => ask.ifNoneMatch)).toEqual([
+            null,
+            '"epoch-1.0.3.state-f1"',
+            '"epoch-1.0.7.state-f1"',
+        ]);
         expect(updates).toBe(0);
         expect(h.state.loaded).toBe(true);
         expect(syncs).toEqual([true]);
+    });
+
+    test('a 304 keeps the document, and the query holds only the version, never a copy of the body', async () => {
+        server.write('kept');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        await focusWindow();
+        expect(server.asked.at(-1)?.ifNoneMatch).not.toBeNull();
+        expect(h.doc.getText('probe').toString()).toBe('kept');
+        const held = h.client
+            .getQueryCache()
+            .getAll()
+            .map((query) => query.state.data)
+            .filter((data) => data !== undefined);
+        expect(held.some((data) => Object.values(Object(data)).some((value) => value instanceof Uint8Array))).toBe(
+            false,
+        );
+    });
+
+    test("a new epoch reloads the page instead of merging the replaced home's state into the held document", async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        server.write('before the restore');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+
+        server.epoch = 'epoch-2';
+        server.stored.getText('probe').delete(0, server.stored.getText('probe').length);
+        server.write('restored');
+        await focusWindow();
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(h.doc.getText('probe').toString()).toBe('before the restore');
     });
 
     test("the reader's own change to the document arms no unsynced-edits guard", async () => {
