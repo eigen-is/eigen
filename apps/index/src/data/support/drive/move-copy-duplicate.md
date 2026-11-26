@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-25
+updated: 2026-11-26
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -57,6 +57,8 @@ With a document, spreadsheet, presentation, board, or drawing open, choose **Fil
 Select more than one item first. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add items one at a time. Right-click the selection and the menu counts them for you: **Move 3 items to…**, **Copy 3 items to…**, **Duplicate 3 items**, or **Mail 3 items to…**.
 
 **Move to…** isn't offered in a list of files from several folders, such as a type filter. **Copy to…** and **Duplicate** are.
+
+Moving needs edit access given to you by name: the item is yours or your team's, or someone added you or your team as an **Editor** of it or of a folder it's in. In a folder you can edit only through **Anyone signed in with the link**, **Move to…** isn't offered. You can still rename, copy, and duplicate there.
 
 ## What happens to sharing
 
