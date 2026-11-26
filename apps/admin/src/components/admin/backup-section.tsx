@@ -21,7 +21,7 @@ import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/vali
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Button } from '@workspace/ui/components/button';
 import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
-import { ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
+import { DetailSection, ErrorState, LoadingState } from '@workspace/ui/components/layout/app';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar';
 import { useDialogValue } from '@workspace/ui/hooks/use-dialog-value';
 import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
@@ -124,9 +124,9 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     };
 
     return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-medium">Backup</h3>
+        <DetailSection
+            label="Backup"
+            action={
                 <div className="flex items-center gap-1">
                     <Button
                         variant="ghost"
@@ -158,80 +158,84 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                         </>
                     )}
                 </div>
+            }
+        >
+            <div className="space-y-3">
+                {rowCount > 0 && (
+                    <Alert variant="warning">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                            An archive holds everything in this account: files, mail, calendars and the stored storage
+                            credentials. It is a secret, so keep it somewhere safe.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {latest && latest.id !== dismissedJobId && (
+                    <BackupJobStatus job={latest} onDismiss={() => setDismissedJobId(latest.id)} />
+                )}
+                {jobsFailed && (
+                    <p className="text-xs text-destructive">Could not load the jobs running for this account.</p>
+                )}
+
+                {isLoading ? (
+                    <LoadingState />
+                ) : isError || !data ? (
+                    <ErrorState message="Could not load the backups of this account." />
+                ) : rowCount === 0 ? (
+                    <p className="text-sm text-muted-foreground">No backups yet.</p>
+                ) : (
+                    // Both lists in one branch: the empty state above stands for the whole section, and
+                    // a home with no archive can still have a safety copy beside it.
+                    <div className="space-y-2">
+                        {data.artifacts.map((artifact) => (
+                            <ArtifactRow
+                                key={artifact.name}
+                                artifact={artifact}
+                                busy={!!running}
+                                onVerify={() => verifyBackup.mutate(artifact.name)}
+                                onRestore={() =>
+                                    confirmDialog.openDialog({ kind: 'restore-artifact', name: artifact.name })
+                                }
+                                onDelete={() =>
+                                    confirmDialog.openDialog({ kind: 'delete-artifact', name: artifact.name })
+                                }
+                            />
+                        ))}
+                        {data.safetyCopies.length > 0 && (
+                            <div className="space-y-2 pt-1">
+                                <h4 className="eigen-section-label">Safety copies</h4>
+                                {data.safetyCopies.map((copy) => (
+                                    <SafetyCopyRow
+                                        key={copy.name}
+                                        copy={copy}
+                                        busy={!!running}
+                                        onRestore={() =>
+                                            confirmDialog.openDialog({ kind: 'restore-copy', name: copy.name })
+                                        }
+                                        onDelete={() =>
+                                            confirmDialog.openDialog({ kind: 'delete-copy', name: copy.name })
+                                        }
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {confirm && (
+                    <ConfirmDialog
+                        open={confirmDialog.open}
+                        onOpenChange={confirmDialog.setOpen}
+                        title={CONFIRM_COPY[confirm.kind].title}
+                        description={CONFIRM_COPY[confirm.kind].description({ name: confirm.name, ownerId })}
+                        onConfirm={() => runConfirmed(confirm)}
+                        confirmText={CONFIRM_COPY[confirm.kind].action}
+                        destructive
+                    />
+                )}
             </div>
-
-            {rowCount > 0 && (
-                <Alert variant="warning">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                        An archive holds everything in this account: files, mail, calendars and the stored storage
-                        credentials. It is a secret, so keep it somewhere safe.
-                    </AlertDescription>
-                </Alert>
-            )}
-
-            {latest && latest.id !== dismissedJobId && (
-                <BackupJobStatus job={latest} onDismiss={() => setDismissedJobId(latest.id)} />
-            )}
-            {jobsFailed && (
-                <p className="text-xs text-destructive">Could not load the jobs running for this account.</p>
-            )}
-
-            {isLoading ? (
-                <LoadingState />
-            ) : isError || !data ? (
-                <ErrorState message="Could not load the backups of this account." />
-            ) : rowCount === 0 ? (
-                <p className="text-sm text-muted-foreground">No backups yet.</p>
-            ) : (
-                // Both lists in one branch: the empty state above stands for the whole section, and
-                // a home with no archive can still have a safety copy beside it.
-                <div className="space-y-2">
-                    {data.artifacts.map((artifact) => (
-                        <ArtifactRow
-                            key={artifact.name}
-                            artifact={artifact}
-                            busy={!!running}
-                            onVerify={() => verifyBackup.mutate(artifact.name)}
-                            onRestore={() =>
-                                confirmDialog.openDialog({ kind: 'restore-artifact', name: artifact.name })
-                            }
-                            onDelete={() => confirmDialog.openDialog({ kind: 'delete-artifact', name: artifact.name })}
-                        />
-                    ))}
-                    {data.safetyCopies.length > 0 && (
-                        <div className="space-y-2 pt-1">
-                            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Safety copies
-                            </h4>
-                            {data.safetyCopies.map((copy) => (
-                                <SafetyCopyRow
-                                    key={copy.name}
-                                    copy={copy}
-                                    busy={!!running}
-                                    onRestore={() =>
-                                        confirmDialog.openDialog({ kind: 'restore-copy', name: copy.name })
-                                    }
-                                    onDelete={() => confirmDialog.openDialog({ kind: 'delete-copy', name: copy.name })}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {confirm && (
-                <ConfirmDialog
-                    open={confirmDialog.open}
-                    onOpenChange={confirmDialog.setOpen}
-                    title={CONFIRM_COPY[confirm.kind].title}
-                    description={CONFIRM_COPY[confirm.kind].description({ name: confirm.name, ownerId })}
-                    onConfirm={() => runConfirmed(confirm)}
-                    confirmText={CONFIRM_COPY[confirm.kind].action}
-                    destructive
-                />
-            )}
-        </div>
+        </DetailSection>
     );
 }
 
