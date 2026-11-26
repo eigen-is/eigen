@@ -484,14 +484,14 @@ test('on a phone the column covers the editor, which stays mounted', async () =>
     await settle();
     const editor = document.querySelector('[data-testid="editor"]');
     expect(editor?.closest('.hidden')).not.toBeNull();
-    // The list's bar: a lone "‹" back to the document, then its title.
-    expect(button('Back')).toBeDefined();
-    expect(button('Comments')).toBeUndefined();
+    // The list's bar: "‹ Comments", back to the document.
+    expect(button('Comments')).toBeDefined();
+    expect(button('Back')).toBeUndefined();
     expect(column()?.className).not.toContain('transition-[width]');
     await click(listRow());
     expect(button('Comments')).toBeDefined();
     await click(button('Comments'));
-    await click(button('Back'));
+    await click(button('Comments'));
     expect(column()).toBeNull();
     expect(document.querySelector('[data-testid="editor"]')?.closest('.hidden')).toBeNull();
     expect(mounts).toBe(1);

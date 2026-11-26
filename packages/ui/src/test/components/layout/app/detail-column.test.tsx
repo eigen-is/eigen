@@ -1,5 +1,5 @@
 // A detail column's bar names a list, never an item: a title alone over a list, "‹ Comments" once it drilled into one
-// item, and on a phone a lone "‹" that closes the column. X closes it off the phone. Esc closes it too, unless a
+// item, and on a phone the same "‹ Comments" over the list, closing the column. X closes it off the phone. Esc closes it too, unless a
 // handler before it used the key, the focus is in a field or a dialog is open.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
@@ -53,6 +53,7 @@ async function render({ isMobile = false, title, withBack = false, extra }: Opti
     return {
         bar: () => slot?.firstElementChild?.firstElementChild?.textContent,
         backs: () => buttons.filter((b) => b.querySelector('.lucide-chevron-left')),
+        title: () => slot?.querySelector('.eigen-toolbar-title')?.textContent,
         close: () => slot?.querySelector<HTMLButtonElement>('button[aria-label="Close"]') ?? null,
     };
 }
@@ -68,6 +69,7 @@ async function pressEscape(target: EventTarget = document.body, prevented = fals
 test('over a list the bar shows the title alone', async () => {
     const column = await render({ title: 'Comments' });
     expect(column.bar()).toBe('CommentsActions');
+    expect(column.title()).toBe('Comments');
     expect(column.backs()).toHaveLength(0);
 });
 
@@ -89,12 +91,26 @@ test('X closes off the phone, and a phone has none', async () => {
     expect((await render({ isMobile: true })).close()).toBeNull();
 });
 
-test('on a phone a lone back closes the column, then the title', async () => {
+test("on a phone the list's bar is one back named after the list, the thread's own, and it closes the column", async () => {
+    const thread = await render({ isMobile: true, title: 'Comments', withBack: true });
+    const threadBack = thread.backs()[0]?.outerHTML;
+    await unmount();
     const column = await render({ isMobile: true, title: 'Comments' });
     const [back, ...more] = column.backs();
     expect(more).toHaveLength(0);
-    expect(back?.getAttribute('aria-label')).toBe('Back');
+    expect(back?.outerHTML).toBe(threadBack);
+    expect(column.title()).toBeUndefined();
     expect(column.bar()).toBe('CommentsActions');
+    await act(async () => back?.click());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onBack).not.toHaveBeenCalled();
+});
+
+test('on a phone a column without a title has a lone back that closes it', async () => {
+    const column = await render({ isMobile: true });
+    const [back, ...more] = column.backs();
+    expect(more).toHaveLength(0);
+    expect(back?.getAttribute('aria-label')).toBe('Back');
     await act(async () => back?.click());
     expect(onClose).toHaveBeenCalledTimes(1);
 });

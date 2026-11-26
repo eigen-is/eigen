@@ -435,7 +435,7 @@ test.each([
     await click(listRow());
     expect(threadShown()).toBe('chat-1.eigenchat');
     await click(button('Comments'));
-    await click(button(isMobile ? 'Back' : 'Close'));
+    await click(button(isMobile ? 'Comments' : 'Close'));
     expect(column()).toBeNull();
     expect(gridHidden()).toBe(false);
     expect(mounts).toBe(1);

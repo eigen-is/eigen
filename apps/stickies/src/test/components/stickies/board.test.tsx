@@ -371,7 +371,9 @@ const column = () => document.querySelector<HTMLElement>('[data-slot="detail-col
 // The row the column sits in, beside the board and under the toolbar.
 const slotRow = () => document.querySelector('[data-slot="detail-column"]')?.parentElement;
 const columnButton = (name: string) =>
-    document.querySelector<HTMLElement>(`[data-slot="detail-column"] button[aria-label="${name}"]`);
+    [...document.querySelectorAll<HTMLButtonElement>('[data-slot="detail-column"] button')].find(
+        (b) => b.getAttribute('aria-label') === name || b.textContent === name,
+    );
 const boardHidden = () => document.querySelector('[data-testid="board-column"]')?.closest('.hidden') != null;
 const toggleActivity = async () => {
     await act(async () => seen.toolbar?.onToggleActivity?.());
@@ -462,14 +464,15 @@ test("a card deleted from the activity keeps the entry's flag, so the column's X
     expect(history.location.state.__TSR_index).toBe(1);
 });
 
-test('on a phone the activity covers the board, which never remounts, and ‹ closes it', async () => {
+test('on a phone the activity covers the board, which never remounts, and ‹ Activity closes it', async () => {
     await openBoard(['/'], { isMobile: true });
     expect(seen.toolbar?.onToggleActivity).toBeDefined();
     await toggleActivity();
     expect(boardHidden()).toBe(true);
     expect(column()?.closest('.hidden')).toBeNull();
     expect(seen.rightInsetPx).toBeUndefined();
-    await act(async () => columnButton('Back')?.click());
+    expect(columnButton('Back')).toBeUndefined();
+    await act(async () => columnButton('Activity')?.click());
     await settle();
     expect(param('panel')).toBeNull();
     expect(column()).toBeNull();

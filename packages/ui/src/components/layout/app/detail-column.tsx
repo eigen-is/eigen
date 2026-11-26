@@ -1,8 +1,8 @@
 // The column a page opens at its right to show one thing the user opened, such as a calendar event or a document's
 // comments. Its bar names a list, never an item: a list's title, a "‹" back once it drilled into one item, the
-// item's actions, and the X that closes it, which a phone swaps for a lone "‹" at the left. Esc closes it too, unless
-// a dialog, a menu or a field has the key, or a handler that heard it first used it, such as a canvas canceling a drag.
-// It mounts at its width and eases to a new one, such as the comments list drilling into a thread.
+// item's actions, and the X that closes it. A phone has no X: its "‹" at the left closes the column, beside the
+// title as a thread's back is. Esc closes it too, unless a dialog, a menu or a field has the key, or a handler that
+// heard it first used it, such as a canvas canceling a drag. It mounts at its width and eases to a new one.
 
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
@@ -57,13 +57,10 @@ export function DetailColumn({ width, title, onBack, actions, onClose, fill, chi
                 )}
                 toolbar={
                     <>
-                        {onBack ? (
-                            <BackButton onClick={onBack} label={title} />
+                        {onBack || isMobile ? (
+                            <BackButton onClick={onBack ?? onClose} label={title} />
                         ) : (
-                            <>
-                                {isMobile && <BackButton onClick={onClose} />}
-                                {title && <ToolbarTitle>{title}</ToolbarTitle>}
-                            </>
+                            title && <ToolbarTitle>{title}</ToolbarTitle>
                         )}
                         <div className="flex flex-1 items-center justify-end gap-1">
                             {actions}
