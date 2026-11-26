@@ -22,7 +22,7 @@ Each calendar has a small colored square next to its name. That square is a togg
 Click the square to switch between visible and hidden. The change takes effect straight away.
 
 ::: grid columns="1"
-![A week with your own events beside a team calendar's, each in its calendar's color](/data/about/media/calendar-still-today.webp)
+![A week of your own events, with a team calendar's meeting at the foot, each in its calendar's color](/data/about/media/calendar-still-today.webp)
 :::
 
 ## Show or hide a shared calendar

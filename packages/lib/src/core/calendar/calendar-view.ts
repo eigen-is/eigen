@@ -1,7 +1,7 @@
 // Which days a Calendar view shows. A view is a mode, such as week, month or schedule, and a focused local day,
 // both read from the app's URL. From them come the days to draw, the range the event query asks for, the day an
-// arrow steps to, and the toolbar's title. The Calendar app's routes, toolbar and sidebar use it, and so do the links
-// into Calendar from other apps, such as an invitation in Mail.
+// arrow steps to, and the toolbar's title. It serves the Calendar app, such as its toolbar, and the links into Calendar
+// from other apps, such as an invitation in Mail.
 
 import type { CalendarViewMode } from '@workspace/lib/types/calendar';
 import { CALENDAR_VIEW_MODES } from '@workspace/lib/types/calendar';

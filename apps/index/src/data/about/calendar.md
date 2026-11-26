@@ -25,7 +25,7 @@ An event [repeats](/support/calendar/recurring-events), such as daily, weekly or
 Above three guests the list folds into a count and a summary of the replies. When someone invites you, the event shows up in your calendar with [Accept, Maybe and Decline](/support/calendar/respond-to-invitation) at the bottom.
 
 ::: carousel
-![This week: Saar's own appointments beside the crew's production meeting](/data/about/media/calendar-still-today.webp)
+![This week: Saar's own appointments, with the crew's production meeting at the foot](/data/about/media/calendar-still-today.webp)
 ![The build day opened on its three guests](/data/about/media/calendar-still-build.webp)
 ![The festival week: the build day, load-in and soundchecks, the volunteer briefing and the weekend itself, between Saar's own errands](/data/about/media/calendar-still-week.webp)
 ![The schedule: the build day, the eve and the festival as a list, day by day](/data/about/media/calendar-still-schedule.webp)

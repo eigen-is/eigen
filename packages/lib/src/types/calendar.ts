@@ -4,8 +4,7 @@
 export const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
 export type ImipMethod = (typeof IMIP_METHODS)[number];
 
-// The views a user picks from, in the order every picker lists them. The bare list is what the settings route
-// validates against.
+// The views a user picks from, in the order every picker lists them.
 export const CALENDAR_VIEW_MODES = ['day', '3day', 'week', 'month', 'schedule'] as const;
 export type CalendarViewMode = (typeof CALENDAR_VIEW_MODES)[number];
 

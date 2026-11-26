@@ -1,7 +1,6 @@
-// Calendar's sidebar: the Create event button, on a phone a link per view that keeps the focused day and the open
-// event and is the view the phone opens on next, the calendar lists, such as the user's own and those shared with
-// them, each with a checkbox that shows or hides its events, and at its foot the mini month above the storage meter.
-// The lists scroll, so the month stays in view however many calendars there are.
+// Calendar's sidebar: the Create event button, the calendar lists, such as the user's own and those shared with them,
+// with a checkbox each that shows or hides its events, and parts such as a phone's view links and the mini month at its
+// foot. The lists scroll, so the month stays in view however many calendars there are.
 
 import { useMatch } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
@@ -284,21 +283,18 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     {teamShared.length > 0 && (
                         <SidebarSection condensed={condensed} title="Team calendars" loading={sharedLoading}>
                             {teamShared.map((sc) => {
-                                const display = {
-                                    ...sc,
-                                    calendarName: sharedCalendarLabel(sc),
-                                };
+                                const label = sharedCalendarLabel(sc);
                                 return (
                                     <CalendarRow
                                         key={sc.id}
-                                        color={display.color || display.calendarColor}
-                                        label={display.calendarName}
-                                        checked={display.visible}
+                                        color={sc.color || sc.calendarColor}
+                                        label={label}
+                                        checked={sc.visible}
                                         condensed={condensed}
                                         onToggle={() =>
                                             updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
                                         }
-                                        onEdit={() => handleEditSharedCalendar(display)}
+                                        onEdit={() => handleEditSharedCalendar({ ...sc, calendarName: label })}
                                         onImport={
                                             isGuest || sc.permission !== 'write'
                                                 ? undefined

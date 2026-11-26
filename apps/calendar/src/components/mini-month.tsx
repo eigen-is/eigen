@@ -18,7 +18,7 @@ export function MiniMonth({ mode, focus }: { mode?: CalendarViewMode; focus: Dat
 
     const openDay = (day: Date) => {
         if (mode) showView(mode, day);
-        else navigate({ to: '/', search: { date: toLocalDateString(day) } });
+        else void navigate({ to: '/', search: { date: toLocalDateString(day) } });
         setSidebarOpen(false);
     };
 

@@ -1,8 +1,6 @@
-// The stills of the Calendar page, each as the production lead sees it, their themes alternating in the carousel: this
-// week, her own runs and appointments beside the crew's meetings, in light; the build day opened on its guests, in
-// dark; the festival week with the build day, the go/no-go and the festival weekend, in light; the schedule from the
-// build day through the festival, in dark; and the festival's month, in light. Each picks its view, since Calendar
-// opens on the view picked last.
+// The stills of the Calendar page, each as the production lead sees it, their themes alternating in the carousel, such
+// as this week's appointments in light and the build day opened on its guests in dark. Each picks its view, since
+// Calendar opens on the view picked last.
 
 import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';

@@ -17,7 +17,7 @@ export async function openFestivalWeek(page: Page, stack: Stack): Promise<void> 
     }
 }
 
-export async function openFestivalMonth(page: Page, stack: Stack, title: string): Promise<Locator> {
+export async function openFestivalMonth(page: Page, stack: Stack, title: string): Promise<void> {
     await openView(page, stack, 'Month');
     const event = page.getByText(title).first();
     for (let month = 0; month < 3; month++) {
@@ -26,7 +26,7 @@ export async function openFestivalMonth(page: Page, stack: Stack, title: string)
             () => event.boundingBox(),
             () => null,
         );
-        if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) return event;
+        if (box && box.y >= 0 && box.y + box.height <= VIEWPORT.height) return;
         // Exact, or the sidebar mini month's "Show next month" matches too.
         await page.getByRole('button', { name: 'Next month', exact: true }).dispatchEvent('click');
         await Bun.sleep(800);

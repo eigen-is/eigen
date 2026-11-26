@@ -10,6 +10,9 @@ import type { Scene } from '../lib/scene';
 import { VIEWPORT } from '../lib/scene';
 import { moreOnDayOf, openFestivalMonth } from './festival-week';
 
+// The first event on the eve of the festival.
+const EVE_FIRST_EVENT = 'Breakfast at the bakery';
+
 export const calendarHero = {
     name: 'calendar-hero',
     kind: 'video',
@@ -18,7 +21,7 @@ export const calendarHero = {
     apps: ['calendar'],
     personas: ['saar'],
     setup: async ({ pages: [page], cursors: [cursor], stack }) => {
-        await openFestivalMonth(page, stack, EVE);
+        await openFestivalMonth(page, stack, EVE_FIRST_EVENT);
         await Bun.sleep(2000);
         await cursor.moveTo(await restPoint(page), { duration: 1 });
     },
@@ -27,7 +30,7 @@ export const calendarHero = {
         const meeting = page.getByText('Go / no-go meeting');
         // The meeting is the eve's last event, so a short month row lists it under the day's "N more".
         if ((await meeting.count()) === 0) {
-            await cursor.click(await pointOn(await moreOnDayOf(page, EVE)));
+            await cursor.click(await pointOn(await moreOnDayOf(page, EVE_FIRST_EVENT)));
             await Bun.sleep(1000);
         }
         await cursor.click(await pointOn(meeting.first()));
@@ -48,9 +51,6 @@ export const calendarHero = {
         await Bun.sleep(800);
     },
 } satisfies Scene;
-
-// The day's first event, on the eve of the festival.
-const EVE = 'Breakfast at the bakery';
 
 // The toolbar's empty stretch past the month's title, read from the page, since a sidebar row, a day cell or the mini
 // month lights up under the pointer.
