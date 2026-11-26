@@ -7,6 +7,7 @@ import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { MAX_SYNC_STEP_1_BYTES } from '../../lib/collab/collab-document';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getSharedDatabase } from '../../lib/drive/shared';
 import { recentPaths } from '../../lib/drive/shared-schema';
@@ -273,6 +274,35 @@ describe('a socket without a login opens what a public link opens', () => {
         }
         await waitFor(() => visitor.count(STEP_2) === before + 3, 5_000);
         expect(visitor.ws.readyState).toBe(WebSocket.OPEN);
+    });
+
+    test('a step 1 over the cap gets no answer, for a member and a visitor, and the next one does', async () => {
+        const doc = await newPublicDoc();
+        // A well-formed state vector: client ids of five varuint bytes, each with a clock of 1.
+        const entries = Math.ceil(MAX_SYNC_STEP_1_BYTES / 6) + 1;
+        const vector = encoding.createEncoder();
+        encoding.writeVarUint(vector, entries);
+        for (let i = 0; i < entries; i++) {
+            encoding.writeVarUint(vector, 2 ** 31 + i);
+            encoding.writeVarUint(vector, 1);
+        }
+        const huge = syncFrame((encoder) => {
+            encoding.writeVarUint(encoder, STEP_1);
+            encoding.writeVarUint8Array(encoder, encoding.toUint8Array(vector));
+        });
+        expect(huge.byteLength).toBeGreaterThan(MAX_SYNC_STEP_1_BYTES);
+
+        for (const user of [alice, null]) {
+            const client = await open(user, doc.id);
+            const before = client.count(STEP_2);
+            client.ws.send(huge);
+            client.ws.send(syncFrame((encoder) => syncProtocol.writeSyncStep1(encoder, client.doc)));
+            await waitFor(() => client.count(STEP_2) > before, 5_000);
+            // Frames are answered in order, so after this round trip an answer to the big one would have arrived.
+            await roundTrip(client);
+            expect(client.count(STEP_2)).toBe(before + 2);
+            expect(client.ws.readyState).toBe(WebSocket.OPEN);
+        }
     });
 
     test("a member's socket gets the server's step 1", async () => {
