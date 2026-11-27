@@ -364,7 +364,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!, 'foreground');
         } catch (e) {
             error = e;
         }
@@ -389,7 +389,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         try {
             await expect(
-                importIntoDocument(home.drive, path, buffer, REPLACE, home.user, controller.signal),
+                importIntoDocument(home.drive, path, buffer, REPLACE, home.user, 'foreground', controller.signal),
             ).rejects.toMatchObject({ name: 'AbortError' });
         } finally {
             runSpy.mockRestore();
@@ -428,7 +428,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!, 'foreground');
         } catch (e) {
             error = e;
         } finally {
@@ -454,6 +454,86 @@ describe('Eigendoc docx import/convert', () => {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
     }, 60_000);
+});
+
+// Someone who edits only through "Anyone signed in with the link, can edit" waits behind the people the item is
+// shared with, as a reader through a link does. A convert's new document lands in the source's folder, which decides.
+describe('docx import and convert priority', () => {
+    const readers = () =>
+        [
+            ['a link-only editor', ctx.charlie.user.sessionToken, 'background'],
+            ['an editor by name', ctx.bob.user.sessionToken, 'foreground'],
+            ['the owner', ctx.alice.user.sessionToken, 'foreground'],
+        ] as const;
+
+    async function shareOpen(pathId: string, named: readonly object[]): Promise<void> {
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${pathId}/acl`, {
+            visibility: 'public-write',
+            add: [{ id: ctx.bob.user.email, read: true, write: true }, ...named],
+        });
+    }
+
+    async function importPriorities(
+        run: ReturnType<typeof spyOn<typeof documentTransformRunner, 'run'>>,
+        send: () => Promise<Response>,
+    ): Promise<[number, string[]]> {
+        const res = await send();
+        const priorities = run.mock.calls
+            .splice(0)
+            .flatMap(([request, opts]) => (request.kind === 'import' ? [opts.priority] : []));
+        return [res.status, priorities];
+    }
+
+    test('an import into a document follows the reader access to the document', async () => {
+        const docs = await Promise.all(readers().map((_, i) => createDoc(`import-lane-${i}`)));
+        for (const doc of docs) await shareOpen(doc.id, []);
+        const body = await buildGoldenDocx(TEST_PNG_BYTES);
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (const [i, [who, token, expected]] of readers().entries()) {
+                const url = `/drive/${ctx.alice.user.id}/${mountId}/file/${docs[i].id}/import?mode=replace`;
+                const seen = await importPriorities(run, () => authedRequest(token, url, { method: 'POST', body }));
+                expect([who, seen]).toEqual([who, [200, [expected]]]);
+            }
+        } finally {
+            run.mockRestore();
+        }
+    }, 120_000);
+
+    test("a convert follows the reader access to the source's folder, not to the file", async () => {
+        const body = await buildGoldenDocx(TEST_PNG_BYTES);
+        const sources = await Promise.all(
+            readers().map(async (_, i) => {
+                const folder = await drivePost<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `folder/${rootId}`,
+                    { folderName: `convert-lane-${i}` },
+                );
+                await shareOpen(folder.id, []);
+                const file = await driveUpload<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    folder.id,
+                    new File([body], `lane-${i}.docx`, { type: DOCX_MIME }),
+                );
+                await shareOpen(file.id, [{ id: ctx.charlie.user.email, read: true, write: true }]);
+                return file;
+            }),
+        );
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (const [i, [who, token, expected]] of readers().entries()) {
+                const url = `/drive/${ctx.alice.user.id}/${mountId}/file/${sources[i].id}/convert/eigendoc`;
+                const seen = await importPriorities(run, () => authedRequest(token, url, { method: 'POST' }));
+                expect([who, seen]).toEqual([who, [200, [expected]]]);
+            }
+        } finally {
+            run.mockRestore();
+        }
+    }, 120_000);
 });
 
 // The extracted images count toward the mount's quota as an upload does; a re-import overwrites none, so is credited none.

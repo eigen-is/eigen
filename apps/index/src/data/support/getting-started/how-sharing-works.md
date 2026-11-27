@@ -60,6 +60,6 @@ They don't need an account set up for them in advance, though. Anyone you share 
 A few things help you keep a handle on who has access:
 
 - **You can change or remove access at any time.** Open the **Share** dialog again, change someone's dropdown to **Viewer** or **Editor**, or set it to **Remove** to take their access away.
-- **Owners can stop editors from re-sharing.** If you own a file, you can turn off **Editors can share**. With it off, editors can still work on the file, but only you can add or remove people.
+- **Owners can stop editors from re-sharing.** If you own a file, you can turn off **Editors can share**. With it off, editors can still work on the file, but only you can add or remove people or move it to another folder.
 
 When you're ready to share something, [Share a file or folder](/support/drive/share-a-file) walks through it step by step.

@@ -71,7 +71,10 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         pluralLabel: 'Move {n} items to…',
         icon: FolderInput,
         group: 'organize',
-        applies: (s) => s.capabilities.canMove && s.items.every((item) => byName(s, item)),
+        // A move can open the item to more people, so an item whose owner restricted sharing moves only with them.
+        applies: (s) =>
+            s.capabilities.canMove &&
+            s.items.every((item) => byName(s, item) && (!item.sharingRestricted || s.isEffectiveOwnerOf(item.ownerId))),
     },
     // Copy goes anywhere the viewer can write, so reading the items is enough.
     {

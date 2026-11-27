@@ -152,3 +152,16 @@ test('a reader by name of a folder anyone signed in can edit is not offered the 
     breadcrumb = [open];
     expect((await rowsIn(open, [[doc()]])).loaded).toEqual([[]]);
 });
+
+test('an item whose owner keeps sharing to themselves is offered Move only to its owner', async () => {
+    const open = folder({ acl: [editor] });
+    breadcrumb = [open];
+    const restricted = doc({ sharingRestricted: true });
+    const { loaded } = await rowsIn(open, [[restricted], [restricted, doc({ id: 'free' })]]);
+    expect(loaded).toEqual([['share', 'email-collaborators'], []]);
+
+    const teamOpen = folder({ ownerId: teamOwnerId(TEAM_ID) });
+    breadcrumb = [teamOpen];
+    const own = [[doc({ ownerId: teamOwnerId(TEAM_ID), sharingRestricted: true })]];
+    expect((await rowsIn(teamOpen, own)).loaded).toEqual([BY_NAME]);
+});

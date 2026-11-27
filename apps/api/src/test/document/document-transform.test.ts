@@ -1819,7 +1819,10 @@ describe('document transform (docx import)', () => {
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
 // A convert checks write on the destination folder before anything else it pays for.
-const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+const WRITABLE_DRIVE = {
+    canWrite: async () => true,
+    readerAccess: async () => ({ canRead: true, canWrite: true, live: true, priority: 'foreground' }),
+} as unknown as Drive;
 // An insert into a deck opens it for its frame, which a refused import must not pay for either.
 const UNOPENED_DRIVE = {
     getCollabDocument: () => {
@@ -1843,6 +1846,7 @@ describe('document transform (input bound)', () => {
                 upload,
                 { mode: 'replace' },
                 {} as unknown as User,
+                'foreground',
             ).catch((reason: unknown) => reason);
             expect(error).toMatchObject({ status: 413, message });
             expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
@@ -1969,6 +1973,7 @@ describe('document transform (admission)', () => {
                     upload,
                     { mode: 'replace' },
                     user,
+                    'foreground',
                 );
             } catch (err) {
                 error = err;
