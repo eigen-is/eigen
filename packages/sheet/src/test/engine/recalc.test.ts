@@ -623,7 +623,7 @@ describe('engine/recalc — the cells a formula reads', () => {
     };
 
     // The walk is linear in the text, so a crafted file can't make it quadratic.
-    test('walks a 2 MB formula of quoted sheet names in well under a second', async () => {
+    test('walks a 2 MB formula of quoted sheet names at the cost of one of bare names', async () => {
         const quoted = [{ id: 's2', name: 'My Data', data: [[num(1)]] }];
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);

@@ -724,8 +724,8 @@ describe('A graceful shutdown', () => {
         expect(receive.mock.calls.map(([, acl]) => acl?.length ?? 0)).toEqual([1, 0]);
     });
 
-    // The shutdown wraps its wait in settlesWithin with a bound of its own, which no test drives. This pins the
-    // wrap, on a delivery stuck on a home that never opens.
+    // The shutdown bounds its wait on the drain with settlesWithin the same way. No test drives the shutdown's
+    // own bound.
     test('a bounded wait gives up on a delivery that never settles, and the delivery still lands', async () => {
         const tag = 'relay-drain:stalled';
         const held = holdMemberHomes();
