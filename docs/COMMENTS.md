@@ -128,7 +128,7 @@ Adding a comment opens the form client-side; the server is touched only on Save.
 
 A visitor, someone with no login on a document a public link opens ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)), loads the document's stored state and so reads every card as it is stored: its title, description, color, attachments, time and `creator`, the author's email address. The server's side is closed to them: the thread routes, the comment index and the member list all need a login. So `useCommentLifecycle` runs no index or member query when `useAuth()` has no user, `CommentThread` finds no chat for a card's name and shows the card without its replies, and `useCommentsColumn` and the Stickies board offer no Activity.
 
-A reader without a socket, a visitor or someone signed in who reads only through a link, sees a card added or changed meanwhile when the tab is shown again or reloaded ([COLLAB.md § Without a socket](COLLAB.md#without-a-socket-the-editor-shows-the-state-it-fetched)).
+A reader without a socket, a visitor or someone signed in who reads only through a link, sees a card added or changed meanwhile within 30 s while the tab is visible, or when it is shown again ([COLLAB.md § Without a socket](COLLAB.md#without-a-socket-the-editor-shows-the-state-it-fetched)).
 
 The deleted rule bends for the same reason as the missing replies. A visitor's listing has no `chat/` folder, so `useIsCardDeleted` counts only the host's use for them: otherwise every card would read as deleted, its thread missing.
 

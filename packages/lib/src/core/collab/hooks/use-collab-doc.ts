@@ -2,7 +2,7 @@
 // and gets the doc and its connection state. A live reader, as the document's info names them, syncs it over a
 // y-websocket provider, and the hook decides what each close code does to the tab: reconnect, wait and retry, stop for
 // good, or reload. Any other reader, such as a visitor without a login, gets no socket: the hook loads the stored state
-// over HTTP and asks again when the tab shows again.
+// over HTTP and asks again every 30 s while the tab is visible.
 
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import {
@@ -74,10 +74,10 @@ export type CollabDoc = {
     // retrying; cleared on sync.
     storageUnavailable: boolean;
     // The server closed with COLLAB_STORAGE_GONE_CLOSE, or answered the stored state with a 410: the stored data is
-    // missing, so the hook stopped asking.
+    // missing, so the hook stopped retrying.
     storageGone: boolean;
     // The stored state failed in a way another try would not change, such as a 413 for a document too large to show:
-    // the server's message, and the hook stopped asking.
+    // the server's message, and the hook stopped retrying.
     loadError: string | null;
     // Edits may not have reached the server; render `<UnsyncedEditsGuard active>` so leaving warns first.
     unsyncedEdits: boolean;

@@ -439,6 +439,38 @@ test('a save that only adds a person sends no general access, so it never reopen
     expect(updateACL.mock.calls[0]?.[0]).not.toHaveProperty('visibility', expect.anything());
 });
 
+test("a save that leaves Editors can share alone sends no value for it, so it never undoes another owner's change", async () => {
+    sharedPath = { ...notes, sharingRestricted: true };
+    ({ unmount } = await renderInDocument(createElement(RouteHarness)));
+    await act(async () => showPath({ ...notes, sharingRestricted: false }));
+    await addByEnter('dan@example.com');
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([
+        [expect.objectContaining({ add: [{ id: 'dan@example.com', read: true, write: true }], remove: [] })],
+    ]);
+    expect(updateACL.mock.calls[0]?.[0]).not.toHaveProperty('sharingRestricted', expect.anything());
+});
+
+test('turning Editors can share off is a change: Esc asks first, and Save sends it alone', async () => {
+    await open();
+    await click(dialog()?.querySelector('[role="checkbox"]'));
+    await act(async () => {
+        contactField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    const titles = [...document.querySelectorAll('[role="dialog"] h2')].map((h) => h.textContent);
+    expect(titles).toContain('Discard changes?');
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await unmount();
+
+    await open();
+    await click(dialog()?.querySelector('[role="checkbox"]'));
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([[{ path: notes, add: [], remove: [], sharingRestricted: true }]]);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
 test('Anyone with the link is not offered while public links are off, nor on a chat', async () => {
     publicLinks = false;
     await open();
