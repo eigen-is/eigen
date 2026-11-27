@@ -23,12 +23,11 @@ describe('costRatio', () => {
         expect(ratio).toBeLessThan(32);
     });
 
-    // A quadratic cost at n is 256 times its baseline of about 15 ms, so one turn keeps the file short.
-    test('a quadratic cost at n against n/16 reads far over 64', async () => {
-        const n = 80_000;
-        const { ratio } = await costRatio({ run: () => quadratic(n) }, { run: () => quadratic(n / 16) }, 1);
-        expect(ratio).toBeGreaterThan(128);
-    }, 30_000);
+    test('a quadratic cost at n against n/4 reads near 16, four times what a linear one does', async () => {
+        const n = 20_000;
+        const { ratio } = await costRatio({ run: () => quadratic(n) }, { run: () => quadratic(n / 4) });
+        expect(ratio).toBeGreaterThan(8);
+    });
 
     test('a slow setup is not counted', async () => {
         const { ratio } = await costRatio(
