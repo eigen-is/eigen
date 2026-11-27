@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/get-started]
 order: 20
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with anyone who has the link, and decide whether they can view it or also make changes.
@@ -51,4 +51,4 @@ In the **Share** dialog, click the **Email collaborators** button to open a comp
 
 ## Control who can change sharing
 
-If you own the file, you can stop editors from re-sharing it. In the **Share** dialog, turn off **Editors can share**. With it off, only you can add or remove people. Editors can still work on the file, but they can't change who else has access.
+If you own the file, you can stop editors from re-sharing it. In the **Share** dialog, turn off **Editors can share**. With it off, only you can add or remove people or move it to another folder, since a folder can open it to more people. Editors can still work on the file, but they can't change who else has access.

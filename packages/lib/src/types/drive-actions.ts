@@ -23,14 +23,15 @@ export type DriveActionId =
 // The menu group a Drive action's row sits in, named as MenuSections names it.
 export type DriveActionGroup = 'open' | 'create' | 'organize' | 'output' | 'collaborate' | 'destructive';
 
-// The facts a Drive action's gate reads: the items it acts on, what the view allows, and which items were
-// shared with the viewer.
+// The facts a Drive action's gate reads: the items it acts on, what the view allows, which items were
+// shared with the viewer and which owners the viewer counts as.
 export type DriveActionSubject = {
     items: readonly DrivePath[];
     capabilities: DriveCapabilities;
     // True for an item the viewer reaches through a direct share. Deleting it leaves the share, and the
     // server refuses a copy into its owner's folder.
     isSharedWithMe: (item: DrivePath) => boolean;
+    isEffectiveOwnerOf: (ownerId: string) => boolean;
 };
 
 export type DriveAction = {

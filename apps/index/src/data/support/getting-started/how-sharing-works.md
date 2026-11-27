@@ -6,7 +6,7 @@ category: Sharing
 tags: [sharing, permissions, collaboration, getting-started, guests]
 related: [drive/share-a-file, drive/get-started, admin/guests]
 order: 4
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 Sharing in Eigen works the same way wherever you are. The same controls cover your files in Drive and the documents, spreadsheets, presentations, boards, and chats you create. This page explains the ideas behind it, so you know what you're giving away before you share. For the click-by-click steps, see [Share a file or folder](/support/drive/share-a-file).
@@ -60,6 +60,6 @@ They don't need an account set up for them in advance, though. Anyone you share 
 A few things help you keep a handle on who has access:
 
 - **You can change or remove access at any time.** Open the **Share** dialog again, change someone's dropdown to **Viewer** or **Editor**, or set it to **Remove** to take their access away.
-- **Owners can stop editors from re-sharing.** If you own a file, you can turn off **Editors can share**. With it off, editors can still work on the file, but only you can add or remove people.
+- **Owners can stop editors from re-sharing.** If you own a file, you can turn off **Editors can share**. With it off, editors can still work on the file, but only you can add or remove people or move it to another folder.
 
 When you're ready to share something, [Share a file or folder](/support/drive/share-a-file) walks through it step by step.
