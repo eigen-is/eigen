@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2496 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2497 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1215,7 +1215,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1317)
+## Utilities & constants (1318)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1975,6 +1975,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/range-rules.ts |
 | `writeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `costRatio` | `@workspace/lib/test/cost-ratio` | packages/lib/src/test/cost-ratio.ts |
+| `waitUntil` | `@workspace/lib/test/wait-until` | packages/lib/src/test/wait-until.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `previewCountLines` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |

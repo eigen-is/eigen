@@ -13,6 +13,7 @@ import { collabStateVersion } from '../../../../core/collab/collab-state';
 import type { CollabDoc, useCollabDoc as UseCollabDoc } from '../../../../core/collab/hooks/use-collab-doc';
 import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
+import { waitUntil } from '../../../wait-until';
 
 // The hook news up a WebsocketProvider itself, so the test swaps the module for a fake that never
 // opens a socket and lets each case drive the connection through the same events y-websocket emits,
@@ -565,16 +566,6 @@ function stateServer() {
 
 // TanStack Query refetches a stale query when the tab shows again. The caller waits for what the ask does.
 const focusWindow = () => act(() => void window.dispatchEvent(new window.Event('visibilitychange')));
-
-// Waits until what the test reads holds, turn by turn, as apps/docs's waitUntil does: the fetch, TanStack Query's
-// notify and React's effects each land a turn or more later. Past the deadline it fails with what it waited for.
-async function waitUntil(holds: () => boolean, what: string): Promise<void> {
-    const deadline = performance.now() + 2_000;
-    while (!holds()) {
-        if (performance.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-        await act(() => new Promise((resolve) => setTimeout(resolve)));
-    }
-}
 
 describe('useCollabDoc for a reader who gets no socket', () => {
     let server: ReturnType<typeof stateServer>;

@@ -100,7 +100,8 @@
     "./vector/*": "./src/vector/*.ts",
     "./background": "./src/background/index.ts",
     "./charts": "./src/charts/index.ts",
-    "./test/cost-ratio": "./src/test/cost-ratio.ts"
+    "./test/cost-ratio": "./src/test/cost-ratio.ts",
+    "./test/wait-until": "./src/test/wait-until.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.31.3",

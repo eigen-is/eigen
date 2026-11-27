@@ -7,6 +7,7 @@ import type { TiptapEditorHTMLElement } from '@tiptap/core';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
+import { waitUntil } from '@workspace/lib/test/wait-until';
 import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -14,7 +15,6 @@ import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { answerUploads } from '../../fixtures/answered-upload';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
-import { waitUntil } from '../../fixtures/wait-until';
 
 // happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
 let resizes: (() => void)[] = [];

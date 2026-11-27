@@ -3,9 +3,9 @@
 // into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { waitUntil } from '@workspace/lib/test/wait-until';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { answerUploads } from '../../fixtures/answered-upload';
-import { waitUntil } from '../../fixtures/wait-until';
 
 installHappyDom();
 

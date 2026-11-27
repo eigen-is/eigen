@@ -52,7 +52,7 @@ test('a recompute past the slot budget is reported, and the next one builds a wh
 });
 
 // A batch that starts just before the fold's deadline must stop in the graph build or the walk, before it evaluates.
-// The deadline is read on performance.now(), which the fake clock moves.
+// The deadline is read on the performance clock, which the fake clock moves.
 describe('the deadline', () => {
     beforeEach(() => {
         jest.useFakeTimers();
