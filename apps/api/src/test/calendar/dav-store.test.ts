@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import { eq, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
 import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf, storedEvents } from '../calendar-test-helpers';
-import { cpuClock } from '../cpu-time';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -212,30 +212,42 @@ describe('putResource', () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
         const calendarId = await defaultCalendarId(harness);
-        await put(calendar, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
-        calendar.db
-            .update(schema.resources)
-            .set({
-                ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
-            })
-            .where(eq(schema.resources.uri, 'linked.ics'))
-            .run();
+        // A fresh copy each time, since a put changes it; the baseline sends one alarm among other subcomponents of
+        // the same length, so it moves one.
         const count = 30_000;
-        const body = vcal(
-            event('linked@eigen', 'Linked', [
-                ...Array<string>(count).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
-                ...Array<string>(count).fill('BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT5M\r\nEND:VALARM'),
-            ]),
-        );
+        const linkedCopy = async (alarms: number) => {
+            const uid = `linked-${crypto.randomUUID()}@eigen`;
+            const uri = `${crypto.randomUUID()}.ics`;
+            await put(calendar, calendarId, uri, vcal(event(uid, 'Linked')));
+            calendar.db
+                .update(schema.resources)
+                .set({
+                    ics: sql`CAST(replace(CAST(${schema.resources.ics} AS TEXT), 'SUMMARY:Linked', 'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1') AS BLOB)`,
+                })
+                .where(eq(schema.resources.uri, uri))
+                .run();
+            const body = vcal(
+                event(uid, 'Linked', [
+                    ...Array<string>(4 * count - alarms).fill('BEGIN:X-FIRST\r\nEND:X-FIRST'),
+                    ...Array<string>(alarms).fill('BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT5M\r\nEND:VALARM'),
+                ]),
+            );
+            return { uri, body };
+        };
+        const { uri, body } = await linkedCopy(count);
 
-        const cpuMs = cpuClock();
-        const result = await put(calendar, calendarId, 'linked.ics', body);
-        expect(cpuMs()).toBeLessThan(1_500);
-
+        const result = await put(calendar, calendarId, uri, body);
         expect(result.ok).toBe(true);
-        const stored = await resourceTextOf(calendar, calendarId, 'linked.ics');
+        const stored = await resourceTextOf(calendar, calendarId, uri);
         expect(stored.match(/BEGIN:VALARM/g)).toHaveLength(count);
         expect(stored).not.toContain('X-FIRST');
+
+        const adopt = (alarms: number) => ({
+            setup: () => linkedCopy(alarms),
+            run: (copy: { uri: string; body: string }) => put(calendar, calendarId, copy.uri, copy.body),
+        });
+        const ratio = await costRatio(adopt(count), adopt(1));
+        expect(ratio).toBeLessThan(14.5);
     });
 
     test('a linked copy refuses a body whose occurrence no key can name, and keeps its bytes', async () => {

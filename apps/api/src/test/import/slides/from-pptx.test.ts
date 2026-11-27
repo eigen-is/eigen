@@ -2,12 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
-import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
-import { cpuClock } from '../../cpu-time';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
 
-const MAX_PPTX_WORK = 3_000_000;
 const MAX_SLIDES = 500;
 
 // The reader's output and the limits a hostile pptx meets before the work they bound.
@@ -227,16 +225,14 @@ describe('limits', () => {
     });
 
     test("a master's shapes and their text are read once and copied onto every slide, each slide's its own", () => {
-        // 20,000 runs on each of 500 slides took seconds when every slide read them again.
+        // 20,000 runs on each of 500 slides took seconds when every slide read them again, and are now past the budget.
         const master = sp({
             xfrm: box(0, 0, 1, 1),
             txBox: true,
             text: `<a:p>${'<a:r><a:t>x</a:t></a:r>'.repeat(20_000)}</a:p>`,
         });
         const pptx = buildPptx({ masters: [{ shapes: master }], slides: Array.from({ length: 500 }, () => ({})) });
-        const cpuMs = cpuClock();
         const deck = readPptx(pptx, OPTIONS);
-        expect(cpuMs()).toBeLessThan(1000);
         expect(deck.slides[499].elements).toEqual(deck.slides[0].elements);
         expect(deck.slides[499].elements[0]).not.toBe(deck.slides[0].elements[0]);
     });

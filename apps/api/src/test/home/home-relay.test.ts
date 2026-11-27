@@ -724,9 +724,9 @@ describe('A graceful shutdown', () => {
         expect(receive.mock.calls.map(([, acl]) => acl?.length ?? 0)).toEqual([1, 0]);
     });
 
-    // A delivery stuck on a home that never opens must not hold the shutdown, or eat the time the
-    // mounts need to upload. The shutdown bounds its wait as this test does.
-    test('stops waiting for a delivery that never settles once the bound is over', async () => {
+    // The shutdown bounds its wait on the drain with settlesWithin the same way. No test drives the shutdown's
+    // own bound.
+    test('a bounded wait gives up on a delivery that never settles, and the delivery still lands', async () => {
         const tag = 'relay-drain:stalled';
         const held = holdMemberHomes();
         let drainedFirst: boolean;

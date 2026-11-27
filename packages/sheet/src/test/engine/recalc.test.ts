@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { FormulaGraph } from '../../engine/formula-graph';
@@ -622,13 +623,20 @@ describe('engine/recalc — the cells a formula reads', () => {
     };
 
     // The walk is linear in the text, so a crafted file can't make it quadratic.
-    test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
-        const sheets = [{ id: 's2', name: 'My Data', data: [[num(1)]] }];
+    test('walks a 2 MB formula of quoted sheet names at the cost of one of bare names', async () => {
+        const quoted = [{ id: 's2', name: 'My Data', data: [[num(1)]] }];
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
-        const start = performance.now();
-        expect(reached(sheets, f)).toEqual(['s2 0 0']);
-        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(reached(quoted, f)).toEqual(['s2 0 0']);
+
+        // The same walk over a name of as many characters that needs no quotes, which the old split never glued.
+        const bare = [{ id: 's2', name: 'MyDataSet', data: [[num(1)]] }];
+        const g = `=${'MyDataSet!A1+'.repeat(160_000)}1`;
+        expect(g.length).toBe(f.length);
+        expect(reached(bare, g)).toEqual(['s2 0 0']);
+        // About 1 with the fix; 15 when the walk glues each quoted name on with a splice that moves every later token.
+        const ratio = await costRatio({ run: () => reached(quoted, f) }, { run: () => reached(bare, g) });
+        expect(ratio).toBeLessThan(4);
     });
 
     test('walks a 1 MB run of letters in well under a second', () => {

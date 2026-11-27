@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import type { Cell, Op, Sheet } from '@workspace/lib/sheets';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { FormulaGraph } from '../../engine/formula-graph';
@@ -52,14 +52,33 @@ test('a recompute past the slot budget is reported, and the next one builds a wh
 });
 
 // A batch that starts just before the fold's deadline must stop in the graph build or the walk, before it evaluates.
-test('a graph build past the deadline stops at the next formula it lists', () => {
-    const sheet = { id: 's1', name: 'One', data: [[{ f: '=1+1', v: 2 }], [{ f: '=A1*2', v: 4 }]] };
-    expect(() => new FormulaGraph([sheet], { deadline: performance.now() - 1 })).toThrow(RangeError);
-});
+// The deadline is read on the performance clock, which the fake clock moves.
+describe('the deadline', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+    afterEach(() => {
+        jest.useRealTimers();
+    });
 
-test('a walk past the deadline stops at the next cell it visits', async () => {
-    const sheet = { id: 's1', name: 'One', data: [[n(1)], [n(2)]] };
-    const graph = new FormulaGraph([sheet], { deadline: performance.now() + 5 });
-    await Bun.sleep(10);
-    expect(() => graph.affected([sheet], [{ id: 's1', r: 0, c: 0 }])).toThrow(RangeError);
+    test('a graph build past the deadline stops at the next formula it lists', () => {
+        // The clock passes the deadline while the build reads the second formula, after it listed the first.
+        const late = {
+            get f() {
+                jest.advanceTimersByTime(10);
+                return '=A1*2';
+            },
+            v: 4,
+        };
+        const sheet = { id: 's1', name: 'One', data: [[{ f: '=1+1', v: 2 }], [late]] };
+        expect(() => new FormulaGraph([sheet], { deadline: performance.now() + 5 })).toThrow(RangeError);
+    });
+
+    test('a walk past the deadline stops at the next cell it visits', () => {
+        const sheet = { id: 's1', name: 'One', data: [[n(1)], [n(2)]] };
+        const graph = new FormulaGraph([sheet], { deadline: performance.now() + 5 });
+        expect(graph.affected([sheet], [{ id: 's1', r: 0, c: 0 }])).toEqual([]);
+        jest.advanceTimersByTime(10);
+        expect(() => graph.affected([sheet], [{ id: 's1', r: 0, c: 0 }])).toThrow(RangeError);
+    });
 });

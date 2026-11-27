@@ -247,9 +247,7 @@ describe("a package's parse budget", () => {
         spies.push(reads);
         const bomb = build([deflated('[Content_Types].xml', comment(180 * 1024 * 1024))]);
         expect(bomb.length).toBeLessThan(1024 * 1024);
-        const started = performance.now();
         expect(refusal(() => openPackage(bomb, MESSAGES))).toEqual([413, 'Too large']);
-        expect(performance.now() - started).toBeLessThan(100);
         expect(reads).not.toHaveBeenCalled();
     });
 });

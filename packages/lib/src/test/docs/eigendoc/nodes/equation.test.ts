@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createDocument, Editor, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import type { MathRow } from '@workspace/math';
 import { MATH_LIMITS, MATHML_NAMESPACE, readLatex, writeMathml, writeText } from '@workspace/math';
 import { Window } from 'happy-dom';
@@ -261,14 +262,27 @@ describe('a drawn equation pastes as its <math> alone', () => {
         expect(doc.body.querySelectorAll('math').length).toBe(1);
     });
 
-    test('4,000 equations in one wrapper unwrap in linear time', () => {
-        const html = `<div class="MathJax">${`<p><math ${XMLNS}><mi>x</mi></math></p>`.repeat(4000)}</div>`;
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const start = performance.now();
-        unwrapRenderedMath(doc.body);
-        expect(performance.now() - start).toBeLessThan(500);
-        expect(doc.body.querySelectorAll('math').length).toBe(4000);
+    // 16,000 equations in one wrapper, each in a paragraph of its own. The old unwrap counted the <math> in a
+    // renderer's wrapper once for each equation; a plain <div> is the same body with no wrapper to count. Each turn
+    // parses a fresh body, outside the reading.
+    const unwrap = (wrapper: string) => ({
+        setup: () =>
+            new DOMParser().parseFromString(
+                `<div${wrapper}>${`<p><math ${XMLNS}><mi>x</mi></math></p>`.repeat(16_000)}</div>`,
+                'text/html',
+            ).body,
+        run: (body: HTMLElement) => unwrapRenderedMath(body),
     });
+
+    test('16,000 equations in one wrapper unwrap in linear time', async () => {
+        const body = unwrap(' class="MathJax"').setup();
+        unwrapRenderedMath(body);
+        expect(body.querySelectorAll('math').length).toBe(16_000);
+
+        // About 1 with the fix; over 2,000 when the unwrap counts the wrapper's <math> for each equation.
+        const ratio = await costRatio(unwrap(' class="MathJax"'), unwrap(''));
+        expect(ratio).toBeLessThan(50);
+    }, 30_000);
 });
 
 // A comment's, a mail's or a slide's editor has no equation node, so ProseMirror would keep the text of each token

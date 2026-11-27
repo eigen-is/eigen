@@ -99,7 +99,10 @@
     "./vector": "./src/vector/index.ts",
     "./vector/*": "./src/vector/*.ts",
     "./background": "./src/background/index.ts",
-    "./charts": "./src/charts/index.ts"
+    "./charts": "./src/charts/index.ts",
+    "./test/cost-ratio": "./src/test/cost-ratio.ts",
+    "./test/count-calls": "./src/test/count-calls.ts",
+    "./test/wait-until": "./src/test/wait-until.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.31.3",

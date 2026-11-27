@@ -1,12 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import type { NewVectorElement } from '@workspace/lib/vector';
-import { xmlChild, xmlElements } from '../../../lib/core/xml';
+import * as xml from '../../../lib/core/xml';
+import type { PptxDeck } from '../../../lib/import/slides/from-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
+import * as inherit from '../../../lib/import/slides/inherit';
 import { withWorkBudget } from '../../../lib/import/slides/lookup';
 import { paintOf } from '../../../lib/import/slides/paint';
 import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
-import { cpuClock } from '../../cpu-time';
 import type { PptxFixture } from '../../fixtures/pptx';
 import {
     box,
@@ -25,6 +27,7 @@ import {
     THEME,
     zipParts,
 } from '../../fixtures/pptx';
+import { countXmlScans } from '../../fixtures/xml-scans';
 
 // What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the color
 // map and the background.
@@ -37,6 +40,15 @@ const placed = (found: NewVectorElement | undefined) =>
 
 const placeholder = (ph: string, at?: string, text?: string) =>
     sp({ ph, xfrm: at, text: text === undefined ? undefined : para(text) });
+
+// Shared parts hold at most a few hundred thousand junk elements, scanned once; scanned again for each of hundreds
+// of slides or thousands of shapes that inherit them, they are a hundred million children or more.
+const MAX_SCANNED = 10_000_000;
+
+// Reads the deck counting what our xml lookups scan, up to MAX_SCANNED, so a read that scans a shared element again
+// for each inheritor fails at once.
+const readScanned = (pptx: Uint8Array, holds: (deck: PptxDeck) => void) =>
+    countCalls(MAX_SCANNED, countXmlScans, () => holds(readPptx(pptx, OPTIONS)));
 
 describe('placeholders', () => {
     test("a placeholder with no xfrm takes its layout's, else its master's", () => {
@@ -93,21 +105,30 @@ describe('placeholders', () => {
         expect(elements.map(placed)).toEqual(kinds.map(() => [50, 50, 500, 500]));
     });
 
-    test('a slide of many placeholders over a layout of many matches each in one lookup', () => {
+    test('a slide of many placeholders over a layout of many matches each in one lookup', async () => {
         const ph = (attributes: string) => `<p:sp><p:nvSpPr><p:nvPr><p:ph ${attributes}/></p:nvPr></p:nvSpPr></p:sp>`;
         const layout = Array.from({ length: 40_000 }, (_, i) => ph(`type="dt" idx="${i + 100_000}"`)).join('');
-        const slide = Array.from({ length: 5000 }, (_, i) => ph(`type="chart" idx="${i}"`)).join('');
+        const slide = Array.from({ length: 4999 }, (_, i) => ph(`type="chart" idx="${i}"`)).join('');
         const pptx = buildPptx({
-            layouts: [{ shapes: layout }],
-            slides: [{ shapes: slide, attributes: ' showMasterSp="0"' }],
+            layouts: [{ shapes: layout + placeholder('<p:ph type="dt" idx="4999"/>', box(10, 20, 300, 40)) }],
+            slides: [
+                {
+                    shapes: slide + placeholder('<p:ph type="chart" idx="4999"/>', undefined, 'Last'),
+                    attributes: ' showMasterSp="0"',
+                },
+            ],
         });
-        const cpuMs = cpuClock();
-        readPptx(pptx, OPTIONS);
-        // Quadratic matching took seconds here; one lookup each takes milliseconds.
-        expect(cpuMs()).toBeLessThan(1000);
+        // Matched by scanning the layout's 40,000 placeholders, each of the 5,000 asks a placeholder's kind 40,000
+        // times, which took seconds; matched by lookup, each asks it a few times.
+        const kinds = await countCalls(
+            3_000_000,
+            (count) => count(spyOn(inherit, 'placeholderKind')),
+            () => expect(readPptx(pptx, OPTIONS).slides[0].elements.map(placed)).toEqual([[10, 20, 300, 40]]),
+        );
+        expect(kinds).toBeLessThan(3_000_000);
     });
 
-    test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", () => {
+    test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", async () => {
         // 100,000 empty elements where a lookup scans: once a slide shape, they took seconds.
         const junk = (prefix: string) => `<${prefix}:x/>`.repeat(100_000);
         const placeholder = (inner: string) =>
@@ -135,13 +156,12 @@ describe('placeholders', () => {
             zipParts(presentation),
             buildPptx({ theme, slides: [{ shapes: shape }] }),
         ]) {
-            const cpuMs = cpuClock();
-            readPptx(pptx, OPTIONS);
-            expect(cpuMs()).toBeLessThan(1000);
+            const scanned = await readScanned(pptx, (deck) => expect(deck.slides[0].elements.length).toBe(2000));
+            expect(scanned).toBeLessThan(MAX_SCANNED);
         }
     });
 
-    test("what a shared part's elements hold is looked into once: text style levels, run defaults, theme styles, fills, backgrounds and attributes", () => {
+    test("what a shared part's elements hold is looked into once: text style levels, run defaults, theme styles, fills, backgrounds and attributes", async () => {
         // Junk where a lookup scans, under 2,000 paragraphs, runs or shapes, or 500 slides: scanned again by each, they
         // took seconds to minutes.
         const junk = (count: number, tag = 'a:x') => `<${tag}/>`.repeat(count);
@@ -170,81 +190,123 @@ describe('placeholders', () => {
             `${junk(300_000, 'p:x')}<p:cSld><p:bg><p:bgPr>${solid('FF0000')}<a:effectLst/></p:bgPr></p:bg>`,
         );
         const blip = `<a:blip xmlns:q="urn:q" ${Array.from({ length: 300_000 }, (_, i) => `q:a${i}=""`).join(' ')} r:embed="rId9"/>`;
-        for (const pptx of [
-            buildPptx(styled(`${junk(100_000)}<a:lvl1pPr/>`, paragraphs)),
-            buildPptx(styled(`<a:lvl1pPr>${junk(100_000)}<a:defRPr/></a:lvl1pPr>`, paragraphs)),
-            buildPptx(styled(`<a:lvl1pPr><a:defRPr>${junk(100_000)}</a:defRPr></a:lvl1pPr>`, `<a:p>${runs}</a:p>`)),
-            buildPptx(
-                styled(
-                    `<a:lvl1pPr><a:defRPr><a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></a:defRPr></a:lvl1pPr>`,
-                    runs,
+        // Each deck with the slides it reads and the elements its first slide draws.
+        const decks: [Uint8Array, number, number][] = [
+            [buildPptx(styled(`${junk(100_000)}<a:lvl1pPr/>`, paragraphs)), 1, 1],
+            [buildPptx(styled(`<a:lvl1pPr>${junk(100_000)}<a:defRPr/></a:lvl1pPr>`, paragraphs)), 1, 1],
+            [buildPptx(styled(`<a:lvl1pPr><a:defRPr>${junk(100_000)}</a:defRPr></a:lvl1pPr>`, runs)), 1, 1],
+            [
+                buildPptx(
+                    styled(
+                        `<a:lvl1pPr><a:defRPr><a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></a:defRPr></a:lvl1pPr>`,
+                        runs,
+                    ),
                 ),
-            ),
-            buildPptx({
-                theme: THEME.replace('<a:fillStyleLst><a:solidFill>', `<a:fillStyleLst><a:solidFill>${junk(100_000)}`),
-                slides: [{ shapes: shapes('', styleRefs(1, 0)) }],
-            }),
-            buildPptx({
-                theme: THEME.replace('<a:ln w="9525">', `<a:ln w="9525">${junk(100_000)}`),
-                slides: [{ shapes: shapes('', styleRefs(0, 1)) }],
-            }),
-            buildPptx({
-                masters: [
-                    {
-                        shapes: placeholder(
-                            '<p:ph type="body"/>',
-                            `${box(0, 0, 100, 100)}<a:ln>${junk(100_000)}${solid('FF0000')}</a:ln>`,
-                        ),
-                    },
-                ],
-                slides: [{ shapes: body('').repeat(2000) }],
-            }),
-            buildPptx({
-                slides: [
-                    {
-                        shapes: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="4" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${box(0, 0, 10, 10)}<a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></p:grpSpPr>${shapes('<a:grpFill/>')}</p:grpSp>`,
-                    },
-                ],
-            }),
-            buildPptx({
-                theme: THEME.replace(
-                    '<a:bgFillStyleLst><a:solidFill>',
-                    `<a:bgFillStyleLst><a:solidFill>${junk(300_000)}`,
-                ),
-                masters: [{ bg: '<p:bgRef idx="1001"><a:srgbClr val="FF0000"/></p:bgRef>' }],
-                slides: slides(500),
-            }),
-            zipParts(master),
+                1,
+                1,
+            ],
+            [
+                buildPptx({
+                    theme: THEME.replace(
+                        '<a:fillStyleLst><a:solidFill>',
+                        `<a:fillStyleLst><a:solidFill>${junk(100_000)}`,
+                    ),
+                    slides: [{ shapes: shapes('', styleRefs(1, 0)) }],
+                }),
+                1,
+                2000,
+            ],
+            [
+                buildPptx({
+                    theme: THEME.replace('<a:ln w="9525">', `<a:ln w="9525">${junk(100_000)}`),
+                    slides: [{ shapes: shapes('', styleRefs(0, 1)) }],
+                }),
+                1,
+                2000,
+            ],
+            [
+                buildPptx({
+                    masters: [
+                        {
+                            shapes: placeholder(
+                                '<p:ph type="body"/>',
+                                `${box(0, 0, 100, 100)}<a:ln>${junk(100_000)}${solid('FF0000')}</a:ln>`,
+                            ),
+                        },
+                    ],
+                    slides: [{ shapes: body('').repeat(2000) }],
+                }),
+                1,
+                2000,
+            ],
+            [
+                buildPptx({
+                    slides: [
+                        {
+                            shapes: `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="4" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${box(0, 0, 10, 10)}<a:solidFill>${junk(100_000)}<a:srgbClr val="FF0000"/></a:solidFill></p:grpSpPr>${shapes('<a:grpFill/>')}</p:grpSp>`,
+                        },
+                    ],
+                }),
+                1,
+                2000,
+            ],
+            [
+                buildPptx({
+                    theme: THEME.replace(
+                        '<a:bgFillStyleLst><a:solidFill>',
+                        `<a:bgFillStyleLst><a:solidFill>${junk(300_000)}`,
+                    ),
+                    masters: [{ bg: '<p:bgRef idx="1001"><a:srgbClr val="FF0000"/></p:bgRef>' }],
+                    slides: slides(500),
+                }),
+                500,
+                0,
+            ],
+            [zipParts(master), 500, 0],
             // Every slide maps its colors anew, the same way: its own placeholder's master fill resolves once.
-            buildPptx({
-                masters: [
-                    {
-                        shapes: placeholder(
-                            '<p:ph type="body"/>',
-                            `${box(0, 0, 100, 100)}<a:solidFill>${junk(300_000)}<a:schemeClr val="tx1"/></a:solidFill>`,
-                        ),
-                    },
-                ],
-                slides: slides(500, () => override(0)).map((slide) => ({ ...slide, shapes: body('') })),
-            }),
-            buildPptx({
-                masters: [{ shapes: sp({ xfrm: box(0, 0, 1, 1), spPr: `${junk(300_000)}${solid('FF0000')}` }) }],
-                slides: slides(500, override),
-            }),
-            buildPptx({
-                masters: [
-                    {
-                        bg: `<p:bgPr><a:blipFill>${blip}<a:stretch/></a:blipFill><a:effectLst/></p:bgPr>`,
-                        rels: rel('rId9', 'image', '../media/image1.png'),
-                    },
-                ],
-                slides: slides(500),
-                files: { 'ppt/media/image1.png': PIXEL_PNG },
-            }),
-        ]) {
-            const cpuMs = cpuClock();
-            readPptx(pptx, OPTIONS);
-            expect(cpuMs()).toBeLessThan(1000);
+            [
+                buildPptx({
+                    masters: [
+                        {
+                            shapes: placeholder(
+                                '<p:ph type="body"/>',
+                                `${box(0, 0, 100, 100)}<a:solidFill>${junk(300_000)}<a:schemeClr val="tx1"/></a:solidFill>`,
+                            ),
+                        },
+                    ],
+                    slides: slides(500, () => override(0)).map((slide) => ({ ...slide, shapes: body('') })),
+                }),
+                500,
+                1,
+            ],
+            [
+                buildPptx({
+                    masters: [{ shapes: sp({ xfrm: box(0, 0, 1, 1), spPr: `${junk(300_000)}${solid('FF0000')}` }) }],
+                    slides: slides(500, override),
+                }),
+                500,
+                1,
+            ],
+            [
+                buildPptx({
+                    masters: [
+                        {
+                            bg: `<p:bgPr><a:blipFill>${blip}<a:stretch/></a:blipFill><a:effectLst/></p:bgPr>`,
+                            rels: rel('rId9', 'image', '../media/image1.png'),
+                        },
+                    ],
+                    slides: slides(500),
+                    files: { 'ppt/media/image1.png': PIXEL_PNG },
+                }),
+                500,
+                0,
+            ],
+        ];
+        for (const [pptx, slides, elements] of decks) {
+            const scanned = await readScanned(pptx, (deck) =>
+                expect([deck.slides.length, deck.slides[0].elements.length]).toEqual([slides, elements]),
+            );
+            expect(scanned).toBeLessThan(MAX_SCANNED);
         }
     });
 
@@ -366,9 +428,9 @@ describe('a shared fill', () => {
         const entry = parse(
             `<a:gradFill ${NS}><a:gsLst>${junk}<a:gs pos="100000"><a:srgbClr val="00FF00"/></a:gs><a:gs pos="0">${junk}<a:schemeClr val="phClr"/></a:gs><a:gs pos="50000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0"/></a:gradFill>`,
         );
-        const stops = xmlChild(entry, A_NS, 'gsLst');
-        const stop = stops && xmlElements(stops)[101];
-        const color = xmlChild(solidEntry, A_NS, 'schemeClr');
+        const stops = xml.xmlChild(entry, A_NS, 'gsLst');
+        const stop = stops && xml.xmlElements(stops)[101];
+        const color = xml.xmlChild(solidEntry, A_NS, 'schemeClr');
         if (!stop || !stops || !color) throw new Error('no stops');
         const counts = [solidEntry, color, stops, stop].map(countVisits);
         const theme = themeOf('accent1');

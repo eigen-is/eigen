@@ -2,14 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { FLAT_CHART_LOOK, readChartSpec } from '@workspace/lib/charts';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
-import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { parseXml } from '../../../lib/core/xml';
+import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
-import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
-import { cpuClock } from '../../cpu-time';
+import { CHART_CONTENT_TYPE, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import type { PptxFixture } from '../../fixtures/pptx';
 import { box, buildPptx, graphicFrame, groupXfrm, grp, NS, PX, para, rel, sp } from '../../fixtures/pptx';
-
-const MAX_PPTX_WORK = 3_000_000;
 
 // A graphic frame's chart: its part read through the core chart reader into a chart element, or the box saying what
 // was there.
@@ -340,16 +338,17 @@ describe('bounds', () => {
             types: chartType('ppt/charts/chart1.xml'),
             files: { 'ppt/charts/chart1.xml': part },
         });
-        const cpuMs = cpuClock();
         // Read for each map, the part took a minute; once the work left can't cover a read, the rest are boxes.
         const deck = readPptx(pptx, OPTIONS);
-        expect(cpuMs()).toBeLessThan(3000);
         expect(deck.slides[0].elements[0]?.type).toBe('chart');
         expect(deck.slides[399].elements[0]).toMatchObject({
             type: 'rectangle',
             autoFit: true,
             html: '<p>Chart not imported</p>',
         });
+        const root = parseXml(part);
+        const affordable = root ? Math.floor(MAX_PPTX_WORK / chartCost(root)) : 0;
+        expect(deck.slides.filter(({ elements: [found] }) => found?.type === 'chart').length).toBe(affordable);
     });
 
     test('a chart is charged the points its caches declare, not only its elements', () => {
@@ -414,10 +413,9 @@ describe('bounds', () => {
         // 200,000 junk elements in the series: read for every slide, they took seconds.
         const junk = `<c:x/>`.repeat(200_000);
         const part = COLUMN.replace('<c:idx val="0"/>', `<c:idx val="0"/>${junk}`);
-        const pptx = many(400, part);
-        const cpuMs = cpuClock();
-        const deck = readPptx(pptx, OPTIONS);
-        expect(cpuMs()).toBeLessThan(1000);
+        // Read again for each slide, the part costs its charge each time, and the budget leaves the later ones boxes.
+        const deck = readPptx(many(400, part), OPTIONS);
+        expect(deck.slides).toHaveLength(400);
         expect(deck.slides.every(({ elements: [found] }) => found?.type === 'chart')).toBe(true);
     });
 });

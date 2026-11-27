@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { setCellValue } from '../../../state/modules/cell';
 import {
@@ -279,33 +280,31 @@ describe('state/modules/text — rich text wrap', () => {
         ).toEqual(['aa bb cc', ' dd']);
     });
 
-    // 16,000 words took seconds when every step added up the line from its start again. Four times the words
-    // cost a linear layout four times the CPU and a quadratic one sixteen times. CPU time, not the wall clock,
-    // and a ratio, not a bound, so a loaded or slower runner passes too. Ten rounds lift the short run above
-    // the clock's grain, a first run warms the JIT, and the fastest of three runs keeps a GC pause out of the ratio.
-    test('a long rich cell lays out in linear time, wrapped or not', () => {
-        const cpu = (words: number, tb: string | undefined) => {
-            const v = Array.from({ length: words }, (_, index) => `w${index % 97}`).join(' ');
-            clearMeasureTextCache();
-            const started = process.cpuUsage();
-            for (let round = 0; round < 10; round += 1) {
-                pieces(
-                    [
-                        { v, fs: 10 },
-                        { v: ' end', fs: 20 },
-                    ],
-                    tb,
-                    1e7,
-                );
-            }
-            const { user, system } = process.cpuUsage(started);
-            return user + system;
-        };
-        for (const tb of [undefined, '2']) {
-            cpu(4000, tb);
-            const small = Math.min(cpu(4000, tb), cpu(4000, tb), cpu(4000, tb));
-            const large = Math.min(cpu(16000, tb), cpu(16000, tb), cpu(16000, tb));
-            expect(large).toBeLessThan(small * 10);
-        }
+    // A long cell took seconds when every step added up the line from its start again, wrapped or not: sixteen
+    // times the words cost that layout 256 times the CPU, and a linear one sixteen. Each turn starts with an empty
+    // measure cache, and the rounds lift the short side over the helper's floor.
+    test('a long rich cell lays out in linear time, wrapped or not', async () => {
+        const layout = (words: number) => ({
+            setup: () => {
+                clearMeasureTextCache();
+                return Array.from({ length: words }, (_, index) => `w${index % 97}`).join(' ');
+            },
+            run: (v: string) => {
+                for (let round = 0; round < 500; round += 1) {
+                    for (const tb of ['2', undefined]) {
+                        pieces(
+                            [
+                                { v, fs: 10 },
+                                { v: ' end', fs: 20 },
+                            ],
+                            tb,
+                            1e7,
+                        );
+                    }
+                }
+            },
+        });
+        const ratio = await costRatio(layout(2048), layout(128));
+        expect(ratio).toBeLessThan(64);
     });
 });
