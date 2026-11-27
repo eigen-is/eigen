@@ -1247,7 +1247,7 @@ describe('Calendar transfer routes', () => {
             setup: () => new TextEncoder().encode(file(`long-guests-${crypto.randomUUID()}@other`, guests)),
             run: (bytes: Uint8Array) => home.calendar.importEvents(calendarId, bytes),
         });
-        const { ratio } = await costRatio(importOf(30_000), importOf(1));
+        const ratio = await costRatio(importOf(30_000), importOf(1));
         expect(ratio).toBeLessThan(4.2);
     });
 

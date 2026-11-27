@@ -747,7 +747,7 @@ describe('structure', () => {
             buildDocxWithBody(body, { numbering: numbering(''), styles }),
         ]);
         expect(nodesOfType(docxToPmJson(Buffer.from(forged)).json, 'listItem')).toHaveLength(10_000);
-        const { ratio } = await costRatio(reading(forged), reading(honest));
+        const ratio = await costRatio(reading(forged), reading(honest));
         expect(ratio).toBeLessThan(18);
     }, 60_000);
 
@@ -830,7 +830,7 @@ describe('structure', () => {
             buildDocxWithBody(paragraph(run('Item'), ordered(2)).repeat(10_000)),
         ]);
         expect(nodesOfType(docxToPmJson(Buffer.from(lists)).json, 'orderedList')).toHaveLength(10_000);
-        const { ratio } = await costRatio(reading(lists), reading(items));
+        const ratio = await costRatio(reading(lists), reading(items));
         expect(ratio).toBeLessThan(7.5);
     }, 10_000);
 
@@ -869,7 +869,7 @@ describe('structure', () => {
             buildDocxWithBody(heading.repeat(1000), { numbering: numbering('%1') }),
         ]);
         expect(nodesOfType(docxToPmJson(Buffer.from(long)).json, 'heading')).toHaveLength(1000);
-        const { ratio } = await costRatio(reading(long), reading(short));
+        const ratio = await costRatio(reading(long), reading(short));
         expect(ratio).toBeLessThan(110);
     }, 30_000);
 
@@ -1064,7 +1064,7 @@ describe('structure', () => {
             buildDocxWithBody(paragraph(`<w:r>${words}</w:r>`)),
         ]);
         expect(texts(docxToPmJson(Buffer.from(fielded)).json).join('')).toHaveLength(40_000);
-        const { ratio } = await costRatio(reading(fielded), reading(plain));
+        const ratio = await costRatio(reading(fielded), reading(plain));
         expect(ratio).toBeLessThan(13);
     }, 60_000);
 });

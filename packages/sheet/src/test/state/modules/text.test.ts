@@ -304,7 +304,7 @@ describe('state/modules/text — rich text wrap', () => {
                 }
             },
         });
-        const { ratio } = await costRatio(layout(2048), layout(128));
+        const ratio = await costRatio(layout(2048), layout(128));
         expect(ratio).toBeLessThan(64);
     });
 });

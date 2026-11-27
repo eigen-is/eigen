@@ -18,19 +18,19 @@ function quadratic(n: number): number {
 
 describe('costRatio', () => {
     test('a linear cost at n against n/16 reads near 16', async () => {
-        const { ratio } = await costRatio({ run: () => linear(16 * BASE) }, { run: () => linear(BASE) });
+        const ratio = await costRatio({ run: () => linear(16 * BASE) }, { run: () => linear(BASE) });
         expect(ratio).toBeGreaterThan(8);
         expect(ratio).toBeLessThan(32);
     });
 
     test('a quadratic cost at n against n/4 reads near 16, four times what a linear one does', async () => {
         const n = 20_000;
-        const { ratio } = await costRatio({ run: () => quadratic(n) }, { run: () => quadratic(n / 4) });
+        const ratio = await costRatio({ run: () => quadratic(n) }, { run: () => quadratic(n / 4) });
         expect(ratio).toBeGreaterThan(8);
     });
 
     test('a slow setup is not counted', async () => {
-        const { ratio } = await costRatio(
+        const ratio = await costRatio(
             { setup: () => linear(8 * BASE), run: () => linear(BASE) },
             { run: () => linear(BASE) },
         );
@@ -43,21 +43,22 @@ describe('costRatio', () => {
             order.push(side);
             linear(BASE);
         };
-        await costRatio({ setup: () => 'guarded', run: turn }, { run: () => turn('baseline') }, 2);
-        expect(order).toEqual(['guarded', 'baseline', 'guarded', 'baseline']);
+        await costRatio({ setup: () => 'guarded', run: turn }, { run: () => turn('baseline') });
+        expect(order).toEqual(['guarded', 'baseline', 'guarded', 'baseline', 'guarded', 'baseline']);
     });
 
-    test('an async run is awaited', async () => {
-        const { baselineMs } = await costRatio(
-            { run: () => linear(BASE) },
+    test('an async run is awaited, so it reads what the same work does run at once', async () => {
+        const ratio = await costRatio(
             {
                 run: async () => {
                     await Bun.sleep(1);
                     linear(BASE);
                 },
             },
+            { run: () => linear(BASE) },
         );
-        expect(baselineMs).toBeGreaterThan(10);
+        expect(ratio).toBeGreaterThan(0.5);
+        expect(ratio).toBeLessThan(2);
     });
 
     test('a baseline under 10 ms of CPU throws and names its reading', async () => {

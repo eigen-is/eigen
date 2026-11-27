@@ -246,7 +246,7 @@ describe('putResource', () => {
             setup: () => linkedCopy(alarms),
             run: (copy: { uri: string; body: string }) => put(calendar, calendarId, copy.uri, copy.body),
         });
-        const { ratio } = await costRatio(adopt(count), adopt(1));
+        const ratio = await costRatio(adopt(count), adopt(1));
         expect(ratio).toBeLessThan(14.5);
     });
 

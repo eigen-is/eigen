@@ -675,7 +675,7 @@ describe('stamp trust', () => {
         restamp(incoming);
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
 
-        const { ratio } = await costRatio(onFresh(body(1), restamp), onFresh(body(0), restamp));
+        const ratio = await costRatio(onFresh(body(1), restamp), onFresh(body(0), restamp));
         expect(ratio).toBeLessThan(5);
     });
 
@@ -1120,7 +1120,7 @@ describe('a RECURRENCE-ID from its occurrence key', () => {
             const events = rows(rrule);
             return { run: () => buildResource(events) };
         };
-        const { ratio } = await costRatio(build('FREQ=DAILY'), build(null));
+        const ratio = await costRatio(build('FREQ=DAILY'), build(null));
         expect(ratio).toBeLessThan(4.4);
     });
 });
@@ -1501,7 +1501,7 @@ describe('stripping', () => {
         expect(masterOf(incoming).getFirstProperty('attendee')?.toJSON()[1]).toEqual({ cn: 'Bob' });
 
         const restamp = (resource: ICAL.Component) => restampResource(resource, null);
-        const { ratio } = await costRatio(onFresh(body('EIGEN'), restamp, 3), onFresh(body('KEEP'), restamp, 3));
+        const ratio = await costRatio(onFresh(body('EIGEN'), restamp, 3), onFresh(body('KEEP'), restamp, 3));
         expect(ratio).toBeLessThan(8);
     });
 
@@ -1579,7 +1579,7 @@ describe('a removal costs one pass over the list', () => {
         expect(names.filter((name) => name === 'last-modified')).toHaveLength(1);
         expect(names.filter((name) => name === 'x-pad')).toHaveLength(105_000);
         expect(masterOf(resource).getFirstPropertyValue('summary')).toBe('New');
-        const { ratio } = await costRatio(onFresh(body(30_000), retitle), onFresh(body(1), retitle));
+        const ratio = await costRatio(onFresh(body(30_000), retitle), onFresh(body(1), retitle));
         expect(ratio).toBeLessThan(12);
     });
 
@@ -1600,7 +1600,7 @@ describe('a removal costs one pass over the list', () => {
         const names = masterNames(resource);
         expect(names).not.toContain('attendee');
         expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
-        const { ratio } = await costRatio(onFresh(body(30_000), dropGuests, 3), onFresh(body(1), dropGuests, 3));
+        const ratio = await costRatio(onFresh(body(30_000), dropGuests, 3), onFresh(body(1), dropGuests, 3));
         expect(ratio).toBeLessThan(20);
     });
 
@@ -1622,7 +1622,7 @@ describe('a removal costs one pass over the list', () => {
         const names = masterNames(resource);
         expect(names).not.toContain('exdate');
         expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
-        const { ratio } = await costRatio(onFresh(body(30_000), overrideIt, 5), onFresh(body(1), overrideIt, 5));
+        const ratio = await costRatio(onFresh(body(30_000), overrideIt, 5), onFresh(body(1), overrideIt, 5));
         expect(ratio).toBeLessThan(50);
     });
 
@@ -1643,7 +1643,7 @@ describe('a removal costs one pass over the list', () => {
         const names = resource.getAllSubcomponents().map((sub) => sub.name);
         expect(names).not.toContain('vtimezone');
         expect(names).toEqual([...Array<string>(15_001).fill('vevent'), 'x-last']);
-        const { ratio } = await costRatio(onFresh(body(50_000), move), onFresh(body(1), move));
+        const ratio = await costRatio(onFresh(body(50_000), move), onFresh(body(1), move));
         expect(ratio).toBeLessThan(8);
     });
 
@@ -1661,7 +1661,7 @@ describe('a removal costs one pass over the list', () => {
             'vtimezone',
             ...Array<string>(6_001).fill('vevent'),
         ]);
-        const { ratio } = await costRatio(onFresh(ics, move('Europe/Amsterdam'), 2), onFresh(ics, move(), 2));
+        const ratio = await costRatio(onFresh(ics, move('Europe/Amsterdam'), 2), onFresh(ics, move(), 2));
         expect(ratio).toBeLessThan(15);
     });
 
@@ -1682,7 +1682,7 @@ describe('a removal costs one pass over the list', () => {
             .getAllSubcomponents()
             .map((sub) => sub.name);
         expect(names).toEqual([...Array<string>(110_000).fill('x-first'), ...Array<string>(60_000).fill('x-last')]);
-        const { ratio } = await costRatio(onFresh(body(60_000), dropAlarms, 2), onFresh(body(1), dropAlarms, 2));
+        const ratio = await costRatio(onFresh(body(60_000), dropAlarms, 2), onFresh(body(1), dropAlarms, 2));
         expect(ratio).toBeLessThan(46);
     });
 });

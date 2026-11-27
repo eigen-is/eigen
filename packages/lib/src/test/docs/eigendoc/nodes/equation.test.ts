@@ -280,7 +280,7 @@ describe('a drawn equation pastes as its <math> alone', () => {
         expect(body.querySelectorAll('math').length).toBe(16_000);
 
         // About 1 with the fix; over 2,000 when the unwrap counts the wrapper's <math> for each equation.
-        const { ratio } = await costRatio(unwrap(' class="MathJax"'), unwrap(''));
+        const ratio = await costRatio(unwrap(' class="MathJax"'), unwrap(''));
         expect(ratio).toBeLessThan(50);
     }, 30_000);
 });

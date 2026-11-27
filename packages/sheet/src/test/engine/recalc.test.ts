@@ -635,7 +635,7 @@ describe('engine/recalc — the cells a formula reads', () => {
         expect(g.length).toBe(f.length);
         expect(reached(bare, g)).toEqual(['s2 0 0']);
         // About 1 with the fix; 15 when the walk glues each quoted name on with a splice that moves every later token.
-        const { ratio } = await costRatio({ run: () => reached(quoted, f) }, { run: () => reached(bare, g) });
+        const ratio = await costRatio({ run: () => reached(quoted, f) }, { run: () => reached(bare, g) });
         expect(ratio).toBeLessThan(4);
     });
 
