@@ -82,6 +82,12 @@ test("a visitor's ?chat= link opens the card it names", async () => {
     expect(server.outsideTheLink()).toEqual([]);
 });
 
+test("a visitor's ?panel=activity link opens no column", async () => {
+    await open(`${URL_OF('pub')}?panel=activity`);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(document.querySelector('[data-slot="detail-column"]')).toBeNull();
+});
+
 test("a visitor's File › Print prints in the browser and asks the server for nothing", async () => {
     let prints = 0;
     window.print = () => prints++;

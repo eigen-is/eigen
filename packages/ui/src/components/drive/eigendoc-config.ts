@@ -11,6 +11,7 @@ import {
     getStickiesAppUrl,
     getVectorAppUrl,
 } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
 import type { DocumentPanel } from '@workspace/lib/types/comments';
 import type { EigenDocType } from '@workspace/lib/types/drive';
@@ -96,5 +97,8 @@ export function eigenDocEditorValidateSearch(search: Record<string, unknown>): E
 // The editor search for a hook inside an editor, such as the comment host, so no route has to hand it down. This file
 // compiles in every app's router, where an app with no editor route types the search without these keys.
 export function useEigenDocEditorSearch(): EigenDocEditorSearch {
-    return eigenDocEditorValidateSearch(useSearch({ strict: false }));
+    const { user } = useAuth();
+    const search = eigenDocEditorValidateSearch(useSearch({ strict: false }));
+    // A link may still name the activity, which a visitor without a login never gets.
+    return !user && search.panel === 'activity' ? { ...search, panel: undefined } : search;
 }
