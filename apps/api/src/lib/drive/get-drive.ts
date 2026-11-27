@@ -27,14 +27,10 @@ export async function getSharedDrive(ownerId: string, user: User): Promise<Drive
     return new SharedDrive(home, user);
 }
 
-// A visitor has no home of their own, so the request opens only the home its URL names.
-async function getLinkDrive(ownerId: string): Promise<LinkDrive> {
-    const home = await getHome(ownerId); // ownerId-routed: the request is for this owner's home
-    return new LinkDrive(home);
-}
-
+// A visitor has no home of their own, so a LinkDrive opens only the home its URL names, and none while public links
+// are off.
 export async function getReadDrive(ownerId: string, user: User | null): Promise<DriveLike | LinkDrive> {
-    return user ? getSharedDrive(ownerId, user) : getLinkDrive(ownerId);
+    return user ? getSharedDrive(ownerId, user) : new LinkDrive(ownerId);
 }
 
 // A visitor never writes, syncs nothing over the collab socket and waits behind every reader by name.
@@ -45,6 +41,6 @@ export async function getReaderAccess(
     user: User | null,
 ): Promise<ReaderAccess> {
     if (user) return (await getSharedDrive(ownerId, user)).readerAccess(mountId, pathId, user);
-    const canRead = await (await getLinkDrive(ownerId)).canRead(mountId, pathId);
+    const canRead = await new LinkDrive(ownerId).canRead(mountId, pathId);
     return { canRead, canWrite: false, live: false, priority: 'background' };
 }
