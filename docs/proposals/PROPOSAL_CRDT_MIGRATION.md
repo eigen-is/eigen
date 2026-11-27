@@ -4,6 +4,8 @@ This proposal designs how Eigen changes the shape of a stored collab document wi
 
 **Status:** not started. The core primitive exists (`restoreYjsDoc`); everything on top is new. Before 1.0 a format change is done outright, and from 1.0 every one needs this machinery, so it is the first row of [ROADMAP-POST-1.md § Format-change work](../ROADMAP-POST-1.md#format-change-work). Written 2026-07-05 and checked against the code on 2026-07-06.
 
+**Brought in line with the identity rulings of 27 November 2026** ([PROPOSAL_ACCOUNT_IDENTITY.md § 6.1](PROPOSAL_ACCOUNT_IDENTITY.md#61-every-managed-database-restarts-its-numbering-at-100)). Every managed database restarts its numbering at 100, the 0.5.0 layout, and a database numbered below 100 is refused. `doc_format` is part of that version 100 layout of a document's `data.db`, so it needs no migration, and every document has the row from the start. The rule "no row means format 1" is gone. What that changes for restore and downgrade is in Open questions 6 and 7.
+
 ## Problem
 
 Every Eigen collab document (`.eigendoc`, `.eigenstickies`, `.eigenslides`, `.eigensheets`) is a
@@ -68,8 +70,8 @@ speak the old format.
 zstd-compressed at the storage seam by `blob-codec.ts`, which is the in-repo precedent for format
 evolution at this layer: **new readers sniff the 4-byte zstd magic and pass legacy raw blobs
 through untouched — absence of the marker means "old format", old and new rows coexist, no schema
-migration needed**. This proposal reuses that stance one level up: absence of a format stamp means
-format 1.
+migration needed**. The format stamp does not reuse that stance. Every document has its stamp from
+the start, so a missing stamp means nothing (§ Where the stamp lives).
 
 **Compaction already happens.** `DbProvider.createSnapshot` (in `db-provider.ts`) squashes the
 doc into a fresh snapshot every 100 updates or 1 MB, deletes the covered `doc_updates`, and keeps
@@ -151,7 +153,8 @@ The roadmap row survives grounding as written: the primitive exists, everything 
 - **Collab format version** — new: a small integer per container answering "which semantic Yjs
   shape does the state in `doc_snapshots`/`doc_updates` follow for this `EigenDocType`".
 
-The first is machinery we extend (one additive migration); the second is data this proposal adds.
+The first is machinery we use as it is: the stamp's table is part of the version 100 layout, so it
+needs no migration. The second is data this proposal adds.
 
 ### Where the stamp lives
 
@@ -159,12 +162,18 @@ Three candidate homes, weighed:
 
 | Option | Survives byte-copy of the container? | Survives version-restore? | Survives export/import? | Cost |
 |---|---|---|---|---|
-| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([ARCHITECTURE.md](../ARCHITECTURE.md) § Backend, the copy / move row), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One additive `COLLAB_DB_CONFIG` migration |
+| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([ARCHITECTURE.md](../ARCHITECTURE.md) § Backend, the copy / move row), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One table in the version 100 layout of `data.db` |
 | B. A meta root inside the `Y.Doc` | Yes | Only if restore surgery special-cases it | Yes | Is itself a frozen-format change to every doc; requires hydrating the doc just to read the version; `restoreYjsDoc` would need to exclude it from surgery |
 | C. Column in the mount's `metadata.db` | **No** — cross-mount copy/export rebuilds rows; the stamp detaches from the bytes it describes | No — restore doesn't touch metadata | No | Cheap to query |
 
-**Decision: A.** A single-row table in `data.db`, mirroring `__schema_version`'s shape exactly,
-added as `COLLAB_DB_CONFIG` migration v2 (the existing, sanctioned mechanism — every open runs it):
+**Decision: A.** A single-row table in `data.db`, mirroring `__schema_version`'s shape exactly.
+It is part of the version 100 layout of the document's `data.db` in 0.5.0. Today `COLLAB_DB_CONFIG`
+is at version 1 with two tables, `doc_updates` and `doc_snapshots`. At the reset every managed
+database restarts its numbering at 100, with one migration that creates the 0.5.0 layout. There is
+no separate mark: `runMigrations` in `managed-database.ts` already refuses a number above its own,
+so an old release refuses a database numbered 100, and 0.5.0 refuses one numbered below 100
+([PROPOSAL_ACCOUNT_IDENTITY.md § 6.1](PROPOSAL_ACCOUNT_IDENTITY.md#61-every-managed-database-restarts-its-numbering-at-100)).
+`doc_format` is created by that one migration. There is no version 2 for it:
 
 ```sql
 CREATE TABLE IF NOT EXISTS doc_format (
@@ -173,13 +182,20 @@ CREATE TABLE IF NOT EXISTS doc_format (
 );
 ```
 
-- **Missing row ⇒ format 1.** Every `data.db` in production today, every old `versions/*.db`
-  archive, every previously exported container reads as format 1 without backfill — the
-  `blob-codec.ts` "absence means legacy" stance.
-- New containers get the current version written at creation.
-- Old server builds opening a stamped file are unaffected: `ManagedDatabase.runMigrations` only
-  applies migrations *above* the stored schema version, and old code simply never reads
-  `doc_format`. Deliberate downgrade tolerance (see Rollback).
+- **Every document has the row from the start.** A new document gets it at creation, with its
+  type's current version. The documents on eigen.is, and their stored versions, get it from the
+  one-time conversion script. So the rule "no row means format 1" is not needed for a database the
+  server accepts, and this proposal drops it. A database from before 0.5.0 is numbered below 100 and
+  refused, not read as format 1.
+- **A stored version carries its row.** `versions/<ts>.db` is a byte copy of `data.db`, so it
+  holds the row the document had when the version was taken.
+- **A downgrade.** The table adds no schema version, so a build from 0.5.0 on opens the file. A
+  build from before the format machinery never reads the row. A build that reads it, but knows a
+  lower current format, meets a stamp above its own (Open question 7). The earlier plan said an
+  old build opens a v2 file unaffected. That was not so: `ManagedDatabase.runMigrations` refuses a
+  database whose schema version is above the build's `currentVersion`. A downgrade to a release
+  before 0.5.0 is the identity proposal's rollback: the old release plus the backup taken before
+  the reset.
 - Option C returns below — not as the source of truth, but as a **query cache** so the sweep can
   find stale containers without downloading every `data.db`.
 
@@ -239,7 +255,7 @@ tombstones that no transform can preserve coherently. The persistent mechanic is
 1. Load the stored state (`loadYjsState` — latest snapshot + tail updates).
 2. `migrateCollabState` → new-format state bytes.
 3. In **one SQLite transaction** on `data.db`: insert the new state as the sole `doc_snapshots`
-   row, delete all `doc_updates`, delete older snapshots, upsert `doc_format.version`.
+   row, delete all `doc_updates`, delete older snapshots, update `doc_format.version`.
 
 Consequences, stated plainly:
 
@@ -256,7 +272,7 @@ Consequences, stated plainly:
 
 `ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.open` (after `Drive.holdDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
 
-1. Read `doc_format` (missing ⇒ 1). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
+1. Read `doc_format` (every accepted `data.db` has the row; Open question 6). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
    continue as today — one cheap SELECT on the hot path.
 2. If stale: take a **pre-migration version snapshot** via the existing
    `mount.snapshotContainerDataDb(containerId, policy)` — the same call `restoreContainer` makes,
@@ -305,7 +321,10 @@ shapes without a second write path.
 
 ### Version history: restoring a pre-migration snapshot
 
-A `versions/<ts>.db` archive self-describes (its `doc_format` row, or absence ⇒ 1). The restore
+A `versions/<ts>.db` archive self-describes through its `doc_format` row. Restore reads the
+archive's bytes directly (`readYjsStateFromFile` opens the temp copy with bun:sqlite, not through
+`ManagedDatabase`), so the 0.5.0 mark check does not run there, and an archive without the row has
+no meaning any more (Open question 6). The restore
 pipeline in `versioning/restore.ts` changes in one place: after `readYjsStateFromFile`, read the
 archive's stamp and run `migrateCollabState(type, state, archiveVersion)` before
 `applySnapshotState`. The live doc's stamp stays current; connected editors converge onto the
@@ -434,19 +453,21 @@ guarantees the pristine old-format bytes exist for as long as retention holds th
 **A fleet:** no bulk tool in v1. The realistic sequence is: halt the sweep (it's a scheduler job),
 fix the migration, redeploy, let lazy-open + sweep re-converge, restore individually where content
 was damaged (the blast radius is bounded by how far the sweep got, which the admin endpoint
-reports). A true binary downgrade also works mechanically — old server code opens stamped files
-fine (it ignores `doc_format`; `runMigrations` only applies versions above the stored one) — but
-already-migrated docs would render wrong under old app code, so it is the last resort, paired with
-per-doc restores.
+reports). A binary downgrade to an earlier 0.5.x build opens the files, because `doc_format` is in
+version 100 and adds no schema version. But already-migrated docs would render wrong under old app
+code, and a build that reads the stamp meets one above its own format (Open question 7). So it is
+the last resort, paired with per-doc restores.
 
 ## Frozen-format impact
 
 Everything here is **additive**, done through the sanctioned migration mechanisms:
 
-- `COLLAB_DB_CONFIG` v2 adds the `doc_format` table (`ManagedDatabase` migration — the existing
-  pattern; chat's and mail's DBs already evolve this way). No existing table changes.
-- `metadata.db` (at v7 today) gains `paths.collabFormat` via its next `DatabaseConfig` version
-  (the v6 `contentDirty` precedent). Note [PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)'s
+- The `doc_format` table is part of the version 100 layout of a document's `data.db`, made at the
+  0.5.0 reset ([PROPOSAL_ACCOUNT_IDENTITY.md § 6.1](PROPOSAL_ACCOUNT_IDENTITY.md#61-every-managed-database-restarts-its-numbering-at-100)).
+  No `COLLAB_DB_CONFIG` migration, and no existing table changes.
+- The mount's `metadata.db` (at v9 today) restarts at version 100 at the same reset.
+  `paths.collabFormat` comes with the sweep, after 0.5.0, as its next `DatabaseConfig` version
+  (the `contentDirty` precedent). Note [PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)'s
   `paths.integrityCheckedAt` contends for the same slot — whichever lands second takes the next
   number.
 - Yjs roots, drive MIME values, container layout: untouched by the machinery itself. The first
@@ -493,11 +514,25 @@ counts) come from `verifySnapshotDb` in
 comparator (old state ≈ migrated state, field by field) does not exist there — it is new work owned
 by *this* proposal, built alongside the first migration. CRDT bytes are not comparable; states are.
 
+Open since the identity rulings of 2026-11-27. The ruling removes "no row means format 1"; these
+are the places that relied on it, with no recommendation yet:
+
+**OQ6 — A database numbered 100 without a row.** Ruled on 2026-11-27: code that reads a database
+file directly checks the number too. A restore of a stored version (`readYjsStateFromFile`) and
+putting back a safety copy (`restoreSafetyCopy`) refuse a file numbered below 100, as an open does.
+Still open: what should `ensureCollabFormat` do if it ever finds no `doc_format` row on a database
+numbered 100?
+
+**OQ7 — A stamp above the build's own format.** Before, an old build never read the row. Now every
+build from the read helper on reads it. A downgrade to such a build, or a copy from a newer server,
+meets a stamp above its `collabFormatVersion`. Refuse the document, or open it read-only?
+
 ## Phasing
 
 Each phase ships independently; nothing user-visible changes until a real migration exists.
 
-1. **Stamp plumbing (small).** `COLLAB_DB_CONFIG` v2 + write-current-on-create + read helper;
+1. **Stamp plumbing (small).** The `doc_format` table and write-current-on-create land with the
+   0.5.0 reset, in the version 100 layout; the conversion script writes the row on eigen.is. Then the read helper;
    `collabFormatVersion` in `EIGEN_DOC_TYPE_INFO`; registry skeleton with empty arrays + the
    startup/test drift assertion; `formatVersion` in `CollabDocumentInfo`. Pure bookkeeping.
 2. **Handshake.** `?fmt=` via the `WebsocketProvider` `params` option at the four editor call

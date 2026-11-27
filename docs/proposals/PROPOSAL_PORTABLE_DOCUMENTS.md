@@ -4,7 +4,9 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 **Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row. The decisions below were made by the owner on 2026-10-09. What this proposal says about the code was true on 2026-10-09, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. On 2026-11-01 the owner changed how the download is packed (§ Download): the media streams from storage on the main thread and never crosses into the transform process.
 
-> **TLDR**: A document is a Drive folder (`Report.eigendoc/` with `data.db`, `comments.db`, `media/`, `chat/`, `versions/`), and Drive offers no download for it. This proposal packs a document into one zip file, `Report.eigendoc`, whose first entry is `mimetype`, stored uncompressed, holding the type's MIME string, the way ODF and EPUB mark their type. Inside are the document's Yjs state, its media and its comment threads as JSON. No SQLite file goes in, so the server never opens a database a stranger wrote, and the internal storage layout stays free to change. Each type's Yjs shape does become public. So each type has its own package format number: before 1.0 a package of an older format is refused, and from 1.0 every break of a type's shape ships a converter for its packages. Download is a new format in the type's `exportFormats`, served by the existing export route. Drive's upload and Save to Drive recognize a package and unpack it into a new document. WebDAV and attachments keep the file as it is, and a file action unpacks it later. Comments travel, because a document names people by email only. Whispers stay behind, and so do versions. No new API route, no database migration. About 7 working days.
+**Brought in line with the identity rulings of 27 November 2026** ([PROPOSAL_ACCOUNT_IDENTITY.md](PROPOSAL_ACCOUNT_IDENTITY.md#8-the-owners-rulings)). The 2026-10-09 decisions assumed that a container names people by email. It does not any more: it names them by reference, and the package carries their names in one more part, `people.json`. How an upload treats the ids in a package is not designed yet (Open questions 4 and 5).
+
+> **TLDR**: A document is a Drive folder (`Report.eigendoc/` with `data.db`, `comments.db`, `media/`, `chat/`, `versions/`), and Drive offers no download for it. This proposal packs a document into one zip file, `Report.eigendoc`, whose first entry is `mimetype`, stored uncompressed, holding the type's MIME string, the way ODF and EPUB mark their type. Inside are the document's Yjs state, its media and its comment threads as JSON. No SQLite file goes in, so the server never opens a database a stranger wrote, and the internal storage layout stays free to change. Each type's Yjs shape does become public. So each type has its own package format number: before 1.0 a package of an older format is refused, and from 1.0 every break of a type's shape ships a converter for its packages. Download is a new format in the type's `exportFormats`, served by the existing export route. Drive's upload and Save to Drive recognize a package and unpack it into a new document. WebDAV and attachments keep the file as it is, and a file action unpacks it later. Comments travel. A document names people by reference (a member's id, or a guest's email), so the package also lists the name and address of every id it names. How an upload treats those ids is still open. Whispers stay behind, and so do versions. No new API route, no database migration. About 7 working days.
 
 ## Goals
 
@@ -32,7 +34,9 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 **Each type names its Yjs roots.** `yjsRoots` in the same registry: `{ default: 'xmlfragment' }` for a doc, `{ state: 'map', ops: 'array' }` for a sheet, `{ elements, frames, meta }` for slides and vector, `{ columns, tasks, columnOrder }` for stickies.
 
-**A container names people by email.** Chat authors, whisper targets, comment creators, assignees and mentions are emails, never user ids, so a container stays valid on any server ([STORAGE.md](../STORAGE.md#containers-name-users-by-email-never-by-id)). A thread's `messages` table holds `id`, `authorEmail`, `type`, `content`, `attachments`, `whisperTo`, `replyTo`, `editedAt`, `deletedAt` and `createdAt` (`apps/api/src/lib/chat/db-config.ts`). `comments.db` holds per thread `status`, `resolvedBy`, `resolvedAt`, `createdBy`, `assignee`, the title cache and fields derived from the messages (`comment-db-config.ts`).
+**A container names people by reference.** Today a container names people by email. The identity change in 0.5.0 replaces that ([PROPOSAL_ACCOUNT_IDENTITY.md § 3.5](PROPOSAL_ACCOUNT_IDENTITY.md#35-what-is-stored-in-containers)): chat authors, whisper targets, comment creators, resolvers and assignees are references, a member's id or a guest's email. A mention is a token in the text, `<@id>` for a member and `<@email>` for a guest. Cards and stickies columns carry a `creator` reference inside the document's content. A thread's `messages` table holds `id`, `author`, `type`, `content`, `attachments`, `whisperTo`, `replyTo`, `editedAt`, `deletedAt` and `createdAt` (`apps/api/src/lib/chat/db-config.ts`, where `author` is `authorEmail` until the change). `comments.db` holds per thread `status`, `resolvedBy`, `resolvedAt`, `createdBy`, `assignee`, the title cache and fields derived from the messages (`comment-db-config.ts`).
+
+**No container keeps a list of names.** On the server a member's name comes from a lookup by id, and a deleted member's name from the server's list of former members ([PROPOSAL_ACCOUNT_IDENTITY.md § 3.9](PROPOSAL_ACCOUNT_IDENTITY.md#39-former-members-and-showing-a-person)). So a container copied to another server by hand shows ids and no names.
 
 **A comment is spread over three stores.** The card is in the Y.Doc, the thread is an `.eigenchat` under the container's `chat/` folder with its own `media/`, and `comments.db` is the index ([COMMENTS.md](../COMMENTS.md#a-comment-lives-in-three-stores)).
 
@@ -54,6 +58,7 @@ Report.eigendoc                      a zip
 ├── manifest.json                    { "format": 1 }
 ├── content.yjs                      the document's whole Yjs state, one update
 ├── media/<name>                     byte for byte, stored
+├── people.json                      every id the package names: its name and address at export
 └── comments/<chatName>.json         one thread: its index row and its messages
     comments/<chatName>/media/<name> that thread's attachments, stored
 ```
@@ -69,15 +74,15 @@ A thread's JSON:
 ```json
 {
     "status": "resolved",
-    "resolvedBy": "ann@example.com",
+    "resolvedBy": "7OEwianTfhULu6iG8wQz4G2dO5G2w0B4",
     "resolvedAt": 1760000000,
-    "createdBy": "ann@example.com",
+    "createdBy": "7OEwianTfhULu6iG8wQz4G2dO5G2w0B4",
     "createdAt": 1759990000,
-    "assignee": "bob@example.com",
+    "assignee": "jan@other.org",
     "messages": [
         {
             "id": "…",
-            "authorEmail": "ann@example.com",
+            "author": "7OEwianTfhULu6iG8wQz4G2dO5G2w0B4",
             "type": "message",
             "content": "…",
             "attachments": [],
@@ -91,6 +96,16 @@ A thread's JSON:
 ```
 
 The fields `comments.db` derives from the messages (count, last author, snippet, search text) and its title cache stay out. The importer recomputes them.
+
+Every person in a thread is a reference, as in the container: a member's id, or a guest's email. A mention stays a token in `content`.
+
+`people.json` holds the names. No container keeps a list of names, but the export is built from its parts and is not the bytes on disk, so it can write one. It lists every id the package names, in the threads, in the mention tokens and in the `creator` of a card or a stickies column, with the name and address that id had at the moment of the export. The main thread takes them from the user list and, for a deleted member, from the list of former members ([PROPOSAL_ACCOUNT_IDENTITY.md § B3](PROPOSAL_ACCOUNT_IDENTITY.md#b3-noted-during-the-rulings)). A guest is an email already, so a guest gets no entry. Entries are sorted by id:
+
+```json
+[{ "id": "7OEwianTfhULu6iG8wQz4G2dO5G2w0B4", "name": "Anna Jansen", "address": "anna@acme.com" }]
+```
+
+The part records a moment, so a member who changes their name changes the next package's bytes.
 
 Media and thread media are stored, since images and videos are compressed already. The JSON and `content.yjs` are deflated. Entries go in sorted by name and every JSON key in a fixed order, so a pack is deterministic.
 
@@ -121,9 +136,9 @@ The ROADMAP's Frozen-format column flags this row for the same reason.
 
 `driveInfo` gives a container a `downloadUrl`: the export URL with format `eigen`. Download in every Drive menu then works for a document as it does for a file.
 
-The transform process ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)) makes the small parts, and the main thread streams the zip. The main thread captures the document's state the way the other exports do, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. The transform process turns that into `content.yjs` and the threads' JSON. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. It returns those parts and nothing else: the media never crosses into it, since the media is most of a document's bytes and the process has no storage access of its own.
+The transform process ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)) makes the small parts, and the main thread streams the zip. The main thread captures the document's state the way the other exports do, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. The transform process turns that into `content.yjs` and the threads' JSON. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. It returns those parts and nothing else: the media never crosses into it, since the media is most of a document's bytes and the process has no storage access of its own. With them it returns the ids the parts name, and the main thread looks up their names for `people.json`.
 
-The main thread then writes the package through the streaming zip writer, straight into the response: `mimetype`, `manifest.json`, `content.yjs` and the threads, then every media file the current state names and every attachment of a message the package carries, read from storage chunk by chunk and stored as it is. A file in `media/` that only a version names stays behind with the versions ([PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-container-keeps-a-part-while-something-names-it)). So memory holds a chunk, not the document, and the stored media costs no CPU. The writer deflates the JSON and `content.yjs` in chunks and yields between them, measured with `countLoopTurns` as the backup's packing is. A media file whose bytes come out a different size than its row declares ends the download, so a broken package never looks finished.
+The main thread then writes the package through the streaming zip writer, straight into the response: `mimetype`, `manifest.json`, `content.yjs`, `people.json` and the threads, then every media file the current state names and every attachment of a message the package carries, read from storage chunk by chunk and stored as it is. A file in `media/` that only a version names stays behind with the versions ([PROPOSAL_DOCUMENT_LIFECYCLE.md](PROPOSAL_DOCUMENT_LIFECYCLE.md#a-container-keeps-a-part-while-something-names-it)). So memory holds a chunk, not the document, and the stored media costs no CPU. The writer deflates the JSON and `content.yjs` in chunks and yields between them, measured with `countLoopTurns` as the backup's packing is. A media file whose bytes come out a different size than its row declares ends the download, so a broken package never looks finished.
 
 A document whose package would exceed what `openZip` accepts is refused on export with a message that says so, before the first byte goes out: the parts' sizes and the media's declared sizes are known by then, and once the response has started it can no longer answer with an error. No file goes out that cannot come back (Open question 3).
 
@@ -137,16 +152,18 @@ Unpacking is `importEigenPackage`, beside `convertToDocument` in `apps/api/src/l
 2. The first entry is `mimetype`, stored, and its value is the `DRIVE_MIME_*` of the type the file name's extension names. `manifest.json` has the type's current `packageFormat` (§ The format policy).
 3. Apply `content.yjs` to an empty `Y.Doc`. Its root names must be the type's `yjsRoots`, nothing else.
 4. Every media name and chat name is a single safe name: no `/`, no `..`, no control characters.
-5. Every thread parses, and every message has a shape a stored row can have: a known type, an email as author, attachments of the `ChatAttachment` shape, a `replyTo` naming a message in the same thread. A whisper, or a deleted message with content or attachments, is refused, since Eigen never writes one.
-6. Main thread: `drive.create` the document in the target folder under the file's name without its extension, deduplicated like any upload. Apply the update to its collab document. Write the media. For each thread, create its `.eigenchat` under `chat/`, insert its messages as they are (no notification, no activity row, no mention), and seed its index row through `CommentIndex`, which recomputes the derived fields.
+5. Every thread parses, and every message has a shape a stored row can have: a known type, a valid reference as author (the parser in `packages/lib/src/types/owner.ts`), attachments of the `ChatAttachment` shape, a `replyTo` naming a message in the same thread. A whisper, or a deleted message with content or attachments, is refused, since Eigen never writes one. `people.json` parses, and each entry has an id, a name and an address. These checks only prove a shape. An id in an uploaded file proves nothing about who it is, and what the importer does with it is open (Open question 4).
+6. Main thread: `drive.create` the document in the target folder under the file's name without its extension, deduplicated like any upload. Apply the update to its collab document. Write the media. For each thread, create its `.eigenchat` under `chat/`, insert its messages (no notification, no activity row, no mention), and seed its index row through `CommentIndex`, which recomputes the derived fields.
 
 A check that fails refuses the upload with one message: "This isn't a valid Eigen document", or one of the two format messages in § The format policy. The file is not stored as a plain file instead. A file named like a document that does not open as one is the worst result.
 
 The upload records one `uploaded` event on the new document, as for any upload. The document starts with no versions and is shared like anything else in its folder.
 
-People named in the comments get nothing: no account, no guest, no notification. Their emails show as authors. The uploader shares the document with them if they want them in, and the normal share flow makes guests of the ones without an account ([GUEST-ACCESS.md](../GUEST-ACCESS.md)).
+People named in the comments get nothing: no account, no guest, no notification. The uploader shares the document with them if they want them in, and the normal share flow makes guests of the outside ones ([GUEST-ACCESS.md](../GUEST-ACCESS.md)).
 
-An assignee who is not a member of the new document stays the assignee, as history. A new assignment follows the normal rule (Open question 2).
+How they show is not designed yet. A guest is an email and shows as one. An id is the hard part. It must give nobody rights over a message or a card, on the same server or on another one: on the same server it may name a real member, and from another server it names nobody here (Open question 4). The names of people from another server need a place on the receiving server. That is the point where a small list of people inside an imported document is introduced, and where a person confirms each match: "Anna Jansen (anna@acme.com): which member here?" ([PROPOSAL_ACCOUNT_IDENTITY.md § 7](PROPOSAL_ACCOUNT_IDENTITY.md#7-costs-and-open-questions), Open question 5).
+
+An assignee who is not a member of the new document stays the assignee, as history. A new assignment follows the normal rule (Open question 2). What "the assignee" means when it is an id from a package falls under Open question 4.
 
 ### Where a package unpacks
 
@@ -183,7 +200,7 @@ Docs: [EXPORT.md](../EXPORT.md) gets the format and the unpack, [STORAGE.md](../
 - **The 200 MB cap.** A document with a lot of video exceeds `MAX_DECOMPRESSED_BYTES` and cannot be packed. The export refusal makes that visible rather than leaving a file that will not come back.
 - **A Yjs update is untrusted input.** A crafted one can declare huge lengths. It is decoded only in the transform Worker, under its memory and time limits.
 - **A shape change that forgets to bump `packageFormat`.** The old packages then import into a shape the editor no longer expects. Each type gets a golden package checked into its tests, packed at its current format, that must import and open. A change that breaks it fails the test, and the fix is to bump the number and replace the fixture, or after 1.0 to add the converter.
-- **Message rows written directly.** The importer inserts rows `postMessage` never saw, so its checks are the only ones. Where `postMessage` already checks something, such as an email, the importer calls the same validator, so one rule does not drift into two.
+- **Message rows written directly.** The importer inserts rows `postMessage` never saw, so its checks are the only ones. Where `postMessage` already checks something, such as a reference, the importer calls the same validator, so one rule does not drift into two.
 
 ## Found along the way
 
@@ -194,23 +211,30 @@ Docs: [EXPORT.md](../EXPORT.md) gets the format and the unpack, [STORAGE.md](../
 
 - [EXPORT.md](../EXPORT.md): the export route, the Worker, the zip guards.
 - [COMMENTS.md](../COMMENTS.md), [CHAT.md](../CHAT.md): the three stores of a comment, whispers.
-- [STORAGE.md](../STORAGE.md): containers name users by email.
+- [STORAGE.md](../STORAGE.md): what a container holds.
+- [PROPOSAL_ACCOUNT_IDENTITY.md](PROPOSAL_ACCOUNT_IDENTITY.md): references, the list of former members, and the names in an exported document.
 - [BACKUP.md](../BACKUP.md): a home archive is a tar.zst. A package is a zip because it is one small document a user handles, not a home an operator streams.
 
 ## Decisions
 
 1. A downloaded document is one zip file, named and typed like its container, whose first entry is `mimetype`, stored, holding the type's MIME. (Owner, 2026-10-09.)
 2. A package holds the Yjs state, the media and the threads as JSON, never a SQLite file. (Owner, 2026-10-09.)
-3. Comments travel with their authors as emails. An upload creates no account and no guest; sharing does. (Owner, 2026-10-09.)
+3. Comments travel with their authors. An upload creates no account and no guest; sharing does. (Owner, 2026-10-09. The identity ruling of 2026-11-27 replaced "as emails": authors are references, and the package carries their names.)
 4. Drive upload and Save to Drive unpack automatically. WebDAV and attachments keep the file, and **Open as document** unpacks it later. (Owner, 2026-10-09.)
 5. An upload that fails the check is refused, not stored as a file. (Owner, 2026-10-09.)
 6. A name clash deduplicates. An upload never replaces a document. (Owner, 2026-10-09.)
 7. Versions and chat rooms stay out. Whispers do not travel in clear text. (Owner, 2026-10-09.)
 8. Each type has its own package format. Before 1.0 an older package is refused; from 1.0 every break of a type's shape ships a converter for its packages. A newer package is always refused. (Owner, 2026-10-09.)
 9. The transform process makes `content.yjs` and the threads' JSON only. The main thread streams the package with the one streaming zip writer, the media read from storage and never sent into the transform process. (Owner, 2026-11-01.)
+10. The package writes `people.json`: every id it names, with the name and address at that moment, from the user list and the list of former members. (Owner, 2026-11-27, [PROPOSAL_ACCOUNT_IDENTITY.md § B3](PROPOSAL_ACCOUNT_IDENTITY.md#b3-noted-during-the-rulings).)
 
 ## Open questions
 
 1. **All whispers out, or only the ones the downloader is not part of?** Recommended: all. A whisper the downloader wrote is still the other person's too, and the file can be forwarded.
 2. **An assignee who is not a member of the new document.** Recommended: keep them as history. The other choice is to drop the assignee on unpack.
 3. **The size cap.** Recommended: refuse on export above `MAX_DECOMPRESSED_BYTES`. The other choice is a higher cap for packages, which `openZip` would take as a parameter.
+
+Open since the identity ruling of 2026-11-27, with no recommendation yet:
+
+4. **How the ids in a package are treated on upload.** An id in an uploaded file proves nothing, so it must give nobody rights over a message or a card. On the same server an id may name a real member. From another server it names nobody here. This covers authors, resolvers, assignees, mention tokens and the `creator` of a card or a column.
+5. **Where the names of people from another server live.** They need a place on the receiving server. That is where a small list of people inside an imported document comes in, and where a person confirms each match: "Anna Jansen (anna@acme.com): which member here?" What that list holds, and when the confirmation happens, is not designed.
