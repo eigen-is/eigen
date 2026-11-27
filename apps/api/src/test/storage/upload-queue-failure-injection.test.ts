@@ -172,8 +172,9 @@ describe('a Home that closes and reopens in one process', () => {
             await m2.mount.closeDatabase(dataDbId);
             await m2.mount.uploadQueue?.drain({ flushNow: true });
         });
-        // Long enough for the reopen to finish when the close does not wait for the PUT.
-        await settlesWithin([reopened], SETTLE_BOUND_MS);
+        // The close waits for the PUT on the wire, so the reopen cannot finish while the PUT is held. The bound is
+        // long enough for it to finish if the close did not wait.
+        expect(await settlesWithin([reopened], SETTLE_BOUND_MS)).toBe(false);
 
         await oldPut.land();
         await reopened;
@@ -209,7 +210,8 @@ describe('a Home that closes and reopens in one process', () => {
             await m2.mount.init();
             await m2.mount.uploadQueue?.drain({ flushNow: true });
         });
-        await settlesWithin([reopened], SETTLE_BOUND_MS);
+        // The close waits for the orphan, so metadata.db is still open when it lands and the repair can stage.
+        expect(await settlesWithin([reopened], SETTLE_BOUND_MS)).toBe(false);
 
         await orphan.land();
         await reopened;

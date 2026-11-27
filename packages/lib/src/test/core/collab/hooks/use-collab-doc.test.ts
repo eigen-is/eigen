@@ -171,12 +171,8 @@ function mount(options: UseCollabDocOptions, live: boolean | 'unloaded' = true) 
         },
         rerender: render,
         client,
-        // TanStack Query tells its observers on a timer.
-        setLive: (next: boolean) =>
-            act(async () => {
-                setLive(options.pathId, next);
-                await new Promise((resolve) => setTimeout(resolve, 20));
-            }),
+        // TanStack Query tells its observers on a timer, so the caller waits for what the change does.
+        setLive: (next: boolean) => act(() => void setLive(options.pathId, next)),
         unmount: () => act(() => root.unmount()),
     };
 }
@@ -567,13 +563,18 @@ function stateServer() {
     return Object.assign(server, { restore: () => void (globalThis.fetch = realFetch) });
 }
 
-// TanStack Query refetches a stale query when the tab shows again.
-const focusWindow = () =>
-    act(async () => {
-        window.dispatchEvent(new window.Event('visibilitychange'));
-        await new Promise((resolve) => setTimeout(resolve, 20));
-    });
-const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+// TanStack Query refetches a stale query when the tab shows again. The caller waits for what the ask does.
+const focusWindow = () => act(() => void window.dispatchEvent(new window.Event('visibilitychange')));
+
+// Waits until what the test reads holds, turn by turn, as apps/docs's waitUntil does: the fetch, TanStack Query's
+// notify and React's effects each land a turn or more later. Past the deadline it fails with what it waited for.
+async function waitUntil(holds: () => boolean, what: string): Promise<void> {
+    const deadline = performance.now() + 2_000;
+    while (!holds()) {
+        if (performance.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+        await act(() => new Promise((resolve) => setTimeout(resolve)));
+    }
+}
 
 describe('useCollabDoc for a reader who gets no socket', () => {
     let server: ReturnType<typeof stateServer>;
@@ -588,6 +589,10 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         active = null;
         server.restore();
     });
+    const stateAsks = () => server.asked.filter((ask) => ask.url.endsWith('/state')).length;
+    // The hook has had the answer to its state ask number `asks`: nothing is fetching once the server saw it.
+    const answered = (h: ReturnType<typeof mount>, asks: number) =>
+        waitUntil(() => stateAsks() >= asks && h.client.isFetching() === 0, `the answer to state ask ${asks}`);
 
     test('it opens no socket, loads the stored state over HTTP and runs onSync once', async () => {
         server.write('stored');
@@ -595,7 +600,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
         const h = active;
         expect(h.state.loaded).toBe(false);
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
 
         expect(FakeProvider.instances).toEqual([]);
         expect(h.state.provider).toBeNull();
@@ -614,11 +619,12 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         const syncs: boolean[] = [];
         active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
         const doc = h.doc;
 
         server.write(' two');
         await focusWindow();
+        await waitUntil(() => doc.getText('probe').toString() === 'one two', 'the newer state');
         expect(server.asked.at(-1)?.ifNoneMatch).toBe('"epoch-1.0.3.state-f1"');
         expect(h.doc).toBe(doc);
         expect(doc.getText('probe').toString()).toBe('one two');
@@ -626,6 +632,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         let updates = 0;
         doc.on('update', () => updates++);
         await focusWindow();
+        await answered(h, 3);
         expect(server.asked.map((ask) => ask.ifNoneMatch)).toEqual([
             null,
             '"epoch-1.0.3.state-f1"',
@@ -640,8 +647,9 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         server.write('kept');
         active = mount(OPTIONS, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
         await focusWindow();
+        await answered(h, 2);
         expect(server.asked.at(-1)?.ifNoneMatch).not.toBeNull();
         expect(h.doc.getText('probe').toString()).toBe('kept');
         const held = h.client
@@ -660,12 +668,13 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         server.write('before the restore');
         active = mount(OPTIONS, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
 
         server.epoch = 'epoch-2';
         server.stored.getText('probe').delete(0, server.stored.getText('probe').length);
         server.write('restored');
         await focusWindow();
+        await waitUntil(() => reload.mock.calls.length > 0, 'the reload');
         expect(reload).toHaveBeenCalledTimes(1);
         expect(h.doc.getText('probe').toString()).toBe('before the restore');
     });
@@ -673,7 +682,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
     test("the reader's own change to the document arms no unsynced-edits guard", async () => {
         active = mount(OPTIONS, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
         act(() => h.doc.getMap('items').set('local', 1));
         expect(h.state.unsyncedEdits).toBe(false);
     });
@@ -683,7 +692,7 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
         server.refuse = 403;
         active = mount(OPTIONS, false);
-        await settle();
+        await waitUntil(() => reload.mock.calls.length > 0, 'the reload');
         expect(reload).toHaveBeenCalledTimes(1);
         expect(active.state.loaded).toBe(false);
     });
@@ -693,8 +702,10 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         server.refuse = 413;
         server.refusal = 'Document too large to show';
         active = mount(OPTIONS, false);
-        await settle();
-        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        const h = active;
+        // The error is shown once the refusal was answered and judged final, so no second ask can follow.
+        await waitUntil(() => h.state.loadError !== null, "the server's message");
+        expect(stateAsks()).toBe(1);
         expect(active.state.loaded).toBe(false);
         expect(active.state.storageUnavailable).toBe(false);
         expect(active.state.loadError).toBe('Document too large to show');
@@ -704,15 +715,17 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         server.refuse = 404;
         server.refusal = '';
         active = mount(OPTIONS, false);
-        await settle();
-        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        const h = active;
+        await waitUntil(() => h.state.loadError !== null, 'the status');
+        expect(stateAsks()).toBe(1);
         expect(active.state.loadError).toBe('Not found (404)');
     });
 
     test('a 503 keeps retrying under the outage badge and ends in nothing', async () => {
         server.refuse = 503;
         active = mount(OPTIONS, false);
-        await settle();
+        const h = active;
+        await waitUntil(() => h.state.storageUnavailable, 'the outage badge');
         expect(active.state.storageUnavailable).toBe(true);
         expect(active.state.loadError).toBeNull();
     });
@@ -721,31 +734,35 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         const reload = jest.fn();
         Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
         active = mount(OPTIONS, false);
-        await settle();
+        const h = active;
+        await waitUntil(() => h.state.loaded, 'the stored state');
         expect(reload).not.toHaveBeenCalled();
 
         server.refuse = 403;
         await focusWindow();
+        await waitUntil(() => reload.mock.calls.length > 0, 'the reload');
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
     test('until the info says who the reader is, there is no doc, no socket and no fetch', async () => {
         active = mount(OPTIONS, 'unloaded');
         const h = active;
-        await settle();
+        // The info is asked for and never answers, so nothing after it can start.
+        await waitUntil(() => server.asked.length > 0, 'the ask for the info');
         expect(h.state.doc).toBeNull();
         expect(FakeProvider.instances).toEqual([]);
-        expect(server.asked.filter((ask) => ask.url.endsWith('/state'))).toEqual([]);
+        expect(stateAsks()).toBe(0);
     });
 
     test('a reader who becomes live gets a new doc on a socket, and one who stops being live loads over HTTP', async () => {
         server.write('stored');
         active = mount(OPTIONS, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
         const overHttp = h.doc;
 
         await h.setLive(true);
+        await waitUntil(() => h.state.provider !== null, 'the socket');
         expect(h.doc).not.toBe(overHttp);
         expect(h.state.loaded).toBe(false);
         expect(h.provider.doc).toBe(h.doc);
@@ -757,7 +774,10 @@ describe('useCollabDoc for a reader who gets no socket', () => {
 
         const socket = h.provider;
         await h.setLive(false);
-        await settle();
+        await waitUntil(
+            () => h.state.provider === null && h.state.loaded && h.doc.getText('probe').toString() === 'stored',
+            'the stored state over HTTP',
+        );
         expect(socket.destroyed).toBe(true);
         expect(h.state.provider).toBeNull();
         expect(h.doc.getText('probe').toString()).toBe('stored');
@@ -766,7 +786,6 @@ describe('useCollabDoc for a reader who gets no socket', () => {
 
     describe('while the tab stays open', () => {
         const REFRESH_MS = 30_000;
-        const stateAsks = () => server.asked.filter((ask) => ask.url.endsWith('/state')).length;
         const setVisibility = (state: 'visible' | 'hidden') =>
             act(async () => {
                 Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
@@ -886,12 +905,12 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         server.write('first');
         active = mount(OPTIONS, false);
         const h = active;
-        await settle();
+        await waitUntil(() => h.state.loaded, 'the stored state');
         const first = h.doc;
 
         h.rerender({ ...OPTIONS, pathId: 'doc-2' });
         expect(h.state.loaded).toBe(false);
-        await settle();
+        await waitUntil(() => h.doc !== first && h.state.loaded, 'the other document');
         expect(h.doc).not.toBe(first);
         expect(h.state.loaded).toBe(true);
         expect(server.asked.at(-1)?.url).toMatch(/doc-2\/state$/);
