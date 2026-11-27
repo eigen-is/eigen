@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import { chartColor, DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
@@ -7,6 +7,7 @@ import type { XmlElement } from '../../lib/core/xml';
 import { XmlError } from '../../lib/core/xml';
 import type { DrawingTheme } from '../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
+import * as ooxml from '../../lib/ooxml/ooxml';
 import { A_NS, C_NS, MC_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import type { ChartRead } from '../../lib/ooxml/ooxml-chart';
 import {
@@ -18,7 +19,6 @@ import {
     readChart,
 } from '../../lib/ooxml/ooxml-chart';
 import type { Relationship } from '../../lib/ooxml/opc';
-import { cpuClock } from '../cpu-time';
 
 const STRICT = 'http://purl.oclc.org/ooxml';
 const ACCENTS = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47'];
@@ -515,16 +515,29 @@ describe('the data from the caches', () => {
         ]);
     });
 
-    test('a line chart of many series over a long group reads in time', () => {
+    test('a line chart of many series over a long group reads its group once', () => {
         const series = Array.from({ length: MAX_CHART_SERIES }, (_, idx) => ser({ idx, name: `S${idx}`, values: [1] }));
         const filler = '<c:axId val="1"/>'.repeat(200_000);
         const root = parseOoxml(
             space(`<c:lineChart><c:grouping val="standard"/>${series.join('')}${filler}</c:lineChart>${AXES}`),
         );
         if (!root) throw new Error('no root');
-        const cpuMs = cpuClock();
-        expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true);
-        expect(cpuMs()).toBeLessThan(500);
+        // The read walks the group's 200,000 children five times. Its marker flag looked up again for each of the 32
+        // series walked them 37 times.
+        const { ooxmlElements } = ooxml;
+        let walked = 0;
+        const elements = spyOn(ooxml, 'ooxmlElements').mockImplementation((element, alternative) => {
+            const found = ooxmlElements(element, alternative);
+            walked += found.length;
+            if (walked > 2_700_000) throw new Error('the group was walked again for each series');
+            return found;
+        });
+        try {
+            expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true);
+            expect(walked).toBeLessThan(2_700_000);
+        } finally {
+            elements.mockRestore();
+        }
     });
 
     test('multi-level categories read their innermost level', () => {

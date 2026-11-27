@@ -37,7 +37,7 @@ export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 
 // The read's work, charged through the lookups for what a file can repeat, such as children scanned, color transforms,
 // text and chart points. Whatever a file repeats, the read does no more than this.
-const MAX_PPTX_WORK = 3_000_000;
+export const MAX_PPTX_WORK = 3_000_000;
 
 // PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
 const DEFAULT_SLIDE_EMU = { cx: 9_144_000, cy: 6_858_000 };
