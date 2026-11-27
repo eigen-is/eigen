@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import { chartColor, DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { ApiError } from '../../lib/core/errors';
 import type { XmlElement } from '../../lib/core/xml';
@@ -515,7 +516,7 @@ describe('the data from the caches', () => {
         ]);
     });
 
-    test('a line chart of many series over a long group reads its group once', () => {
+    test('a line chart of many series over a long group reads its group once', async () => {
         const series = Array.from({ length: MAX_CHART_SERIES }, (_, idx) => ser({ idx, name: `S${idx}`, values: [1] }));
         const filler = '<c:axId val="1"/>'.repeat(200_000);
         const root = parseOoxml(
@@ -524,20 +525,12 @@ describe('the data from the caches', () => {
         if (!root) throw new Error('no root');
         // The read walks the group's 200,000 children five times. Its marker flag looked up again for each of the 32
         // series walked them 37 times.
-        const { ooxmlElements } = ooxml;
-        let walked = 0;
-        const elements = spyOn(ooxml, 'ooxmlElements').mockImplementation((element, alternative) => {
-            const found = ooxmlElements(element, alternative);
-            walked += found.length;
-            if (walked > 2_700_000) throw new Error('the group was walked again for each series');
-            return found;
-        });
-        try {
-            expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true);
-            expect(walked).toBeLessThan(2_700_000);
-        } finally {
-            elements.mockRestore();
-        }
+        const walked = await countCalls(
+            2_700_000,
+            (count) => count(spyOn(ooxml, 'ooxmlElements'), (_, found) => found.length),
+            () => expect('spec' in readChart(root, { theme, data: 'cache' })).toBe(true),
+        );
+        expect(walked).toBeLessThan(2_700_000);
     });
 
     test('multi-level categories read their innermost level', () => {

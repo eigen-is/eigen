@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import * as guards from '../../core/guards';
 import {
     coalescedRanges,
@@ -34,26 +35,23 @@ describe('coalescedRanges', () => {
 });
 
 describe('wellFormedValidations', () => {
-    test('drops a rule with more ranges than the cap, and a million ranges cost no time', () => {
+    test('drops a rule with more ranges than the cap, and a million ranges cost no time', async () => {
         const ranges = Array.from({ length: 1_000_000 }, (_, i) => cell(i % 1000, 0));
         const capped = Array.from({ length: MAX_RULE_RANGES }, (_, i) => cell(i, 0));
         // The shape check reads each range of the rule within the cap, about 8 thousand reads. A check of every
         // range before the cap reads the million too, twice.
-        const { isRecord } = guards;
-        let reads = 0;
-        const spy = spyOn(guards, 'isRecord').mockImplementation((value) => {
-            if (++reads > 128_000) throw new Error('the shape check read more than 128,000 values');
-            return isRecord(value);
-        });
-        try {
-            const kept = wellFormedValidations({
-                big: { ranges, order: 'a0', rule: RULE },
-                capped: { ranges: capped, order: 'a1', rule: RULE },
-            });
-            expect(Object.keys(kept)).toEqual(['capped']);
-        } finally {
-            spy.mockRestore();
-        }
+        const reads = await countCalls(
+            128_000,
+            (count) => count(spyOn(guards, 'isRecord')),
+            () => {
+                const kept = wellFormedValidations({
+                    big: { ranges, order: 'a0', rule: RULE },
+                    capped: { ranges: capped, order: 'a1', rule: RULE },
+                });
+                expect(Object.keys(kept)).toEqual(['capped']);
+            },
+        );
+        expect(reads).toBeLessThanOrEqual(128_000);
     });
 
     test('keeps the first in order of a sheet with more rules than a sheet may hold', () => {

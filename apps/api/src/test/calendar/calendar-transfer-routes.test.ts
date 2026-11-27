@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { costRatio } from '@workspace/lib/test/cost-ratio';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
@@ -1317,18 +1318,14 @@ describe('Calendar transfer routes', () => {
         ]);
 
         // The file's own parse is the one; a series put to the store would cost a parse of its own.
-        let parses = 0;
-        const realParse = icalParse.parseCalendarStream;
-        const parsed = spyOn(icalParse, 'parseCalendarStream').mockImplementation((ics) => {
-            if (++parses > 1) throw new Error(`the import parsed ${parses} times`);
-            return realParse(ics);
-        });
-        try {
-            const res = await importRequest(alice, calendarId, vcal(zone, ...copies));
-            expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
-        } finally {
-            parsed.mockRestore();
-        }
+        const parses = await countCalls(
+            1,
+            (count) => count(spyOn(icalParse, 'parseCalendarStream')),
+            async () => {
+                const res = await importRequest(alice, calendarId, vcal(zone, ...copies));
+                expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
+            },
+        );
         expect(parses).toBe(1);
     });
 

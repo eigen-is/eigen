@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import { costRatio } from '@workspace/lib/test/cost-ratio';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
 import * as xml from '../../../lib/core/xml';
@@ -36,6 +37,7 @@ import {
     unprefixed,
 } from '../../fixtures/golden-docx';
 import { build, deflated, stored } from '../../fixtures/raw-zip';
+import { countXmlScans } from '../../fixtures/xml-scans';
 
 // The bounds an untrusted docx meets: the XML the reader parses, the structures it walks and every value it writes.
 
@@ -81,24 +83,15 @@ const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => nod
 // Each note's text, in document order.
 const notes = (json: JSONContent) => nodesOfType(json, 'footnote').map((note) => texts(note).join(''));
 
-// The stories a read builds blocks of, the body's and each note's, counted by a spy that throws past MAX_STORIES, so a
-// read that builds a note again for each reference fails at once. The status is the read's refusal.
+// The stories a read refused for its size builds blocks of, the body's and each note's, counted up to MAX_STORIES, so
+// a read that builds a note again for each reference fails at once.
 const MAX_STORIES = 20;
-async function storiesBuilt(docx: ArrayBuffer): Promise<{ status: number; built: number }> {
-    const { buildBlocks } = assemble;
-    let built = 0;
-    const builds = spyOn(assemble, 'buildBlocks').mockImplementation((raw) => {
-        built += 1;
-        if (built > MAX_STORIES) throw new Error(`the read built blocks more than ${MAX_STORIES} times`);
-        return buildBlocks(raw);
-    });
-    try {
-        const { status } = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        return { status, built };
-    } finally {
-        builds.mockRestore();
-    }
-}
+const storiesBuilt = (docx: ArrayBuffer) =>
+    countCalls(
+        MAX_STORIES,
+        (count) => count(spyOn(assemble, 'buildBlocks')),
+        async () => expect((await rejection(() => docxToPmJson(Buffer.from(docx)))).status).toBe(413),
+    );
 
 // A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
 // once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
@@ -842,19 +835,14 @@ describe('structure', () => {
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
         const docx = await buildDocxWithBody(heading.repeat(5000), { numbering });
         const MAX_SPELLED = 100_000;
-        const { spellNumber } = wordml;
-        let spelled = 0;
-        const spells = spyOn(wordml, 'spellNumber').mockImplementation((value, format) => {
-            spelled += 1;
-            if (spelled > MAX_SPELLED) throw new Error(`the labels spelled more than ${MAX_SPELLED} numbers`);
-            return spellNumber(value, format);
-        });
-        try {
-            const [first] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'heading');
-            expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
-        } finally {
-            spells.mockRestore();
-        }
+        const spelled = await countCalls(
+            MAX_SPELLED,
+            (count) => count(spyOn(wordml, 'spellNumber')),
+            () => {
+                const [first] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'heading');
+                expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
+            },
+        );
         expect(spelled).toBeLessThanOrEqual(MAX_SPELLED);
     }, 20_000);
 
@@ -891,9 +879,7 @@ describe('structure', () => {
         const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
         expect(notes(await imported(paragraph(noteRef(1).repeat(2)), { footnotes }))).toHaveLength(2);
         const docx = await buildDocxWithBody(paragraph(noteRef(1).repeat(400)), { footnotes });
-        const { status, built } = await storiesBuilt(docx);
-        expect(status).toBe(413);
-        expect(built).toBeLessThanOrEqual(MAX_STORIES);
+        expect(await storiesBuilt(docx)).toBeLessThanOrEqual(MAX_STORIES);
     }, 20_000);
 
     // Read inside a note too, a note is read once and each copy charged: 1,000 references to a 1,000-paragraph note in
@@ -902,9 +888,7 @@ describe('structure', () => {
         const footnotes =
             footnote(1, paragraph(run('x')).repeat(1000)) + footnote(2, paragraph(noteRef(1).repeat(1000)));
         const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes });
-        const { status, built } = await storiesBuilt(docx);
-        expect(status).toBe(413);
-        expect(built).toBeLessThanOrEqual(MAX_STORIES);
+        expect(await storiesBuilt(docx)).toBeLessThanOrEqual(MAX_STORIES);
     }, 20_000);
 
     // Read for each graphic that names it, the part's 1,000 points would come in 1,000 times.
@@ -920,8 +904,7 @@ describe('structure', () => {
     }, 60_000);
 
     // Found through one index, each note is a lookup; found by scanning its part for each reference, 12,000 notes
-    // cost 144 million children. A spy counts the children our xml lookups return and throws past MAX_SCANNED, so
-    // that read fails at once.
+    // cost 144 million children. What our xml finders scan is counted up to MAX_SCANNED, so that read fails at once.
     test('12,000 notes stay linear', async () => {
         const count = 12_000;
         const ids = Array.from({ length: count }, (_, index) => index + 1);
@@ -929,18 +912,9 @@ describe('structure', () => {
         const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
         const docx = await buildDocxWithBody(body, { footnotes });
         const MAX_SCANNED = 2_000_000;
-        const { xmlElements } = xml;
-        let scanned = 0;
-        const scans = spyOn(xml, 'xmlElements').mockImplementation((element) => {
-            scanned += element.children.length;
-            if (scanned > MAX_SCANNED) throw new Error(`the read scanned more than ${MAX_SCANNED} children`);
-            return xmlElements(element);
-        });
-        try {
-            expect(notes(docxToPmJson(Buffer.from(docx)).json)).toHaveLength(count);
-        } finally {
-            scans.mockRestore();
-        }
+        const scanned = await countCalls(MAX_SCANNED, countXmlScans, () =>
+            expect(notes(docxToPmJson(Buffer.from(docx)).json)).toHaveLength(count),
+        );
         expect(scanned).toBeLessThanOrEqual(MAX_SCANNED);
     }, 60_000);
 
@@ -960,20 +934,15 @@ describe('structure', () => {
         const body = `${open.repeat(depth)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(depth)}`;
         const docx = await buildDocxWithBody(body);
         const MAX_READS = 1000;
-        const { readTable } = tables;
-        let reads = 0;
-        const spy = spyOn(tables, 'readTable').mockImplementation((reader, table, scope) => {
-            reads += 1;
-            if (reads > MAX_READS) throw new Error(`the read read tables more than ${MAX_READS} times`);
-            return readTable(reader, table, scope);
-        });
-        try {
-            const { json } = docxToPmJson(Buffer.from(docx));
-            expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
-            expect(texts(json)).toEqual(['Core']);
-        } finally {
-            spy.mockRestore();
-        }
+        const reads = await countCalls(
+            MAX_READS,
+            (count) => count(spyOn(tables, 'readTable')),
+            () => {
+                const { json } = docxToPmJson(Buffer.from(docx));
+                expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+                expect(texts(json)).toEqual(['Core']);
+            },
+        );
         expect(reads).toBeLessThanOrEqual(MAX_READS);
     }, 20_000);
 
@@ -991,19 +960,11 @@ describe('structure', () => {
         ).join('');
         const docx = await buildDocxWithBody(body, { styles });
         const MAX_LOOKUPS = 300_000;
-        const { get } = Styles.prototype;
-        let lookups = 0;
-        const spy = spyOn(Styles.prototype, 'get').mockImplementation(function (this: Styles, id) {
-            lookups += 1;
-            if (lookups > MAX_LOOKUPS) throw new Error(`the read looked up styles more than ${MAX_LOOKUPS} times`);
-            return get.call(this, id);
-        });
-        try {
-            const { json } = docxToPmJson(Buffer.from(docx));
-            expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
-        } finally {
-            spy.mockRestore();
-        }
+        const lookups = await countCalls(
+            MAX_LOOKUPS,
+            (count) => count(spyOn(Styles.prototype, 'get')),
+            () => expect(nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'paragraph')).toHaveLength(300),
+        );
         expect(lookups).toBeLessThanOrEqual(MAX_LOOKUPS);
     }, 60_000);
 
@@ -1027,18 +988,11 @@ describe('structure', () => {
         const body = paragraph(run('Item'), ordered(10)).repeat(10_000);
         const docx = await buildDocxWithBody(body, { numbering, styles });
         const MAX_HOPS = 1_000_000;
-        const { para } = Styles.prototype;
-        let hops = 0;
-        const spy = spyOn(Styles.prototype, 'para').mockImplementation(function (this: Styles, id) {
-            hops += 1;
-            if (hops > MAX_HOPS) throw new Error(`the read asked styles for more than ${MAX_HOPS} paragraph looks`);
-            return para.call(this, id);
-        });
-        try {
-            expect(nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'paragraph')).toHaveLength(10_000);
-        } finally {
-            spy.mockRestore();
-        }
+        const hops = await countCalls(
+            MAX_HOPS,
+            (count) => count(spyOn(Styles.prototype, 'para')),
+            () => expect(nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'paragraph')).toHaveLength(10_000),
+        );
         expect(hops).toBeLessThanOrEqual(MAX_HOPS);
     }, 60_000);
 

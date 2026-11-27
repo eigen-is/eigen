@@ -5,6 +5,7 @@
 // name-present assert passes on a mangled parameter.
 import { describe, expect, spyOn, test } from 'bun:test';
 import { costRatio } from '@workspace/lib/test/cost-ratio';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';
 import {
@@ -679,7 +680,7 @@ describe('stamp trust', () => {
         expect(ratio).toBeLessThan(5);
     });
 
-    test('EXDATEs with no SEQUENCE re-stamp reading the SEQUENCE once, not once per stamp', () => {
+    test('EXDATEs with no SEQUENCE re-stamp reading the SEQUENCE once, not once per stamp', async () => {
         const count = 1000;
         const padding = 4000;
         const days = Array.from({ length: count }, (_, day) =>
@@ -698,17 +699,11 @@ describe('stamp trust', () => {
         );
 
         // Each read scans the master's properties, which grow by a stamp per EXDATE.
-        let reads = 0;
-        const realSequenceOf = icalParse.sequenceOf;
-        const sequenceReads = spyOn(icalParse, 'sequenceOf').mockImplementation((vevent) => {
-            if (++reads > 1) throw new Error(`sequenceOf read ${reads} times for one VEVENT`);
-            return realSequenceOf(vevent);
-        });
-        try {
-            restampResource(incoming, null);
-        } finally {
-            sequenceReads.mockRestore();
-        }
+        const reads = await countCalls(
+            1,
+            (count) => count(spyOn(icalParse, 'sequenceOf')),
+            () => restampResource(incoming, null),
+        );
 
         const master = masterOf(incoming);
         expect(master.getAllProperties().map((prop) => prop.name)).toEqual([
@@ -727,7 +722,7 @@ describe('stamp trust', () => {
         expect(reads).toBe(1);
     });
 
-    test("a thousand twins of one key read the stored VEVENT's stamps once, and only the first keeps its id", () => {
+    test("a thousand twins of one key read the stored VEVENT's stamps once, and only the first keeps its id", async () => {
         const twins = 1000;
         const stamps = [
             'X-EIGEN-EVENT-ID:stored-id',
@@ -744,17 +739,11 @@ describe('stamp trust', () => {
         const incoming = parseResource(vcal(Array.from({ length: twins }, () => twin).flat()));
 
         // Each read scans the stored VEVENT's properties; one per stamp it can hold is the walk that keys it.
-        let reads = 0;
-        const realReadStamp = icalParse.readStamp;
-        const stampReads = spyOn(icalParse, 'readStamp').mockImplementation((vevent, name) => {
-            if (++reads > 7) throw new Error(`readStamp read ${reads} stamps of one stored VEVENT`);
-            return realReadStamp(vevent, name);
-        });
-        try {
-            restampResource(incoming, stored);
-        } finally {
-            stampReads.mockRestore();
-        }
+        const reads = await countCalls(
+            7,
+            (count) => count(spyOn(icalParse, 'readStamp')),
+            () => restampResource(incoming, stored),
+        );
 
         const lines = (vevent: ICAL.Component) => vevent.getAllProperties().map((prop) => prop.toICALString());
         const vevents = incoming.getAllSubcomponents('vevent');

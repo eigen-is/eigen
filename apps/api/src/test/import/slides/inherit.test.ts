@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import { countCalls } from '@workspace/lib/test/count-calls';
 import type { NewVectorElement } from '@workspace/lib/vector';
 import * as xml from '../../../lib/core/xml';
 import type { PptxDeck } from '../../../lib/import/slides/from-pptx';
@@ -26,6 +27,7 @@ import {
     THEME,
     zipParts,
 } from '../../fixtures/pptx';
+import { countXmlScans } from '../../fixtures/xml-scans';
 
 // What a slide takes from its layout, master and theme: placeholder geometry, the shapes drawn beneath, the color
 // map and the background.
@@ -43,39 +45,10 @@ const placeholder = (ph: string, at?: string, text?: string) =>
 // of slides or thousands of shapes that inherit them, they are a hundred million children or more.
 const MAX_SCANNED = 10_000_000;
 
-// Reads the deck counting the children and prefixed attributes our xml lookups scan. A spy throws once the count
-// passes MAX_SCANNED, so a read that scans a shared element again for each inheritor fails at once.
-function readScanned(pptx: Uint8Array): { deck: PptxDeck; scanned: number } {
-    const { xmlAttr, xmlChild, xmlChildren, xmlElements } = xml;
-    let scanned = 0;
-    const count = (units: number) => {
-        scanned += units;
-        if (scanned > MAX_SCANNED) throw new Error(`the read scanned more than ${MAX_SCANNED} children and attributes`);
-    };
-    const spies = [
-        spyOn(xml, 'xmlElements').mockImplementation((element) => {
-            count(element.children.length);
-            return xmlElements(element);
-        }),
-        spyOn(xml, 'xmlChildren').mockImplementation((element, ns, local) => {
-            count(element.children.length);
-            return xmlChildren(element, ns, local);
-        }),
-        spyOn(xml, 'xmlChild').mockImplementation((element, ns, local) => {
-            count(element.children.length);
-            return xmlChild(element, ns, local);
-        }),
-        spyOn(xml, 'xmlAttr').mockImplementation((element, ns, local) => {
-            if (ns !== '') count(Object.keys(element.attributeNs).length);
-            return xmlAttr(element, ns, local);
-        }),
-    ];
-    try {
-        return { deck: readPptx(pptx, OPTIONS), scanned };
-    } finally {
-        for (const spy of spies) spy.mockRestore();
-    }
-}
+// Reads the deck counting what our xml lookups scan, up to MAX_SCANNED, so a read that scans a shared element again
+// for each inheritor fails at once.
+const readScanned = (pptx: Uint8Array, holds: (deck: PptxDeck) => void) =>
+    countCalls(MAX_SCANNED, countXmlScans, () => holds(readPptx(pptx, OPTIONS)));
 
 describe('placeholders', () => {
     test("a placeholder with no xfrm takes its layout's, else its master's", () => {
@@ -132,7 +105,7 @@ describe('placeholders', () => {
         expect(elements.map(placed)).toEqual(kinds.map(() => [50, 50, 500, 500]));
     });
 
-    test('a slide of many placeholders over a layout of many matches each in one lookup', () => {
+    test('a slide of many placeholders over a layout of many matches each in one lookup', async () => {
         const ph = (attributes: string) => `<p:sp><p:nvSpPr><p:nvPr><p:ph ${attributes}/></p:nvPr></p:nvSpPr></p:sp>`;
         const layout = Array.from({ length: 40_000 }, (_, i) => ph(`type="dt" idx="${i + 100_000}"`)).join('');
         const slide = Array.from({ length: 4999 }, (_, i) => ph(`type="chart" idx="${i}"`)).join('');
@@ -147,22 +120,15 @@ describe('placeholders', () => {
         });
         // Matched by scanning the layout's 40,000 placeholders, each of the 5,000 asks a placeholder's kind 40,000
         // times, which took seconds; matched by lookup, each asks it a few times.
-        const { placeholderKind } = inherit;
-        let kinds = 0;
-        const asked = spyOn(inherit, 'placeholderKind').mockImplementation((type) => {
-            if (++kinds > 3_000_000) throw new Error('placeholders matched by scanning the layout');
-            return placeholderKind(type);
-        });
-        try {
-            const elements = readPptx(pptx, OPTIONS).slides[0].elements;
-            expect(elements.map(placed)).toEqual([[10, 20, 300, 40]]);
-            expect(kinds).toBeLessThan(3_000_000);
-        } finally {
-            asked.mockRestore();
-        }
+        const kinds = await countCalls(
+            3_000_000,
+            (count) => count(spyOn(inherit, 'placeholderKind')),
+            () => expect(readPptx(pptx, OPTIONS).slides[0].elements.map(placed)).toEqual([[10, 20, 300, 40]]),
+        );
+        expect(kinds).toBeLessThan(3_000_000);
     });
 
-    test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", () => {
+    test("what slide shapes inherit is read once: a master placeholder's, its text styles, the presentation's default and the theme's style lists", async () => {
         // 100,000 empty elements where a lookup scans: once a slide shape, they took seconds.
         const junk = (prefix: string) => `<${prefix}:x/>`.repeat(100_000);
         const placeholder = (inner: string) =>
@@ -190,13 +156,12 @@ describe('placeholders', () => {
             zipParts(presentation),
             buildPptx({ theme, slides: [{ shapes: shape }] }),
         ]) {
-            const { deck, scanned } = readScanned(pptx);
-            expect(deck.slides[0].elements.length).toBe(2000);
+            const scanned = await readScanned(pptx, (deck) => expect(deck.slides[0].elements.length).toBe(2000));
             expect(scanned).toBeLessThan(MAX_SCANNED);
         }
     });
 
-    test("what a shared part's elements hold is looked into once: text style levels, run defaults, theme styles, fills, backgrounds and attributes", () => {
+    test("what a shared part's elements hold is looked into once: text style levels, run defaults, theme styles, fills, backgrounds and attributes", async () => {
         // Junk where a lookup scans, under 2,000 paragraphs, runs or shapes, or 500 slides: scanned again by each, they
         // took seconds to minutes.
         const junk = (count: number, tag = 'a:x') => `<${tag}/>`.repeat(count);
@@ -338,8 +303,9 @@ describe('placeholders', () => {
             ],
         ];
         for (const [pptx, slides, elements] of decks) {
-            const { deck, scanned } = readScanned(pptx);
-            expect([deck.slides.length, deck.slides[0].elements.length]).toEqual([slides, elements]);
+            const scanned = await readScanned(pptx, (deck) =>
+                expect([deck.slides.length, deck.slides[0].elements.length]).toEqual([slides, elements]),
+            );
             expect(scanned).toBeLessThan(MAX_SCANNED);
         }
     });
