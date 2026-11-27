@@ -8,7 +8,7 @@ import { dialogFooterHits } from './dialog-footer';
 import { sentenceCaseHits } from './sentence-case';
 import { stripNoise } from './strip-noise';
 import type { ExportsMaps, Primitive, SourceFile } from './unused-primitives';
-import { readPrimitivesIndex, unusedPrimitives } from './unused-primitives';
+import { isTest, readPrimitivesIndex, unusedPrimitives } from './unused-primitives';
 
 const BASELINE_PATH = 'scripts/standards-baseline.json';
 
@@ -411,9 +411,8 @@ const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [
 for (const file of sources) {
     const { path } = file;
     if (!/^(?:apps|packages)\/.*\.tsx?$/.test(path) || path.endsWith('.d.ts')) continue;
-    const isTest = /\/src\/test\/|\.test\.tsx?$/.test(path);
     for (const metric of METRICS) {
-        if (isTest !== (metric.tests ?? false)) continue;
+        if (isTest(path) !== (metric.tests ?? false)) continue;
         const hits = metric.count(file);
         if (hits === 0) continue;
         counts.set(metric.id, (counts.get(metric.id) ?? 0) + hits);

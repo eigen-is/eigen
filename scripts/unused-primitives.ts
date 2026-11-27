@@ -18,8 +18,8 @@ export type SourceFile = {
 // Each package's `exports` map, keyed by the package's folder name under `packages/`.
 export type ExportsMaps = Record<string, Record<string, string>>;
 
-// The helpers of `packages/ui/src/test/` exist for tests, so a test is all the use they get.
-const TEST_HELPERS = 'packages/ui/src/test/';
+// The test helpers of ui and lib exist for tests, so a test is all the use they get.
+const TEST_HELPERS = /^packages\/(?:ui|lib)\/src\/test\//;
 const CODE_FILE = /\.(?:ts|tsx|js|jsx|mjs)$/;
 const INDEX_HEADING = /^## (.+) \(\d+\)$/;
 const INDEX_ROW = /^\| `([^`]+)` \| `([^`]+)` \| (\S+) \|$/;
@@ -123,7 +123,7 @@ export function unusedPrimitives(
             (other) => other.file === primitive.file && other.name === primitive.name.slice(0, -5) && used(other),
         );
     const reported = primitives.filter(
-        (primitive) => !primitive.file.startsWith(TEST_HELPERS) && !used(primitive) && !propsOfUsedComponent(primitive),
+        (primitive) => !TEST_HELPERS.test(primitive.file) && !used(primitive) && !propsOfUsedComponent(primitive),
     );
     return {
         unused: reported.filter((primitive) => !users.has(primitive)),
@@ -131,7 +131,7 @@ export function unusedPrimitives(
     };
 }
 
-function isTest(path: string): boolean {
+export function isTest(path: string): boolean {
     return path.includes('/src/test/') || /\.test\.[jt]sx?$/.test(path);
 }
 
