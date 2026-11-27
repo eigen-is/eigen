@@ -7,7 +7,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { arePublicLinksEnabled } from '../config/server-settings';
 import { ApiError } from '../core';
-import { getHome } from '../home';
 import type { Mount } from '../mount';
 import { canReadByLink } from './acl';
 import type { Drive } from './drive';
@@ -16,10 +15,10 @@ import type { Drive } from './drive';
 type PublicChain = { drive: Drive; chain: DrivePath[] };
 
 export class LinkDrive {
-    private readonly ownerId: string;
+    private readonly openDrive: () => Promise<Drive>;
 
-    public constructor(ownerId: string) {
-        this.ownerId = ownerId;
+    public constructor(openDrive: () => Promise<Drive>) {
+        this.openDrive = openDrive;
     }
 
     public async canRead(mountId: string, pathId: string): Promise<boolean> {
@@ -54,7 +53,7 @@ export class LinkDrive {
     // Null while public links are off, asked before the owner's Home is opened, or where the link rule refuses the path.
     private async publicChain(mountId: string, pathId: string): Promise<PublicChain | null> {
         if (!arePublicLinksEnabled()) return null;
-        const { drive } = await getHome(this.ownerId); // ownerId-routed: the request is for this owner's home
+        const drive = await this.openDrive();
         const chain = await drive.breadCrumb(mountId, pathId);
         const publicPath = canReadByLink(chain);
         return publicPath === null ? null : { drive, chain: chain.slice(publicPath) };
