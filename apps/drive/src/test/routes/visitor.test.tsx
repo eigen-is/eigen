@@ -204,6 +204,27 @@ test('a visitor gets no Share button on a row, in a public folder or on a lone f
     expect(rowShares().length).toBeGreaterThan(0);
 });
 
+test('a visitor gets no Shared with column, in a public folder or on a lone file, and a member does', async () => {
+    const headers = () => document.querySelector('[role="grid"] > .sticky')?.textContent ?? '';
+    const cellCounts = () =>
+        [...document.querySelectorAll('[role="row"].eigen-list-item')].map((row) => row.children.length);
+    await open(`/fs/${OWNER}/default/pub`);
+    expect(headers()).toContain('Owner');
+    expect(headers()).not.toContain('Shared with');
+    expect(cellCounts()).toEqual([5, 5, 5]);
+    await unmount();
+
+    await open(`/shared/with-me?pid=report&uid=${OWNER}&mid=default`);
+    expect(headers()).not.toContain('Shared with');
+    expect(cellCounts()).toEqual([5]);
+    await unmount();
+
+    session.user = { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' };
+    await open(`/fs/${OWNER}/default/pub`);
+    expect(headers()).toContain('Shared with');
+    expect(cellCounts()).toEqual([6, 6, 6]);
+});
+
 test('a signed-in user on the same page can close the file back to the list', async () => {
     session.user = { id: 'bob', email: 'bob@test.eigen.is', name: 'Bob' };
     await open(`/shared/with-me?pid=report&uid=${OWNER}&mid=default`);
