@@ -1,8 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_DRAFTS, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
@@ -301,6 +301,82 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
         expect(await mailNewRows(user)).toEqual([]);
         const archive = await listBox(user.sessionToken, user.id, MAILBOX_ARCHIVE, 50);
         expect(archive.map((row) => row.subject)).toEqual(['The original']);
+    });
+});
+
+// The received time is the file's mtime, which the index keeps to the second.
+describe.skipIf(isWindows)('Received time', () => {
+    let user: TestUser;
+
+    beforeAll(async () => {
+        user = await createTestUser(`mailreceived-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Received');
+        await initHome(user);
+    });
+
+    const fileAt = (box: string, id: string, eml: string, receivedAt: Date): void => {
+        const filePath = seedMaildirFile(user.id, box, id, eml);
+        utimesSync(filePath, receivedAt, receivedAt);
+    };
+
+    test('a message lists by when its file arrived, not by its Date header', async () => {
+        const box = `Received-${Date.now()}`;
+        seedMaildirFolder(user.id, box);
+        const stampedLongAgo = makeEml('Stamped long ago', { date: new Date('2020-01-01T00:00:00Z') });
+        fileAt(box, `${Date.now()}.late`, stampedLongAgo, new Date('2026-11-20T10:00:00Z'));
+        const stampedOnTime = makeEml('Stamped on time', { date: new Date('2026-11-19T00:00:00Z') });
+        fileAt(box, `${Date.now()}.prompt`, stampedOnTime, new Date('2026-11-19T00:00:05Z'));
+
+        const rows = await (await getHome(user.id)).mail.mailboxGet(box);
+        expect(rows.map((row) => row.subject)).toEqual(['Stamped long ago', 'Stamped on time']);
+        expect(rows[0].receivedAt).toEqual(new Date('2026-11-20T10:00:00Z'));
+        expect(rows[0].date).toEqual(new Date('2020-01-01T00:00:00Z'));
+    });
+
+    test('a row from before received times existed gets its file time on the next open', async () => {
+        const box = `Legacy-${Date.now()}`;
+        seedMaildirFolder(user.id, box);
+        const id = `${Date.now()}.legacy`;
+        fileAt(box, id, makeEml('Indexed by an older build'), new Date('2025-06-01T12:00:00Z'));
+        const home = await getHome(user.id);
+        expect((await home.mail.mailboxGet(box)).length).toBe(1);
+
+        // What the v7 migration leaves on every row it finds.
+        const db = new Database(join(mailRootOf(user.id), 'mail.db'));
+        try {
+            db.run('UPDATE emails SET receivedAt = 0 WHERE id = ?', [id]);
+        } finally {
+            db.close();
+        }
+        expect(home.mail.messageGetSummary(id)?.receivedAt.getTime()).toBe(0);
+
+        const rows = await home.mail.mailboxGet(box);
+        expect(rows.map((row) => row.receivedAt)).toEqual([new Date('2025-06-01T12:00:00Z')]);
+    });
+
+    test('a copy keeps the received time of its source', async () => {
+        const box = `CopySource-${Date.now()}`;
+        seedMaildirFolder(user.id, box);
+        const id = `${Date.now()}.copied`;
+        fileAt(box, id, makeEml('Copied along'), new Date('2024-02-02T08:00:00Z'));
+        const home = await getHome(user.id);
+        await home.mail.mailboxGet(box);
+
+        await home.mail.messageCopy(id, MAILBOX_ARCHIVE);
+
+        const archived = findOrFail(
+            await home.mail.mailboxGet(MAILBOX_ARCHIVE),
+            (row) => row.subject === 'Copied along',
+        );
+        expect(archived.receivedAt).toEqual(new Date('2024-02-02T08:00:00Z'));
+    });
+
+    test('a saved draft is received when its file was written', async () => {
+        const home = await getHome(user.id);
+        const draft = await home.mail.messageHandleDraft({ subject: 'Saved draft', text: 'draft body' });
+
+        const row = findOrFail(await home.mail.mailboxGet(MAILBOX_DRAFTS), (r) => r.id === draft.id);
+        const mtimeMs = statSync(join(boxDir(user.id, MAILBOX_DRAFTS), 'cur', row.filename)).mtimeMs;
+        expect(row.receivedAt.getTime()).toBe(Math.floor(mtimeMs / 1000) * 1000);
     });
 });
 

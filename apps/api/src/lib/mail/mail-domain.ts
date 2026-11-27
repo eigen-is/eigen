@@ -131,8 +131,8 @@ export class Mail {
         return this.store.mailboxesList();
     }
 
-    public async mailboxDeliver(message: Buffer): Promise<string> {
-        const uniqueId = await this.store.append(MAILBOX_INBOX, message);
+    public async mailboxDeliver(message: Buffer, receivedAt?: Date): Promise<string> {
+        const uniqueId = await this.store.append(MAILBOX_INBOX, message, { receivedAt });
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
@@ -170,18 +170,22 @@ export class Mail {
         }
         await enforceHomeDataQuota(this.home.user.id, bytes.byteLength);
 
-        const id = await this.store.append(MAILBOX_INBOX, bytes, { arrival: false });
+        // The file's mtime is when IMAP says it arrived: the last server's stamp, else the sender's, else now.
+        const receivedAt = [headers.receivedDate, headers.date].find(
+            (date) => date && date.getTime() >= 0 && date.getTime() <= Date.now(),
+        );
+        const id = await this.store.append(MAILBOX_INBOX, bytes, { arrival: false, receivedAt });
         return { id };
     }
 
     public async mailboxGet(
         mailbox: string,
-        opts?: { limit?: number; beforeDate?: number; beforeId?: string },
+        opts?: { limit?: number; beforeReceivedAt?: number; beforeId?: string },
     ): Promise<EmailSummary[]> {
         const limit = opts?.limit ?? 200;
         const before =
-            opts?.beforeDate != null && opts?.beforeId != null
-                ? { date: new Date(opts.beforeDate), id: opts.beforeId }
+            opts?.beforeReceivedAt != null && opts?.beforeId != null
+                ? { receivedAt: new Date(opts.beforeReceivedAt), id: opts.beforeId }
                 : undefined;
         return this.store.listMessages(canonicalMailbox(mailbox), { limit, before });
     }
@@ -246,16 +250,15 @@ export class Mail {
 
     public async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
         targetMailbox = canonicalMailbox(targetMailbox);
-        if (!this.store.getSummary(messageId)) {
-            throw new ApiError(404, `Message '${messageId}' not found`);
-        }
+        const source = this.store.getSummary(messageId);
+        if (!source) throw new ApiError(404, `Message '${messageId}' not found`);
         if (!(await this.store.mailboxExists(targetMailbox))) {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
         // Raw bytes, not a `.text()` round-trip: decoding corrupts non-UTF-8 mail, and a copy is not mail arriving.
         const bytes = Buffer.from(await this.store.getRawMessage(messageId));
-        await this.store.append(targetMailbox, bytes, { arrival: false });
+        await this.store.append(targetMailbox, bytes, { arrival: false, receivedAt: source.receivedAt });
     }
 
     public async messageSetRead(messageId: string, read: boolean): Promise<void> {

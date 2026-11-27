@@ -17,8 +17,8 @@ import { emailKeys, invalidateMailboxes } from './keys';
 
 const MAIL_PAGE_SIZE = 200;
 
-// The server sorts by date and then id, newest first, so a page's cursor is its oldest message's date in epoch
-// milliseconds together with its id.
+// The server sorts by received time and then id, newest first, so a page's cursor is its oldest message's received
+// time in epoch milliseconds together with its id.
 export function useEmails(
     mailboxPath: string,
 ): UseInfiniteQueryResult<InfiniteData<EmailSummary[]>> & { emails: EmailSummary[] } {
@@ -28,9 +28,9 @@ export function useEmails(
     const query = useInfiniteQuery({
         queryKey: emailKeys.list(ownerId, mailboxPath),
         queryFn: async ({ pageParam }): Promise<EmailSummary[]> => {
-            const q: { limit: number; beforeDate?: number; beforeId?: string } = { limit: MAIL_PAGE_SIZE };
+            const q: { limit: number; beforeReceivedAt?: number; beforeId?: string } = { limit: MAIL_PAGE_SIZE };
             if (pageParam) {
-                q.beforeDate = pageParam.beforeDate;
+                q.beforeReceivedAt = pageParam.beforeReceivedAt;
                 q.beforeId = pageParam.beforeId;
             }
             // The route segment already spells the mailbox as the server reads it, and lowercasing it would lose a
@@ -39,13 +39,13 @@ export function useEmails(
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        initialPageParam: undefined as { beforeDate: number; beforeId: string } | undefined,
+        initialPageParam: undefined as { beforeReceivedAt: number; beforeId: string } | undefined,
         // Only an empty page ends the list: an optimistic move or delete shortens a full page, which a
         // short-page check would read as the last one.
         getNextPageParam: (lastPage) => {
             if (lastPage.length === 0) return undefined;
             const oldest = lastPage[lastPage.length - 1];
-            return { beforeDate: new Date(oldest.date).getTime(), beforeId: oldest.id };
+            return { beforeReceivedAt: oldest.receivedAt.getTime(), beforeId: oldest.id };
         },
         staleTime: STALE_TIME.ONE_MINUTE,
         retry: 1,

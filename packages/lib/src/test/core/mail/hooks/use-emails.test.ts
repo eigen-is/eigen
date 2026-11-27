@@ -27,6 +27,7 @@ function summary(id: string): EmailSummary {
         recipientsAll: 'me@example.com',
         textShort: '',
         date: new Date(0),
+        receivedAt: new Date(0),
         isRead: false,
         isFlagged: false,
         isDraft: false,

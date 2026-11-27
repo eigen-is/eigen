@@ -52,6 +52,8 @@ function toEmail(messageId: string, mailbox: string, parsedMail: ParsedMail, siz
         ...parsedMail,
         subject: parsedMail.subject ?? '',
         date: parsedMail.date ?? new Date(),
+        // The file's mtime: the store that read the file sets it, as it sets the filename.
+        receivedAt: new Date(),
         id: messageId,
         filename: '',
         mailbox,

@@ -921,7 +921,8 @@ async function main(): Promise<void> {
         return { name: persona.name, address: emailFor(persona.key, MAIL_DOMAIN) };
     };
     // Threads one flow's messages: the date, the Re: prefix, the reference chain and the quote. A reply quotes the
-    // message before it and its text part is the text of its HTML, both as Eigen's composer writes a reply.
+    // message before it and its text part is the text of its HTML, both as Eigen's composer writes a reply. The date
+    // comes back beside the bytes, so the delivery is received when it was sent.
     const threadState = (subject: string) => {
         const references: string[] = [];
         let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
@@ -933,7 +934,7 @@ async function main(): Promise<void> {
                 icalEvent?: { method: string; content: string };
                 headers?: Record<string, string>;
             },
-        ): Promise<Buffer> => {
+        ): Promise<{ buffer: Buffer; date: Date }> => {
             const date = demoTime(now, { daysAgo: message.daysAgo, hour: message.hour, minute: 0 });
             const messageId = `${crypto.randomUUID()}@${MAIL_DOMAIN}`;
             const from = senderOf(message);
@@ -955,7 +956,7 @@ async function main(): Promise<void> {
             });
             references.push(messageId);
             previous = { id: messageId, from, date, html: reply ?? ownHtml };
-            return buffer;
+            return { buffer, date };
         };
     };
     for (const flow of MAILS) {
@@ -998,8 +999,8 @@ async function main(): Promise<void> {
                     );
                     html = (html ?? textToHtml(message.text)) + renderAttachmentPills(refs, externalParty.email);
                 }
-                const buffer = await nextInThread(message, { to, html, ...invite });
-                const deliveredId = await recipientHome.mail.mailboxDeliver(buffer);
+                const { buffer, date } = await nextInThread(message, { to, html, ...invite });
+                const deliveredId = await recipientHome.mail.mailboxDeliver(buffer, date);
                 // The persona's own replies belong in their Sent box, not their inbox. They move there and are
                 // marked read, as mail you sent is.
                 if (!external) {
@@ -1024,11 +1025,11 @@ async function main(): Promise<void> {
                         : message.html;
                 // Every persona gets a copy of one message with one Message-ID, as with a real list mail. A
                 // reply threads only when it references that id.
-                const buffer = await nextInThread(message, { to, html });
+                const { buffer, date } = await nextInThread(message, { to, html });
                 const copies = new Map<string, string>();
                 for (const persona of PERSONAS) {
                     const home = await getHome(lookup(userByKey, persona.key).id);
-                    const deliveredId = await home.mail.mailboxDeliver(buffer);
+                    const deliveredId = await home.mail.mailboxDeliver(buffer, date);
                     copies.set(persona.key, deliveredId);
                     // The sender's own copy belongs in their Sent box, same as an inbox-thread reply.
                     if (emailFor(persona.key, MAIL_DOMAIN) === senderAddress) {

@@ -94,7 +94,9 @@ export type EmailSummary = {
     toAddress: string;
     recipientsAll: string;
     textShort: string;
+    // The sender's own stamp. The list sorts by receivedAt instead, the file's mtime, which IMAP clients read too.
     date: Date;
+    receivedAt: Date;
     isRead: boolean;
     isFlagged: boolean;
     isDraft: boolean;

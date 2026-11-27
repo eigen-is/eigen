@@ -32,6 +32,8 @@ export type PartHeaders = Pick<
     contentId: string | undefined;
     // Raw `Authentication-Results` values in document order — the MTA prepends its own on receipt.
     authenticationResults: string[];
+    // The date the topmost `Received` header ends in, after its last `;`: the last server's stamp.
+    receivedDate: Date | undefined;
 };
 
 type HeaderLine = { key: string; value: string };
@@ -52,7 +54,11 @@ export function parseHeaders(head: Buffer): PartHeaders {
     const contentType = structured(contentTypeLine ? contentTypeLine.value : defaultContentType(contentDisposition));
 
     const dateLine = lines.findLast((line) => line.key === 'date');
-    const date = dateLine && new Date(dateLine.value);
+    const date = dateLine && parseDate(dateLine.value);
+    const receivedLine = first('received')?.value;
+    const receivedDate = receivedLine?.includes(';')
+        ? parseDate(receivedLine.slice(receivedLine.lastIndexOf(';') + 1))
+        : undefined;
     const subject = last('subject');
     const messageId = last('message-id');
     const inReplyTo = last('in-reply-to');
@@ -75,7 +81,8 @@ export function parseHeaders(head: Buffer): PartHeaders {
                 .trim() ?? '',
         contentId: last('content-id'),
         subject: subject && libmime.decodeWords(subject),
-        date: date && !Number.isNaN(date.getTime()) ? date : undefined,
+        date,
+        receivedDate,
         from: addresses('from').at(-1),
         replyTo: addresses('reply-to').at(-1),
         to: oneOrMany(addresses('to')),
@@ -116,6 +123,11 @@ function headerLines(head: Buffer): HeaderLine[] {
         }
     }
     return lines;
+}
+
+function parseDate(value: string): Date | undefined {
+    const date = new Date(value.trim());
+    return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 function structured(value: string): StructuredValue {

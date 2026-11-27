@@ -228,13 +228,14 @@ export class MaildirStore {
 
     public async listMessages(
         mailbox: string,
-        opts: { limit: number; before?: { date: Date; id: string } },
+        opts: { limit: number; before?: { receivedAt: Date; id: string } },
     ): Promise<EmailSummary[]> {
         if (!(await this.mailboxExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
-        // Only the first open blocks: afterwards the DB answers at once and the sync's SSE events carry what changed.
-        if (this.db.getEmailsCount(mailbox) === 0) {
+        // Only the first open blocks, and the first after an upgrade left rows without a received time: afterwards the
+        // DB answers at once and the sync's SSE events carry what changed.
+        if (this.db.getEmailsCount(mailbox) === 0 || this.db.hasRowsWithoutReceivedAt(mailbox)) {
             await this.reconcileMailbox(mailbox);
         } else {
             this.reconcileMailbox(mailbox).catch((err) =>
@@ -283,11 +284,11 @@ export class MaildirStore {
     }
 
     // skipReconcile leaves discovery to the next pass. arrival: false is a message the user placed there, indexed and
-    // broadcast but not mail arriving, so it reaches `received` as not new.
+    // broadcast but not mail arriving, so it reaches `received` as not new. receivedAt backdates the file, now by default.
     public async append(
         mailbox: string,
         message: Buffer,
-        opts?: { skipReconcile?: boolean; arrival?: boolean },
+        opts?: { skipReconcile?: boolean; arrival?: boolean; receivedAt?: Date },
     ): Promise<string> {
         const uniqueId = createUniqueMessageId();
         // Recorded before the file lands: a watcher-driven sync can reach it first and must find the flag.
@@ -295,7 +296,7 @@ export class MaildirStore {
         try {
             // Lock covers only the delivery — the follow-up reconcile takes the lock itself.
             await this.storeLock.run(() =>
-                this.deliver(mailbox, PATHS.MAIL.NEW, `${uniqueId},S=${message.byteLength}`, message),
+                this.deliver(mailbox, PATHS.MAIL.NEW, `${uniqueId},S=${message.byteLength}`, message, opts?.receivedAt),
             );
         } catch (e) {
             this.deliveries.delete(uniqueId);
@@ -326,6 +327,7 @@ export class MaildirStore {
 
             applyFlagsFromFilename(parsed, filename);
             parsed.filename = filename;
+            parsed.receivedAt = (await this.getMessageFile(MAILBOX_DRAFTS, filename).stat()).mtime;
             this.db.insertEmails([parsed]);
             this.indexBytes += parsed.size - (replaced?.size ?? 0);
             // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
@@ -465,6 +467,7 @@ export class MaildirStore {
                     const p = await parseEml(id, mailbox, file);
                     applyFlagsFromFilename(p, fileName);
                     p.filename = fileName;
+                    p.receivedAt = (await file.stat()).mtime;
                     parsed.push(p);
                 } catch (e: unknown) {
                     this.deliveries.delete(id);
@@ -485,6 +488,22 @@ export class MaildirStore {
                 this.events.received(p, delivered ?? indexed);
             }
         }
+
+        // A row the v7 migration found reads its received time from its file, as a rebuilt index would.
+        const received: { id: string; receivedAt: Date }[] = [];
+        for (const record of dbRecords) {
+            const fileName = diskFiles.get(record.id);
+            if (record.receivedAt.getTime() !== 0 || !fileName) continue;
+            try {
+                received.push({
+                    id: record.id,
+                    receivedAt: (await this.getMessageFile(mailbox, fileName).stat()).mtime,
+                });
+            } catch (e: unknown) {
+                if (!isEnoent(e)) throw e;
+            }
+        }
+        this.db.setReceivedAt(received);
 
         // Flag changes (on disk with different filename)
         for (const [id, record] of dbById) {
@@ -679,10 +698,18 @@ export class MaildirStore {
     }
 
     // Maildir delivery: staged in `tmp/` and fsynced, then renamed into `new` for an arrival or `cur` for Eigen's own write.
-    private async deliver(mailbox: string, subdir: 'new' | 'cur', filename: string, bytes: Buffer): Promise<void> {
+    // A backdated file gets its mtime in `tmp/`, so no sync can index it with the time of the write.
+    private async deliver(
+        mailbox: string,
+        subdir: 'new' | 'cur',
+        filename: string,
+        bytes: Buffer,
+        receivedAt?: Date,
+    ): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
         await this.storage.writeDurable(tmpPath, bytes);
+        if (receivedAt) await this.storage.setModifiedTime(tmpPath, receivedAt);
         await this.storage.renameDurable(tmpPath, path.join(mailboxPath, subdir, filename));
     }
 

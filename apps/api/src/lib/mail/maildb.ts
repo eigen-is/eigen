@@ -70,6 +70,7 @@ export class MailDB {
             recipientsAll: email.recipientsAll,
             textShort: email.textShort,
             date: email.date,
+            receivedAt: email.receivedAt,
             size: email.size,
             isRead: email.isRead,
             isFlagged: email.isFlagged,
@@ -154,20 +155,49 @@ export class MailDB {
     // A `SELECT *` would carry every row's `textShort`, the whole body kept for FTS, just to compare filenames.
     public listReconcileRows(mailbox: string) {
         return this.db
-            .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
+            .select({
+                id: schema.emails.id,
+                filename: schema.emails.filename,
+                size: schema.emails.size,
+                receivedAt: schema.emails.receivedAt,
+            })
             .from(schema.emails)
             .where(eq(schema.emails.mailbox, mailbox))
             .all();
     }
 
-    // Keyset pagination, newest first. `id` breaks a tie, because `date` has duplicates in practice.
-    public listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
+    // A row the v7 migration found has no received time until a sync reads its file.
+    public hasRowsWithoutReceivedAt(mailbox: string): boolean {
+        return (
+            this.db
+                .select({ id: schema.emails.id })
+                .from(schema.emails)
+                .where(and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.receivedAt, new Date(0))))
+                .limit(1)
+                .get() !== undefined
+        );
+    }
+
+    public setReceivedAt(rows: readonly { id: string; receivedAt: Date }[]): void {
+        if (rows.length === 0) return;
+        this.db.transaction((tx) => {
+            for (const { id, receivedAt } of rows) {
+                tx.update(schema.emails).set({ receivedAt }).where(eq(schema.emails.id, id)).run();
+            }
+        });
+    }
+
+    // Keyset pagination, newest first. `id` breaks a tie, because `receivedAt` has duplicates in practice.
+    public listMessages(
+        mailbox: string,
+        opts: { limit: number; before?: { receivedAt: Date; id: string } },
+    ): EmailSummary[] {
         const conditions: (SQL | undefined)[] = [eq(schema.emails.mailbox, mailbox)];
         if (opts.before) {
             conditions.push(
                 or(
-                    lt(schema.emails.date, opts.before.date),
-                    and(eq(schema.emails.date, opts.before.date), lt(schema.emails.id, opts.before.id)),
+                    lt(schema.emails.receivedAt, opts.before.receivedAt),
+                    and(eq(schema.emails.receivedAt, opts.before.receivedAt), lt(schema.emails.id, opts.before.id)),
                 ),
             );
         }
@@ -175,7 +205,7 @@ export class MailDB {
             .select()
             .from(schema.emails)
             .where(and(...conditions))
-            .orderBy(desc(schema.emails.date), desc(schema.emails.id))
+            .orderBy(desc(schema.emails.receivedAt), desc(schema.emails.id))
             .limit(opts.limit)
             .all();
         return rows.map(cutPreview);
@@ -218,7 +248,7 @@ export class MailDB {
                 .select()
                 .from(schema.emails)
                 .where(and(inArray(schema.emails.id, candidateIds), mailboxCond))
-                .orderBy(desc(schema.emails.date), desc(schema.emails.id))
+                .orderBy(desc(schema.emails.receivedAt), desc(schema.emails.id))
                 .limit(opts.limit)
                 .all()
                 .map(cutPreview);
@@ -254,7 +284,7 @@ export class MailDB {
             FROM emails_fts
             JOIN emails e ON e.rowid = emails_fts.rowid
             WHERE emails_fts MATCH ${match}${mailboxFilter}${candidateFilter}
-            ORDER BY bm25(emails_fts), e.date DESC, e.id DESC
+            ORDER BY bm25(emails_fts), e.receivedAt DESC, e.id DESC
             LIMIT ${opts.limit}
         `);
         if (ranked.length === 0) return [];

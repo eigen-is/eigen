@@ -225,6 +225,10 @@ export class LocalFilesystem {
         return await fsPromises.stat(fullPath);
     }
 
+    public async setModifiedTime(filePath: string, time: Date): Promise<void> {
+        await fsPromises.utimes(this.getFilePath(filePath), time, time);
+    }
+
     public async unlink(filePath: string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         await fsPromises.unlink(fullPath);

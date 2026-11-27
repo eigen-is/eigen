@@ -1,17 +1,18 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
+import { utimesSync } from 'node:fs';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
-import { seedMaildirFolder } from '../mail-test-helpers';
-import { app, assertJson, authedRequest, getTestContext } from '../setup';
+import { makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
+import { assertJson, authedRequest, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
 // Seed a dedicated custom mailbox (unique name, isolated from every other test file) with a
 // known set of messages: 201 total (> the default page size of 200), three of which share a
-// single timestamp to pin the (date, id) keyset tiebreak, plus one long body whose unique word
+// single received time to pin the (receivedAt, id) keyset tiebreak, plus one long body whose unique word
 // sits past character 200 to prove the list-response textShort cap doesn't touch the FTS index. The long
-// one has a sender of its own, so a from:-only search (the path with no FTS term) can find it too.
+// one has a sender of its own, so a from:-only search (the path with no FTS term) can find it too. Each
+// Date header runs the other way round, so a list that sorted by it would come out reversed.
 const TOTAL = 201;
 const LONG_IDX = 50;
 const NEEDLE = 'pagefindneedle';
@@ -19,50 +20,9 @@ const LONG_SENDER = 'longbody@example.com';
 const LONG_BODY = `${'lorem ipsum dolor sit amet '.repeat(10)}${NEEDLE} end`;
 const WALK_LIMIT = 5;
 
-type Seed = { id: string; subject: string; dateMs: number };
+type Seed = { id: string; subject: string };
 
-async function deliverToInbox(
-    email: string,
-    subject: string,
-    dateMs: number,
-    body: string,
-    from = 'sender@example.com',
-): Promise<string> {
-    const eml = [
-        `From: ${from}`,
-        `To: ${email}`,
-        `Subject: ${subject}`,
-        `Date: ${new Date(dateMs).toUTCString()}`,
-        '',
-        body,
-    ].join('\r\n');
-    const res = await app.handle(
-        new Request(`http://localhost/mail/deliver/${email}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'message/rfc822' },
-            body: new TextEncoder().encode(eml).buffer as ArrayBuffer,
-        }),
-    );
-    if (!res.ok) throw new Error(`deliver failed: ${res.status}`);
-    return await res.text();
-}
-
-// Delivery indexes via a sync that can coalesce with an in-flight fs-watcher sync and miss the
-// just-written file (see search.test.ts). Drive a fresh sync and retry until the row is in the
-// DB, then move it out of the inbox into the isolated box (move preserves the Date-header date).
-async function moveWhenIndexed(ownerId: string, id: string, box: string): Promise<void> {
-    const { getHome } = await import('../../lib/home');
-    const home = await getHome(ownerId);
-    for (let i = 0; i < 40; i++) {
-        await home.mail.mailboxGet(MAILBOX_INBOX);
-        if (await home.mail.messageGet(id)) {
-            await home.mail.messageMove(id, box);
-            return;
-        }
-        await Bun.sleep(25);
-    }
-    throw new Error(`message ${id} was not indexed for move`);
-}
+const receivedMs = (row: EmailSummary) => new Date(row.receivedAt).getTime();
 
 describe.skipIf(isWindows)('Mail pagination', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -84,20 +44,21 @@ describe.skipIf(isWindows)('Mail pagination', () => {
 
         const base = Date.UTC(2021, 0, 1, 0, 0, 0);
         for (let i = 0; i < TOTAL; i++) {
-            // Indices 100/101/102 all collapse onto the minute-100 timestamp -> a 3-message cluster
-            // sharing one date; every other index gets its own distinct minute.
-            const dateMs = i === 101 || i === 102 ? base + 100 * 60_000 : base + i * 60_000;
+            // Indices 100/101/102 all collapse onto the minute-100 received time -> a 3-message cluster
+            // sharing one; every other index gets its own distinct minute.
+            const receivedAt = new Date(i === 101 || i === 102 ? base + 100 * 60_000 : base + i * 60_000);
             const subject = `Page ${i}`;
-            const id =
+            const id = `${Date.now()}.page${i}`;
+            const eml =
                 i === LONG_IDX
-                    ? await deliverToInbox(ctx.charlie.user.email, subject, dateMs, LONG_BODY, LONG_SENDER)
-                    : await deliverToInbox(ctx.charlie.user.email, subject, dateMs, `body ${i}`);
-            await moveWhenIndexed(ownerId, id, box);
-            seeds.push({ id, subject, dateMs });
+                    ? makeEml(subject, { from: LONG_SENDER, body: LONG_BODY, date: new Date(base - i * 60_000) })
+                    : makeEml(subject, { body: `body ${i}`, date: new Date(base - i * 60_000) });
+            const filePath = seedMaildirFile(ownerId, box, id, eml);
+            utimesSync(filePath, receivedAt, receivedAt);
+            seeds.push({ id, subject });
             if (i === LONG_IDX) longId = id;
         }
-        // Seeding a whole mailbox with per-message index polls regularly outruns bun's 5s hook default under load.
-    }, 60_000);
+    });
 
     test('page 1 returns the newest messages, capped at limit', async () => {
         const page = await assertJson<EmailSummary[]>(
@@ -106,7 +67,7 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         expect(page.length).toBe(WALK_LIMIT);
         expect(page[0].subject).toBe(`Page ${TOTAL - 1}`);
         for (let i = 1; i < page.length; i++) {
-            expect(new Date(page[i - 1].date).getTime()).toBeGreaterThanOrEqual(new Date(page[i].date).getTime());
+            expect(receivedMs(page[i - 1])).toBeGreaterThanOrEqual(receivedMs(page[i]));
         }
     });
 
@@ -120,7 +81,7 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         expect(page.length).toBe(200);
         expect(page[0].subject).toBe(`Page ${TOTAL - 1}`);
         for (let i = 1; i < page.length; i++) {
-            expect(new Date(page[i - 1].date).getTime()).toBeGreaterThanOrEqual(new Date(page[i].date).getTime());
+            expect(receivedMs(page[i - 1])).toBeGreaterThanOrEqual(receivedMs(page[i]));
         }
     });
 
@@ -130,29 +91,28 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         );
         expect(full.length).toBe(TOTAL);
 
-        // Authoritative order is date DESC, id DESC.
+        // Authoritative order is receivedAt DESC, id DESC.
         for (let i = 1; i < full.length; i++) {
-            const prev = new Date(full[i - 1].date).getTime();
-            const cur = new Date(full[i].date).getTime();
+            const prev = receivedMs(full[i - 1]);
+            const cur = receivedMs(full[i]);
             expect(prev).toBeGreaterThanOrEqual(cur);
             if (prev === cur) expect(full[i - 1].id > full[i].id).toBe(true);
         }
 
-        // The seeded cluster materialised: at least one date is shared by >= 3 messages.
-        const perDate = new Map<number, number>();
+        // The seeded cluster materialised: at least one received time is shared by >= 3 messages.
+        const perTime = new Map<number, number>();
         for (const r of full) {
-            const key = new Date(r.date).getTime();
-            perDate.set(key, (perDate.get(key) ?? 0) + 1);
+            perTime.set(receivedMs(r), (perTime.get(receivedMs(r)) ?? 0) + 1);
         }
-        expect([...perDate.values()].some((c) => c >= 3)).toBe(true);
+        expect([...perTime.values()].some((c) => c >= 3)).toBe(true);
 
         const walked: string[] = [];
         const seen = new Set<string>();
-        let before: { dateMs: number; id: string } | undefined;
+        let before: { receivedMs: number; id: string } | undefined;
         let dup = false;
         for (let guard = 0; guard <= TOTAL && !dup; guard++) {
             let path = `/mail/${ownerId}/mailbox/${box}?limit=${WALK_LIMIT}`;
-            if (before) path += `&beforeDate=${before.dateMs}&beforeId=${encodeURIComponent(before.id)}`;
+            if (before) path += `&beforeReceivedAt=${before.receivedMs}&beforeId=${encodeURIComponent(before.id)}`;
             const pg = await assertJson<EmailSummary[]>(await authedRequest(token, path));
             if (pg.length === 0) break;
             for (const row of pg) {
@@ -161,7 +121,7 @@ describe.skipIf(isWindows)('Mail pagination', () => {
                 walked.push(row.id);
             }
             const last = pg[pg.length - 1];
-            before = { dateMs: new Date(last.date).getTime(), id: last.id };
+            before = { receivedMs: receivedMs(last), id: last.id };
             if (pg.length < WALK_LIMIT) break;
         }
 
