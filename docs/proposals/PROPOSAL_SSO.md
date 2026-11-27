@@ -218,6 +218,12 @@ Two small items:
   fixed id the provider gives each person. better-auth stores it as `accountId` on the `account`
   row (`../../apps/api/auth-schema.ts`) and looks it up first (`handleOAuthUserInfo`). So:
   provider + `sub` → person id.
+- **The provider must give each person a `sub` that is never reused.** Keycloak does (the
+  user's internal id), and so does authentik by default (a hash of the user id). But authentik
+  can also be set to use the username, the address or the UPN as `sub`. Then a new person with
+  an old username gets the old `sub`, and if the old account still exists, the sign-in is a
+  plain sign-in to it. Eigen cannot see this from outside and no guard catches it. So the
+  screen where the owner adds a provider says it, and so do the docs.
 - **Account linking: only a marked account, at a proven domain.** When the `sub` is unknown,
   better-auth looks for an account with the same address and links to it. Eigen keeps the
   default `requireLocalEmailVerified: true`, so only an account with `emailVerified` set can be
