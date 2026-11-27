@@ -75,9 +75,9 @@ export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: Drive
     if (!intoOpenFolder) throw new ApiError(423, DOCUMENT_WRITE_ERROR);
 }
 
-// What a visitor without a login may read: the index of the highest path with a link, or null. A visitor is never live,
-// so a raw database is refused as for every such reader. Past that the chain is folders, then at most a file, or a
-// collab document and at most its media/ and a file in it. The link is at or above that end.
+// What a visitor without a login may read: the index of the highest path with a link, or null. The chain is folders,
+// then at most a file, or a collab document and at most its media/ and a file in it, which leaves out every raw
+// database. The link is at or above that end.
 export function canReadByLink(chain: readonly DrivePath[]): number | null {
     const head = chain.findIndex((path) => path.visibility === 'link');
     if (head < 0 || isTrashedChain(chain)) return null;
