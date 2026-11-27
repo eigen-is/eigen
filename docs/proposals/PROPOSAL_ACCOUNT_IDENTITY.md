@@ -251,6 +251,7 @@ What is **not** solved: mail to a reused address reaches the new holder (correct
 SSO means: sign in with your company account (authentik, Keycloak). It is built after 0.5.0. The rules below are what that work must follow.
 
 - **The login is bound to the provider and its `sub`**, not to the address. The `sub` is the fixed id the provider gives each person. better-auth already stores it (`accountId` on the `account` row) and looks it up first (`handleOAuthUserInfo`). So: provider + `sub` → person id.
+- **The provider must give each person a `sub` that is never reused.** Keycloak and authentik do by default. But authentik can be set to use the username or the address as `sub`. Then a new Anna gets old Anna's `sub`, and if old Anna's account still exists, new Anna signs in to it. Eigen cannot see this from outside and no guard catches it. So the screen where the owner adds a provider says it, and so do the docs.
 - **A provider's domain becomes a member domain.** The address a provider sends must be on that provider's own domain. Any other address is refused. So an SSO login can never touch a guest.
 - **Adding a provider whose domain has guests.** Say Acme adds a provider for partner.com, and three guests have partner.com addresses. The owner is shown these guests and must confirm. Then they are deleted, and the share registry rows for their addresses go too. Their old shares and messages stay under the plain address and belong to nobody. Such an entry looks dead in a share list, with a remove button. The partner.com people sign in with SSO as new members, and what they need is shared again.
 - **A domain stays a member domain** as long as a member has an address on it, also after its provider is removed. Known and accepted: once the provider is removed and the last member on that domain is deleted, the domain is a guest domain again, and old stored entries match a returning guest.
@@ -442,6 +443,7 @@ SSO choices:
 - [x] The owner route reads the provider's settings page itself, public addresses only. A setting in the server's environment allows a provider on a private network, from the first version.
 - [x] 2FA required for the owner and admins: yes, but as its own item in the roadmap's Security pack, after the action that removes 2FA for a person who lost it. Not part of the identity change or of SSO.
 - [x] An address change is refused in `user.update.before` until the address-change feature exists, and the admin role loses the `set-email` right until then.
+- [x] The provider must give each person a `sub` that is never reused. Eigen cannot check it, so the provider screen and the docs say it.
 - [x] The order: the identity change first, in 0.5.0. SSO starts after it and ships in a 0.5.x, built by Tobias or by us.
 
 What the plan must respect:
