@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
 import * as xml from '../../../lib/core/xml';
@@ -8,19 +9,22 @@ import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
+import * as assemble from '../../../lib/import/doc/assemble';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
 import { MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
+import { Styles } from '../../../lib/import/doc/styles';
+import * as tables from '../../../lib/import/doc/tables';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import { PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { CHARS_PER_UNIT } from '../../../lib/ooxml/budget';
 import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
+import * as wordml from '../../../lib/ooxml/wordml';
 import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
 import { MAX_DECOMPRESSED_BYTES, openZip, ZipReader } from '../../../lib/ooxml/zip';
-import { cpuClock } from '../../cpu-time';
 import {
     buildDocxWithBody,
     chartParts,
@@ -70,10 +74,31 @@ const smartArtData = (inner: string) => ({
 });
 
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
+// A built docx's read, as one side of a costRatio.
+const reading = (docx: ArrayBuffer) => ({ run: () => docxToPmJson(Buffer.from(docx)) });
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
 const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
 // Each note's text, in document order.
 const notes = (json: JSONContent) => nodesOfType(json, 'footnote').map((note) => texts(note).join(''));
+
+// The stories a read builds blocks of, the body's and each note's, counted by a spy that throws past MAX_STORIES, so a
+// read that builds a note again for each reference fails at once. The status is the read's refusal.
+const MAX_STORIES = 20;
+async function storiesBuilt(docx: ArrayBuffer): Promise<{ status: number; built: number }> {
+    const { buildBlocks } = assemble;
+    let built = 0;
+    const builds = spyOn(assemble, 'buildBlocks').mockImplementation((raw) => {
+        built += 1;
+        if (built > MAX_STORIES) throw new Error(`the read built blocks more than ${MAX_STORIES} times`);
+        return buildBlocks(raw);
+    });
+    try {
+        const { status } = await rejection(() => docxToPmJson(Buffer.from(docx)));
+        return { status, built };
+    } finally {
+        builds.mockRestore();
+    }
+}
 
 // A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
 // once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
@@ -705,23 +730,25 @@ describe('structure', () => {
         expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
     }, 5000);
 
-    // A style's numbering without a level looks through its definition's levels for every paragraph.
+    // A style's numbering without a level looks through its definition's levels for every paragraph. Against the same
+    // paragraphs without the forged levels, the read costs about 3 times as much with them dropped and 110 times kept.
     test('100,000 levels past the ninth in one definition cost 10,000 styled paragraphs nothing', async () => {
         const levels = Array.from(
             { length: 100_000 },
             (_, index) => `<w:lvl w:ilvl="${index + LIST_LEVELS}"><w:numFmt w:val="decimal"/></w:lvl>`,
         ).join('');
-        const numbering = `<w:abstractNum w:abstractNumId="1">${levels}<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
+        const numbering = (forged: string) =>
+            `<w:abstractNum w:abstractNumId="1">${forged}<w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;
         const styles =
             '<w:style w:type="paragraph" w:styleId="L"><w:name w:val="L"/><w:pPr><w:numPr><w:numId w:val="1"/></w:numPr></w:pPr></w:style>';
-        const docx = await buildDocxWithBody(paragraph(run('Item'), '<w:pStyle w:val="L"/>').repeat(10_000), {
-            numbering,
-            styles,
-        });
-        const cpuMs = cpuClock();
-        const { json } = docxToPmJson(Buffer.from(docx));
-        expect(cpuMs()).toBeLessThan(2000);
-        expect(nodesOfType(json, 'listItem')).toHaveLength(10_000);
+        const body = paragraph(run('Item'), '<w:pStyle w:val="L"/>').repeat(10_000);
+        const [forged, honest] = await Promise.all([
+            buildDocxWithBody(body, { numbering: numbering(levels), styles }),
+            buildDocxWithBody(body, { numbering: numbering(''), styles }),
+        ]);
+        expect(nodesOfType(docxToPmJson(Buffer.from(forged)).json, 'listItem')).toHaveLength(10_000);
+        const { ratio } = await costRatio(reading(forged), reading(honest));
+        expect(ratio).toBeLessThan(18);
     }, 60_000);
 
     test('quotes nest at most eight deep, deeper ones joining the eighth', async () => {
@@ -787,6 +814,8 @@ describe('structure', () => {
         expect(nodesOfType(json, 'orderedList')).toHaveLength(1);
     });
 
+    // Against 10,000 items of one list, 10,000 lists of their own num cost about 1.5 times as much; with each num found
+    // by a scan of the others, 38 times.
     test('10,000 lists stay linear', async () => {
         const nums = Array.from(
             { length: 10_000 },
@@ -796,30 +825,52 @@ describe('structure', () => {
         const body = Array.from({ length: 10_000 }, (_, index) => paragraph(run('Item'), ordered(100 + index))).join(
             '',
         );
-        const cpuMs = cpuClock();
-        const json = await imported(body, { numbering: nums });
-        expect(nodesOfType(json, 'orderedList')).toHaveLength(10_000);
-        expect(cpuMs()).toBeLessThan(2000);
+        const [lists, items] = await Promise.all([
+            buildDocxWithBody(body, { numbering: nums }),
+            buildDocxWithBody(paragraph(run('Item'), ordered(2)).repeat(10_000)),
+        ]);
+        expect(nodesOfType(docxToPmJson(Buffer.from(lists)).json, 'orderedList')).toHaveLength(10_000);
+        const { ratio } = await costRatio(reading(lists), reading(items));
+        expect(ratio).toBeLessThan(7.5);
     }, 10_000);
 
-    // A label grows with its lvlText and, in letters, with every item; a heading keeps it as text.
+    // A label grows with its lvlText and, in letters, with every item; a heading keeps it as text. Its first number
+    // here is 1,154 letters, so a label built to the cap spells one number per heading, and one built whole and then
+    // cut spells 2,000. A spy counts the numbers spelled and throws past MAX_SPELLED, so that build fails at once.
     test('numbered heading labels are capped, so many cost no more than short ones', async () => {
         const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:start w:val="30000"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="${'%1'.repeat(2000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
-        const cpuMs = cpuClock();
-        const json = await imported(heading.repeat(5000), { numbering });
-        expect(cpuMs()).toBeLessThan(2000);
-        const [first] = nodesOfType(json, 'heading');
-        expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
+        const docx = await buildDocxWithBody(heading.repeat(5000), { numbering });
+        const MAX_SPELLED = 100_000;
+        const { spellNumber } = wordml;
+        let spelled = 0;
+        const spells = spyOn(wordml, 'spellNumber').mockImplementation((value, format) => {
+            spelled += 1;
+            if (spelled > MAX_SPELLED) throw new Error(`the labels spelled more than ${MAX_SPELLED} numbers`);
+            return spellNumber(value, format);
+        });
+        try {
+            const [first] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'heading');
+            expect(nodesOfType(first ?? {}, 'text')[0]?.text?.length).toBeLessThanOrEqual(255 + ' Title'.length);
+        } finally {
+            spells.mockRestore();
+        }
+        expect(spelled).toBeLessThanOrEqual(MAX_SPELLED);
     }, 20_000);
 
+    // Cut to the label cap when read, a 4 MB lvlText costs 1,000 headings about 2.6 times what a short one does, the
+    // parse of the part; split whole for every heading, 4,700 times.
     test('a 4 MB lvlText costs a heading what a short one does', async () => {
-        const numbering = `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${'%1'.repeat(2_000_000)}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
+        const numbering = (lvlText: string) =>
+            `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${lvlText}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
-        const cpuMs = cpuClock();
-        const json = await imported(heading.repeat(200), { numbering });
-        expect(cpuMs()).toBeLessThan(2000);
-        expect(nodesOfType(json, 'heading')).toHaveLength(200);
+        const [long, short] = await Promise.all([
+            buildDocxWithBody(heading.repeat(1000), { numbering: numbering('%1'.repeat(2_000_000)) }),
+            buildDocxWithBody(heading.repeat(1000), { numbering: numbering('%1') }),
+        ]);
+        expect(nodesOfType(docxToPmJson(Buffer.from(long)).json, 'heading')).toHaveLength(1000);
+        const { ratio } = await costRatio(reading(long), reading(short));
+        expect(ratio).toBeLessThan(110);
     }, 30_000);
 
     // A note in a note is its text, read at most two deep: a note's reference to itself, or back to the note around it, goes.
@@ -839,10 +890,10 @@ describe('structure', () => {
     test('a long note referenced 400 times is read once, and its copies are charged', async () => {
         const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
         expect(notes(await imported(paragraph(noteRef(1).repeat(2)), { footnotes }))).toHaveLength(2);
-        const cpuMs = cpuClock();
-        const error = await rejection(() => imported(paragraph(noteRef(1).repeat(400)), { footnotes }));
-        expect(cpuMs()).toBeLessThan(1000);
-        expect(error.status).toBe(413);
+        const docx = await buildDocxWithBody(paragraph(noteRef(1).repeat(400)), { footnotes });
+        const { status, built } = await storiesBuilt(docx);
+        expect(status).toBe(413);
+        expect(built).toBeLessThanOrEqual(MAX_STORIES);
     }, 20_000);
 
     // Read inside a note too, a note is read once and each copy charged: 1,000 references to a 1,000-paragraph note in
@@ -850,34 +901,47 @@ describe('structure', () => {
     test('a note referenced 1,000 times in a note is read once there, and its copies are charged', async () => {
         const footnotes =
             footnote(1, paragraph(run('x')).repeat(1000)) + footnote(2, paragraph(noteRef(1).repeat(1000)));
-        const cpuMs = cpuClock();
-        const error = await rejection(() => imported(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes }));
-        expect(cpuMs()).toBeLessThan(1000);
-        expect(error.status).toBe(413);
+        const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes });
+        const { status, built } = await storiesBuilt(docx);
+        expect(status).toBe(413);
+        expect(built).toBeLessThanOrEqual(MAX_STORIES);
     }, 20_000);
 
+    // Read for each graphic that names it, the part's 1,000 points would come in 1,000 times.
     test('a SmartArt that 1,000 graphics name is read once', async () => {
         const points = Array.from(
             { length: 1000 },
             (_, index) =>
                 `<dgm:pt modelId="${index}"><dgm:t><a:p><a:r><a:t>P${index}</a:t></a:r></a:p></dgm:t></dgm:pt>`,
         ).join('');
-        const cpuMs = cpuClock();
         const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
-        expect(cpuMs()).toBeLessThan(1000);
         expect(texts(json)).toHaveLength(1000);
         expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1000 }]);
     }, 60_000);
 
+    // Found through one index, each note is a lookup; found by scanning its part for each reference, 12,000 notes
+    // cost 144 million children. A spy counts the children our xml lookups return and throws past MAX_SCANNED, so
+    // that read fails at once.
     test('12,000 notes stay linear', async () => {
         const count = 12_000;
         const ids = Array.from({ length: count }, (_, index) => index + 1);
         const body = paragraph(ids.map(noteRef).join(''));
         const footnotes = ids.map((id) => footnote(id, paragraph(run(`N${id}`)))).join('');
-        const cpuMs = cpuClock();
-        const json = await imported(body, { footnotes });
-        expect(cpuMs()).toBeLessThan(2000);
-        expect(notes(json)).toHaveLength(count);
+        const docx = await buildDocxWithBody(body, { footnotes });
+        const MAX_SCANNED = 2_000_000;
+        const { xmlElements } = xml;
+        let scanned = 0;
+        const scans = spyOn(xml, 'xmlElements').mockImplementation((element) => {
+            scanned += element.children.length;
+            if (scanned > MAX_SCANNED) throw new Error(`the read scanned more than ${MAX_SCANNED} children`);
+            return xmlElements(element);
+        });
+        try {
+            expect(notes(docxToPmJson(Buffer.from(docx)).json)).toHaveLength(count);
+        } finally {
+            scans.mockRestore();
+        }
+        expect(scanned).toBeLessThanOrEqual(MAX_SCANNED);
     }, 60_000);
 
     test('a floating one-cell table that holds no figure is read once', async () => {
@@ -888,17 +952,33 @@ describe('structure', () => {
         expect(notes(json)).toEqual(['Note']);
     });
 
+    // Each floating table read once is one read per table; its cell read again for the figure test doubles the reads
+    // with every depth, about C(24, 8) of them here. A spy counts the table reads and throws past MAX_READS.
     test('floating tables nest at most eight deep, each read once', async () => {
         const depth = 24;
         const open = '<w:tbl><w:tblPr><w:tblpPr w:tblpX="0"/></w:tblPr><w:tr><w:tc>';
         const body = `${open.repeat(depth)}${paragraph(run('Core'))}${'</w:tc></w:tr></w:tbl>'.repeat(depth)}`;
-        const cpuMs = cpuClock();
-        const json = await imported(body);
-        expect(cpuMs()).toBeLessThan(1000);
-        expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
-        expect(texts(json)).toEqual(['Core']);
+        const docx = await buildDocxWithBody(body);
+        const MAX_READS = 1000;
+        const { readTable } = tables;
+        let reads = 0;
+        const spy = spyOn(tables, 'readTable').mockImplementation((reader, table, scope) => {
+            reads += 1;
+            if (reads > MAX_READS) throw new Error(`the read read tables more than ${MAX_READS} times`);
+            return readTable(reader, table, scope);
+        });
+        try {
+            const { json } = docxToPmJson(Buffer.from(docx));
+            expect(nodesOfType(json, 'table')).toHaveLength(MAX_TABLE_DEPTH);
+            expect(texts(json)).toEqual(['Core']);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(reads).toBeLessThanOrEqual(MAX_READS);
     }, 20_000);
 
+    // A style's chain stops at MAX_CHAIN: walked whole, 300 styles near the end of a 10,000-deep chain look up about
+    // three million styles. A spy counts the lookups and throws past MAX_LOOKUPS, so that walk fails at once.
     test('a 10,000-deep basedOn chain costs each paragraph style no more than a short one', async () => {
         const count = 10_000;
         const styles = Array.from(
@@ -909,12 +989,26 @@ describe('structure', () => {
         const body = Array.from({ length: 300 }, (_, index) =>
             paragraph(run('Text'), `<w:pStyle w:val="s${count - 1 - index}"/>`),
         ).join('');
-        const cpuMs = cpuClock();
-        const json = await imported(body, { styles });
-        expect(cpuMs()).toBeLessThan(2000);
-        expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
+        const docx = await buildDocxWithBody(body, { styles });
+        const MAX_LOOKUPS = 300_000;
+        const { get } = Styles.prototype;
+        let lookups = 0;
+        const spy = spyOn(Styles.prototype, 'get').mockImplementation(function (this: Styles, id) {
+            lookups += 1;
+            if (lookups > MAX_LOOKUPS) throw new Error(`the read looked up styles more than ${MAX_LOOKUPS} times`);
+            return get.call(this, id);
+        });
+        try {
+            const { json } = docxToPmJson(Buffer.from(docx));
+            expect(nodesOfType(json, 'paragraph')).toHaveLength(300);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(lookups).toBeLessThanOrEqual(MAX_LOOKUPS);
     }, 60_000);
 
+    // A numStyleLink chain stops at MAX_CHAIN: walked whole for each of 10,000 items, it asks the styles for 50 million
+    // paragraph looks. A spy counts them and throws past MAX_HOPS, so that walk fails at once.
     test('a 5,000-link numStyleLink chain is walked once, not per item', async () => {
         const links = 5000;
         const chain = Array.from({ length: links }, (_, index) => 10 + index);
@@ -931,9 +1025,21 @@ describe('structure', () => {
             )
             .join('');
         const body = paragraph(run('Item'), ordered(10)).repeat(10_000);
-        const cpuMs = cpuClock();
-        await imported(body, { numbering, styles });
-        expect(cpuMs()).toBeLessThan(2000);
+        const docx = await buildDocxWithBody(body, { numbering, styles });
+        const MAX_HOPS = 1_000_000;
+        const { para } = Styles.prototype;
+        let hops = 0;
+        const spy = spyOn(Styles.prototype, 'para').mockImplementation(function (this: Styles, id) {
+            hops += 1;
+            if (hops > MAX_HOPS) throw new Error(`the read asked styles for more than ${MAX_HOPS} paragraph looks`);
+            return para.call(this, id);
+        });
+        try {
+            expect(nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'paragraph')).toHaveLength(10_000);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(hops).toBeLessThanOrEqual(MAX_HOPS);
     }, 60_000);
 
     // y-tiptap passes a paragraph's children to one call: 740,000 overflowed the stack.
@@ -948,13 +1054,18 @@ describe('structure', () => {
         expect(nodesOfType(await imported(body), 'hardBreak')).toHaveLength(MAX_INLINE_NODES / 2);
     });
 
+    // The innermost open field answers for the fields around it. Against the same texts without the fields, 40,000
+    // fields left open cost about 2 times as much; scanned for every run child, 86 times.
     test('fields left open cost each run what one field does', async () => {
         const open = '<w:fldChar w:fldCharType="begin"/><w:fldChar w:fldCharType="separate"/>';
-        const body = paragraph(`<w:r>${open.repeat(40_000)}${'<w:t>x</w:t>'.repeat(40_000)}</w:r>`);
-        const cpuMs = cpuClock();
-        const json = await imported(body);
-        expect(cpuMs()).toBeLessThan(1000);
-        expect(texts(json).join('')).toHaveLength(40_000);
+        const words = '<w:t>x</w:t>'.repeat(40_000);
+        const [fielded, plain] = await Promise.all([
+            buildDocxWithBody(paragraph(`<w:r>${open.repeat(40_000)}${words}</w:r>`)),
+            buildDocxWithBody(paragraph(`<w:r>${words}</w:r>`)),
+        ]);
+        expect(texts(docxToPmJson(Buffer.from(fielded)).json).join('')).toHaveLength(40_000);
+        const { ratio } = await costRatio(reading(fielded), reading(plain));
+        expect(ratio).toBeLessThan(13);
     }, 60_000);
 });
 
