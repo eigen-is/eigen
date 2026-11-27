@@ -78,7 +78,7 @@ describe('SharedDrive gating enumeration', () => {
         requireShare: { gate: 'private-helper', reason: 'the gate for ACL changes: write held by name' },
         requireCopy: {
             gate: 'private-helper',
-            reason: 'the read gate of a copy, and no document for a reader not live',
+            reason: 'the read gate of a copy, and no raw database for a reader not live',
         },
         holdsRawDatabase: { gate: 'private-helper', reason: 'whether a copy source is or holds a raw database' },
 
