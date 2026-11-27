@@ -18,6 +18,10 @@ A public link lets anyone who has it view a file, a folder or a document, withou
 3. Click **Copy link** next to **People with access**.
 4. Click **Save**, and send the link to whoever you like.
 
+::: grid columns="1"
+![The Share dialog with General access set to Anyone with the link, and the line "Anyone on the internet with the link can view" under it](/data/about/media/drive-still-public-link.webp)
+:::
+
 You can do this on a file, a folder or a document in Docs, Sheets, Slides, Vector or Stickies. A chat room can't have a public link.
 
 To change **General access** you need to own the item or be added to it by name as an editor, yourself or through a team. Someone who can edit only through **Anyone signed in with the link** can't turn on a public link.
@@ -42,6 +46,10 @@ Someone who opens the link without signing in can:
 - See the comments on a document, with who wrote each one.
 
 They can't edit or comment, download a document in another format, or see the replies under a comment, the people with access, the version history or who else is viewing. The top bar has a **Log in** button that brings them back to the same item after they sign in.
+
+::: grid columns="1"
+![A document opened from a public link without signing in, read-only, with the log in button at the top right](/data/about/media/drive-still-public-visitor.webp)
+:::
 
 Someone who is signed in to your Eigen server opens the link as a viewer, as with **Anyone signed in with the link**.
 

@@ -26,6 +26,7 @@ import { docsComment } from './docs-comment';
 import { docsHero } from './docs-hero';
 import { docsStillDownload, docsStillEquation } from './docs-stills';
 import { driveHero } from './drive-hero';
+import { drivePublicLinkDialog, drivePublicLinkVisitor } from './drive-public-link';
 import { driveShare } from './drive-share';
 import { driveStillActivity, driveStillTiles } from './drive-still';
 import { mailHero } from './mail-hero';
@@ -85,6 +86,8 @@ export const SCENES: Scene[] = [
     stickiesAssign,
     driveHero,
     driveShare,
+    drivePublicLinkDialog,
+    drivePublicLinkVisitor,
     driveStillActivity,
     driveStillTiles,
     adminHero,
