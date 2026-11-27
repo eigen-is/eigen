@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import * as encoding from 'lib0/encoding';
@@ -7,6 +7,7 @@ import * as Y from 'yjs';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { canReadFromAncestors, isRawDatabase } from '../../lib/drive/acl';
 import { getHome } from '../../lib/home/get-home';
+import { Mount } from '../../lib/mount';
 import type { User } from '../../lib/user';
 import { getUserByEmail } from '../../lib/user';
 import type { TestUser } from '../setup';
@@ -64,6 +65,30 @@ function named(children: readonly DrivePath[], name: string): DrivePath {
     const found = children.find((child) => child.name === name);
     if (!found) throw new Error(`No ${name} among ${children.map((child) => child.name).join(', ')}`);
     return found;
+}
+
+// Charlie's copy of one of Alice's paths into his own home.
+async function charlieCopies(pathId: string): Promise<Response> {
+    const home = await driveGet(
+        charlie.sessionToken,
+        charlie.id,
+        await firstMountId(charlie.sessionToken, charlie.id),
+        'root',
+    );
+    return authedRequest(charlie.sessionToken, drive('path', pathId, 'copy'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetOwnerId: charlie.id, targetMountId: home.mountId, targetParentId: home.id }),
+    });
+}
+
+// The names of every path below a folder of the user's own home.
+async function namesBelow(user: TestUser, folderId: string): Promise<string[]> {
+    const mount = await firstMountId(user.sessionToken, user.id);
+    const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mount}/folder/${folderId}`);
+    const children: DrivePath[] = await res.json();
+    const below = await Promise.all(children.map((child) => (child.type === 'file' ? [] : namesBelow(user, child.id))));
+    return [...children.map((child) => child.name), ...below.flat()];
 }
 
 // Alice's edit over a real socket, so its row is stored as a member's is. Resolves once the server's document holds it.
@@ -196,22 +221,6 @@ describe('a reader who is not live', () => {
     });
 
     test('cannot copy a document, a folder holding one, its saved versions or a database, and still copies a plain file', async () => {
-        const home = await driveGet(
-            charlie.sessionToken,
-            charlie.id,
-            await firstMountId(charlie.sessionToken, charlie.id),
-            'root',
-        );
-        const copy = (pathId: string) =>
-            authedRequest(charlie.sessionToken, drive('path', pathId, 'copy'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targetOwnerId: charlie.id,
-                    targetMountId: home.mountId,
-                    targetParentId: home.id,
-                }),
-            });
         for (const pathId of [
             fx.doc.id,
             fx.folder.id,
@@ -219,12 +228,37 @@ describe('a reader who is not live', () => {
             fx.versions.id,
             ...fx.databases.map((db) => db.id),
         ]) {
-            const res = await copy(pathId);
+            const res = await charlieCopies(pathId);
             expect([pathId, res.status]).toEqual([pathId, 403]);
         }
-        expect(await (await copy(fx.doc.id)).text()).toContain('Only people with access can copy this document');
-        expect((await copy(fx.png.id)).status).toBe(200);
-        expect((await copy(fx.picture.id)).status).toBe(200);
+        expect(await (await charlieCopies(fx.doc.id)).text()).toContain(
+            'Only people with access can copy this document',
+        );
+        expect((await charlieCopies(fx.png.id)).status).toBe(200);
+        expect((await charlieCopies(fx.picture.id)).status).toBe(200);
+    });
+
+    test('cannot copy a document that lands in the folder while the copy lists it', async () => {
+        const token = alice.sessionToken;
+        const folder = await drivePost(token, alice.id, mountId, `folder/${fx.folder.id}`, {
+            folderName: `Empty ${crypto.randomUUID()}`,
+        });
+        const listCopy = Mount.prototype.listCopy;
+        const spy = spyOn(Mount.prototype, 'listCopy').mockImplementationOnce(async function (this: Mount, pathId) {
+            const doc = await drivePost(token, alice.id, mountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'Late',
+            });
+            expect((await childrenOf(token, doc.id)).map((child) => child.name)).toContain('data.db');
+            return listCopy.call(this, pathId);
+        });
+        try {
+            const res = await charlieCopies(folder.id);
+            const written = res.status === 200 ? await namesBelow(charlie, (await res.json()).id) : [];
+            expect(written).not.toContain('data.db');
+            expect(spy).toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('still opens the document, its pictures, comments, threads, history, export and members', async () => {

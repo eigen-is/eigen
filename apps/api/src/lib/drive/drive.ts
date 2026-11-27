@@ -51,7 +51,7 @@ import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
-import type { CopyTree } from '../mount/copy';
+import type { CheckCopy, CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
 import { nameTakenError } from '../mount/helpers';
 import { cleanName, validateName } from '../mount/names';
@@ -650,10 +650,13 @@ export class Drive {
         to: CopyTarget,
         desiredName: string | undefined,
         user: User,
+        check?: CheckCopy,
     ): Promise<DrivePath> {
         const source = this.getMount(mountId);
         const src = await source.getActivePath(srcPathId);
-        return this.withHomeHeld(() => to.drive.receiveCopy(to.mountId, to.parentId, source, src, desiredName, user));
+        return this.withHomeHeld(() =>
+            to.drive.receiveCopy(to.mountId, to.parentId, source, src, desiredName, user, check),
+        );
     }
 
     // A WebDAV COPY with Overwrite: T, into this mount under exactly this name. What holds the name is replaced only
@@ -665,11 +668,12 @@ export class Drive {
         name: string,
         checkedId: string | null,
         user: User,
+        check?: CheckCopy,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const safeName = validateName(name);
         const src = await mount.getActivePath(srcPathId);
-        const tree = await this.checkedCopyTree(mount, src, mount, destParentId);
+        const tree = await this.checkedCopyTree(mount, src, mount, destParentId, check);
         const kept = await this.replaceOccupant(mount, destParentId, safeName, src, checkedId, user);
         return kept ?? this.writeCopy(mount, destParentId, safeName, tree, mount, user);
     }
@@ -682,10 +686,11 @@ export class Drive {
         src: DrivePath,
         desiredName: string | undefined,
         user: User,
+        check: CheckCopy | undefined,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         return this.withHomeHeld(async () => {
-            const tree = await this.checkedCopyTree(source, src, mount, destParentId);
+            const tree = await this.checkedCopyTree(source, src, mount, destParentId, check);
             return withFreeName(folderIn(mount, destParentId), cleanName(desiredName ?? src.name), (freeName) =>
                 this.writeCopy(mount, destParentId, freeName, tree, source, user),
             );
@@ -694,7 +699,13 @@ export class Drive {
 
     // Lists what a copy of `src` writes into a folder of `target`, a mount of this drive. Everything that can refuse
     // the copy is checked here, before a byte is written, and the folder before the listing flushes any document.
-    private async checkedCopyTree(source: Mount, src: DrivePath, target: Mount, parentId: string): Promise<CopyTree> {
+    private async checkedCopyTree(
+        source: Mount,
+        src: DrivePath,
+        target: Mount,
+        parentId: string,
+        check: CheckCopy | undefined,
+    ): Promise<CopyTree> {
         // The copy writes the parts of each document it brings, so the document rule is checked on its folder alone.
         await this.personParent(target, parentId, src.type);
         // RFC 4918 asks for a 409 for a folder copied into itself.
@@ -704,6 +715,7 @@ export class Drive {
         // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
         // target's free space, and a single file also the per-file upload cap, the same as an upload.
         const tree = await source.listCopy(src.id);
+        await check?.(tree);
         if (!isContainerType(src.type)) enforceMaxUploadSize(src.size);
         await enforceMountQuota(this.owner.id, target.id, copySize(tree));
         return tree;

@@ -78,9 +78,8 @@ describe('SharedDrive gating enumeration', () => {
         requireShare: { gate: 'private-helper', reason: 'the gate for ACL changes: write held by name' },
         requireCopy: {
             gate: 'private-helper',
-            reason: 'the read gate of a copy, and no raw database for a reader not live',
+            reason: 'the read gate of a copy, and the raw-database check it hands the copy for a reader not live',
         },
-        holdsRawDatabase: { gate: 'private-helper', reason: 'whether a copy source is or holds a raw database' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },
@@ -259,7 +258,7 @@ describe('SharedDrive gating enumeration', () => {
             call: async (sd) => {
                 const { drive } = await getHome(ctx.alice.user.id);
                 const { mount, path } = await drive.resolveFile(mountId, fileId);
-                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt');
+                return sd.receiveCopy(mountId, folderId, mount, path, 'intruder.txt', charlie, undefined);
             },
         },
         emailCollaborators: {
