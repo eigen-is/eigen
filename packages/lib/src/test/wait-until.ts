@@ -7,9 +7,9 @@ const DEADLINE_MS = 2_000;
 export async function waitUntil(holds: () => boolean, what: string): Promise<void> {
     // React loads only now, after the test installed happy-dom.
     const { act } = await import('react');
-    const deadline = performance.now() + DEADLINE_MS;
+    const deadline = Date.now() + DEADLINE_MS;
     while (!holds()) {
-        if (performance.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+        if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
         await act(() => new Promise((resolve) => setTimeout(resolve)));
     }
 }

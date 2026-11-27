@@ -86,7 +86,6 @@
     "packages/lib/src/test/core/html.test.ts": 4,
     "packages/lib/src/test/sheets/ops-validate.test.ts": 4,
     "packages/lib/src/test/vector/read-vector.test.ts": 4,
-    "packages/lib/src/test/wait-until.ts": 2,
     "packages/math/src/test/latex.test.ts": 2,
     "packages/math/src/test/robustness.test.ts": 4,
     "packages/math/src/test/tree.test.ts": 2,
