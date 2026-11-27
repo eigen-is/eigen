@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, recent, files, find]
 related: [drive/shared-with-you, drive/watch-for-changes]
 order: 87
-updated: 2026-11-12
+updated: 2026-11-27
 ---
 
 **Recent files** gathers the files you worked on lately in one list, newest first. It finds them wherever they live: your own drive, a team drive, or a folder someone shared with you.
@@ -18,6 +18,16 @@ updated: 2026-11-12
 3. Click **Open** in that panel to open it. You can also press Enter, or click the file again. A document opens in its app and a folder opens in Drive. A picture or a PDF has no **Open** button and opens in a preview instead.
 
 Every one of those links opens the same page in Drive. This page is for finding things, so you cannot upload or create files in it.
+
+## Open a recent file from the File menu
+
+In Docs, Sheets, Slides, Stickies, and Vector, you can open another recent file straight from the editor.
+
+1. Open the **File** menu.
+2. Point at **Open recent**. It lists up to eight files of the same kind from **Recent files**, so in Sheets it lists spreadsheets.
+3. Click a file to open it.
+
+The file you have open is left out of the list. **Open recent** is greyed out when you have no other recent file of that kind.
 
 ## What shows up here
 
