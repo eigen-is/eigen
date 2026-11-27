@@ -830,6 +830,17 @@ describe('useCollabDoc for a reader who gets no socket', () => {
             expect(reload).toHaveBeenCalledTimes(1);
         });
 
+        test('a state too large to build is not asked for again while the tab stays visible', async () => {
+            server.refuse = 413;
+            server.refusal = 'Document too large to show';
+            active = mount(OPTIONS, false);
+            await advance(0);
+            expect(stateAsks()).toBe(1);
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+            expect(active.state.loadError).toBe('Document too large to show');
+        });
+
         test('a reader who becomes live, or whose editor goes, asks no more', async () => {
             active = mount(OPTIONS, false);
             const h = active;

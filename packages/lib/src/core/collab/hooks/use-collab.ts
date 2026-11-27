@@ -76,7 +76,8 @@ export function useCollabStoredState(ownerId: string, mountId: string, pathId: s
               }
             : skipToken,
         staleTime: 0,
-        refetchInterval: STORED_STATE_REFRESH_MS,
+        // A refusal that ended in an error is final, so the interval stops with it.
+        refetchInterval: (query) => (query.state.status === 'error' ? false : STORED_STATE_REFRESH_MS),
         // A doc's key is never asked for again once its editor goes.
         gcTime: 0,
         retry: (_failures, error) => !(error instanceof AppError) || error.status >= 500,
