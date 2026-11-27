@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type {
     DataValidationRule,
     DefaultConditionalFormatRule,
@@ -6,6 +6,7 @@ import type {
     SheetValidation,
     SingleRange,
 } from '@workspace/lib/sheets';
+import * as sheets from '@workspace/lib/sheets';
 import { MAX_RULE_RANGES, orderedRules, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { generateNKeysBetween } from '@workspace/lib/vector';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
@@ -20,12 +21,23 @@ import { sheetXml } from '../../../fixtures/xlsx';
 // A sheet's conditional formats and data validations, written and read back through the reader, with the dxfs the
 // registry wrote.
 
-function roundTrip(sheet: Partial<Sheet>) {
+// The write counts the overlap checks of its cut, the innermost step of every lookup the cut's fixes made fast. The
+// spy throws once the count passes `maxChecks`, so a cut that checks every pair fails at once instead of in a minute.
+function roundTrip(sheet: Partial<Sheet>, maxChecks = Number.POSITIVE_INFINITY) {
     const lost: CountedWarningCode[] = [];
     const styles = styleRegistry((code) => lost.push(code));
-    const started = performance.now();
-    const xml = rulesXml({ id: 'fixture', name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
-    const writeMs = performance.now() - started;
+    const { rangesOverlap } = sheets;
+    let checks = 0;
+    const spy = spyOn(sheets, 'rangesOverlap').mockImplementation((a, b) => {
+        if (++checks > maxChecks) throw new Error(`the cut checked more than ${maxChecks} pairs of ranges`);
+        return rangesOverlap(a, b);
+    });
+    let xml: string;
+    try {
+        xml = rulesXml({ id: 'fixture', name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
+    } finally {
+        spy.mockRestore();
+    }
     const looks = readDxfs(parseOoxml(styles.xml()) ?? undefined, []);
     const read = readRules(parseOoxml(sheetXml({ after: xml })) ?? undefined, {
         dxfs: looks,
@@ -37,7 +49,7 @@ function roundTrip(sheet: Partial<Sheet>) {
         inline: (formula) => formula,
         dates: new Set(),
     });
-    return { xml, lost, looks, writeMs, ...read, formats: formatList(read.conditionalFormats) };
+    return { xml, lost, looks, ...read, formats: formatList(read.conditionalFormats) };
 }
 
 type FormatList = ReturnType<typeof formatList>;
@@ -356,9 +368,8 @@ describe('a data validation', () => {
             { ranges: cells(0), rule: list },
             { ranges: cells(1), rule: list },
         ]);
-        const started = performance.now();
-        const { lost, ...read } = roundTrip({ dataValidations });
-        expect(performance.now() - started).toBeLessThan(1000);
+        // About 262 thousand checks; a check of each range against every range above is 67 million.
+        const { lost, ...read } = roundTrip({ dataValidations }, 4_000_000);
         expect(lost).toEqual([]);
         for (const r of [0, 1, 2 * MAX_RULE_RANGES - 1]) {
             expect(ruleAt(read.dataValidations, r, 1)).toEqual(ruleAt(dataValidations, r, 1));
@@ -379,9 +390,8 @@ describe('a data validation', () => {
                 rule: list,
             })),
         );
-        const started = performance.now();
-        const { lost, ...read } = roundTrip({ dataValidations });
-        expect(performance.now() - started).toBeLessThan(1000);
+        // About 2.1 million checks; a walk of every range of every higher rule per rule is 36 million.
+        const { lost, ...read } = roundTrip({ dataValidations }, 8_500_000);
         expect(lost).toEqual([]);
         for (const r of [0, count - 1, count * 64 - 1]) {
             expect(ruleAt(read.dataValidations, r, 1)).toEqual(ruleAt(dataValidations, r, 1));
@@ -404,8 +414,8 @@ describe('a data validation', () => {
 
     test('many rules of many ranges, each in a band of its own, are kept whole in a moment', () => {
         for (const height of [64, 16384]) {
-            const { xml, lost, writeMs } = roundTrip({ dataValidations: numbered(bandList(height)) });
-            expect(writeMs).toBeLessThan(2000);
+            // 2,016 checks of the bounds; an index of the rule's own and lower ranges is 34 million or more.
+            const { xml, lost } = roundTrip({ dataValidations: numbered(bandList(height)) }, 260_000);
             expect(lost).toEqual([]);
             const written = sqrefs(xml);
             expect(written.map((ranges) => ranges.length)).toEqual(Array(64).fill(MAX_RULE_RANGES));
@@ -423,8 +433,8 @@ describe('a data validation', () => {
                 rule: validation({ type: 'dropdown', type2: '', value1: 'x', value2: '' }),
             },
         ]);
-        const { lost, writeMs, ...kept } = roundTrip({ dataValidations });
-        expect(writeMs).toBeLessThan(2000);
+        // 4,160 checks; an index of every rule's ranges, own and lower, is 34 million.
+        const { lost, ...kept } = roundTrip({ dataValidations }, 370_000);
         expect(lost).toEqual([]);
         for (const [r, c] of [
             [0, 0],
@@ -449,8 +459,8 @@ describe('a data validation', () => {
                 rule: validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' }),
             })),
         );
-        const { xml, lost, writeMs } = roundTrip({ dataValidations });
-        expect(writeMs).toBeLessThan(2000);
+        // About 4.1 million checks; with whole rows in the list every lookup checks, over 200 million.
+        const { xml, lost } = roundTrip({ dataValidations }, 30_000_000);
         expect(lost).toEqual([]);
         expect(sqrefs(xml).map((ranges) => ranges.length)).toEqual(Array(64).fill(2048));
     }, 30_000);
