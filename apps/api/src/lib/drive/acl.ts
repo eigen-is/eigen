@@ -80,7 +80,7 @@ export function refuseDocumentWrite(crumbs: readonly DrivePath[], adding?: Drive
 // collab document and at most its media/ and a file in it. The link is at or above that end.
 export function canReadByLink(chain: readonly DrivePath[]): number | null {
     const head = chain.findIndex((path) => path.visibility === 'link');
-    if (head < 0 || isTrashedChain(chain) || isRawDatabase(chain)) return null;
+    if (head < 0 || isTrashedChain(chain)) return null;
     const end = chain.findIndex((path) => path.type !== DRIVE_TYPE_FOLDER);
     if (end < 0) return head;
     if (head > end) return null;

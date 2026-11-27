@@ -195,7 +195,7 @@ describe('a reader who is not live', () => {
         expect(body).not.toContain('comments.db');
     });
 
-    test('cannot copy a document, a folder holding one or a database, and still copies a plain file', async () => {
+    test('cannot copy a document, a folder holding one, its saved versions or a database, and still copies a plain file', async () => {
         const home = await driveGet(
             charlie.sessionToken,
             charlie.id,
@@ -212,12 +212,19 @@ describe('a reader who is not live', () => {
                     targetParentId: home.id,
                 }),
             });
-        for (const pathId of [fx.doc.id, fx.folder.id, fx.thread.id, ...fx.databases.map((db) => db.id)]) {
+        for (const pathId of [
+            fx.doc.id,
+            fx.folder.id,
+            fx.thread.id,
+            fx.versions.id,
+            ...fx.databases.map((db) => db.id),
+        ]) {
             const res = await copy(pathId);
             expect([pathId, res.status]).toEqual([pathId, 403]);
         }
         expect(await (await copy(fx.doc.id)).text()).toContain('Only people with access can copy this document');
         expect((await copy(fx.png.id)).status).toBe(200);
+        expect((await copy(fx.picture.id)).status).toBe(200);
     });
 
     test('still opens the document, its pictures, comments, threads, history, export and members', async () => {

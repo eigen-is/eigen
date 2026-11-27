@@ -80,7 +80,7 @@ describe('SharedDrive gating enumeration', () => {
             gate: 'private-helper',
             reason: 'the read gate of a copy, and no document for a reader not live',
         },
-        holdsDocument: { gate: 'private-helper', reason: 'whether a copy source is or holds a document' },
+        holdsRawDatabase: { gate: 'private-helper', reason: 'whether a copy source is or holds a raw database' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },

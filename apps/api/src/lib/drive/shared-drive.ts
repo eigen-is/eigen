@@ -4,7 +4,7 @@
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
 import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
-import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
@@ -344,22 +344,23 @@ export class SharedDrive {
         return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
     }
 
-    // A copy writes each document's raw databases, so only a live reader copies a document, on its own or in a folder.
+    // A copy writes the raw databases under its source, so only a live reader copies a source that holds one: a
+    // document, a folder with one in it or a document's saved versions.
     private async requireCopy(mountId: string, srcPathId: string): Promise<void> {
         const access = await this.readerAccess(mountId, srcPathId, this.user);
         if (!access.canRead) throw new ApiError(403, 'No read permission on source');
         if (access.live) return;
-        const src = await this.drive.getPath(mountId, srcPathId);
-        if (src && (await this.holdsDocument(mountId, src))) {
+        if (await this.holdsRawDatabase(mountId, await this.drive.breadCrumb(mountId, srcPathId))) {
             throw new ApiError(403, 'Only people with access can copy this document');
         }
     }
 
-    private async holdsDocument(mountId: string, path: DrivePath): Promise<boolean> {
-        if (isDocumentType(path.type)) return true;
-        if (!isFolderType(path.type)) return false;
+    private async holdsRawDatabase(mountId: string, chain: DrivePath[]): Promise<boolean> {
+        if (isRawDatabase(chain)) return true;
+        const path = chain.at(-1);
+        if (!path || path.type === DRIVE_TYPE_FILE) return false;
         const children = await this.drive.getFolderContents(mountId, path.id);
-        const held = await Promise.all(children.map((child) => this.holdsDocument(mountId, child)));
+        const held = await Promise.all(children.map((child) => this.holdsRawDatabase(mountId, [...chain, child])));
         return held.includes(true);
     }
 
