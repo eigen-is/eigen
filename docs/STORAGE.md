@@ -196,11 +196,12 @@ The list lives in the `recent_paths` table of the user's own `shared.db` (`apps/
 
 ## The server records an open where it already serves one
 
-Two things write a row: an open and a notification ([§ A notification about a path adds it too](#a-notification-about-a-path-adds-it-too)). An open is recorded in the three routes that serve one, once the open has succeeded:
+Two things write a row: an open and a notification ([§ A notification about a path adds it too](#a-notification-about-a-path-adds-it-too)). An open is recorded in the four routes that serve one, once the open has succeeded:
 
 | Open | Route | Recorded |
 |---|---|---|
 | A document in its editor | The collab socket's open (`routes/collab.ts`) | After the subscribe and the read check that follows it |
+| A document read without a socket, by a signed-in caller | `GET /collab/:ownerId/:mountId/:pathId/state` (`routes/collab.ts`) | When the state is answered, not on a 304, a 413 or a visitor |
 | A plain file in the inline editor | `GET /editor/:ownerId/:mountId/:pathId/content` (`routes/editor.ts`) | After `getEditableContent` answers, unless a folder above is a document (`recordOpenedUnlessInDocument`) |
 | A chat | `GET /chat/:ownerId/:mountId/:chatId/messages` (`routes/chat.ts`) | For the first page only, and never for a comment thread's chat (`containerPath`) |
 
