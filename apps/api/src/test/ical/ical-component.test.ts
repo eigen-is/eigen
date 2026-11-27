@@ -3,7 +3,8 @@
 // equality per property — ical.js rewrites `X-ADDRESS="a\nb"` to `a^nb`, drops a default `VALUE=URI`,
 // reorders parameters and escapes a bare `;`, so a byte assert fails on the first run and a
 // name-present assert passes on a mangled parameter.
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';
 import {
@@ -19,8 +20,17 @@ import {
     storedRecurrenceIds,
 } from '../../lib/ical';
 import type { WriteContext } from '../../lib/ical/ical-component';
-import { cpuClock } from '../cpu-time';
+import * as icalParse from '../../lib/ical/ical-parse';
 import { vcal } from '../ics-test-helpers';
+
+// Each turn works on fresh parses, since the work changes its resource; several copies lift a small one over the
+// floor a ratio needs.
+const onFresh = (ics: string, work: (resource: ICAL.Component) => unknown, copies = 1) => ({
+    setup: () => Array.from({ length: copies }, () => parseResource(ics)),
+    run: (resources: ICAL.Component[]) => {
+        for (const resource of resources) work(resource);
+    },
+});
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
 
@@ -646,24 +656,32 @@ describe('stamp trust', () => {
         expect(ids).toContain('evt-override');
     });
 
-    test('a body carrying twenty thousand EXDATEs re-stamps in under a second and a half', () => {
-        const exdates: string[] = [];
-        for (let day = 0; day < 20_000; day++) {
-            const when = new Date(Date.UTC(2026, 3, 29) + day * 86400_000);
-            exdates.push(`EXDATE:${when.toISOString().replace(/[-:]|\.\d{3}/g, '')}`);
-            exdates.push(`X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=exc-${day};X-EIGEN-SEQ=1:${when.toISOString().slice(0, 10)}`);
-        }
-        const incoming = parseResource(vcal(VTZ_AMS, clientSeries(...exdates)));
-
-        const cpuMs = cpuClock();
-        restampResource(incoming, stored());
-        expect(cpuMs()).toBeLessThan(1500);
+    test('a body carrying twenty thousand EXDATEs and their stamps re-stamps in linear time', async () => {
+        // Each day's EXDATE beside a forged stamp, or one day's twenty thousand times: the same body with one key.
+        const body = (step: number) => {
+            const lines: string[] = [];
+            for (let day = 0; day < 20_000; day++) {
+                const when = new Date(Date.UTC(2026, 3, 29) + day * step * 86400_000);
+                lines.push(`EXDATE:${when.toISOString().replace(/[-:]|\.\d{3}/g, '')}`);
+                lines.push(
+                    `X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=exc-${day};X-EIGEN-SEQ=1:${when.toISOString().slice(0, 10)}`,
+                );
+            }
+            return vcal(VTZ_AMS, clientSeries(...lines));
+        };
+        const held = stored();
+        const restamp = (incoming: ICAL.Component) => restampResource(incoming, held);
+        const incoming = parseResource(body(1));
+        restamp(incoming);
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(20_000);
+
+        const { ratio } = await costRatio(onFresh(body(1), restamp), onFresh(body(0), restamp));
+        expect(ratio).toBeLessThan(5);
     });
 
-    test('thirty-two thousand EXDATEs with no SEQUENCE re-stamp without rescanning the properties per stamp', () => {
-        const count = 32_000;
-        const padding = 128_000;
+    test('EXDATEs with no SEQUENCE re-stamp reading the SEQUENCE once, not once per stamp', () => {
+        const count = 1000;
+        const padding = 4000;
         const days = Array.from({ length: count }, (_, day) =>
             new Date(Date.UTC(2026, 3, 29) + day * 86400_000).toISOString(),
         );
@@ -679,9 +697,18 @@ describe('stamp trust', () => {
             ]),
         );
 
-        const cpuMs = cpuClock();
-        restampResource(incoming, null);
-        expect(cpuMs()).toBeLessThan(700);
+        // Each read scans the master's properties, which grow by a stamp per EXDATE.
+        let reads = 0;
+        const realSequenceOf = icalParse.sequenceOf;
+        const sequenceReads = spyOn(icalParse, 'sequenceOf').mockImplementation((vevent) => {
+            if (++reads > 1) throw new Error(`sequenceOf read ${reads} times for one VEVENT`);
+            return realSequenceOf(vevent);
+        });
+        try {
+            restampResource(incoming, null);
+        } finally {
+            sequenceReads.mockRestore();
+        }
 
         const master = masterOf(incoming);
         expect(master.getAllProperties().map((prop) => prop.name)).toEqual([
@@ -697,10 +724,11 @@ describe('stamp trust', () => {
         expect(stamps.map((stamp) => stamp.getFirstValue())).toEqual(days.map((iso) => iso.slice(0, 10)));
         expect(stamps.every((stamp) => stamp.getFirstParameter('x-eigen-seq') === '0')).toBe(true);
         expect(new Set(stamps.map((stamp) => stamp.getFirstParameter('x-eigen-event-id'))).size).toBe(count);
+        expect(reads).toBe(1);
     });
 
-    test('forty thousand twins of one key read a huge stored VEVENT once, and only the first keeps its id', () => {
-        const twins = 40_000;
+    test("a thousand twins of one key read the stored VEVENT's stamps once, and only the first keeps its id", () => {
+        const twins = 1000;
         const stamps = [
             'X-EIGEN-EVENT-ID:stored-id',
             'X-EIGEN-CREATED-BY:maker',
@@ -710,14 +738,23 @@ describe('stamp trust', () => {
             'X-EIGEN-IMPORTED-ORGANIZER:boss@example.com',
         ];
         const stored = parseResource(
-            vcal(['BEGIN:VEVENT', 'UID:twin@eigen', ...Array<string>(16_000).fill('X-PAD:p'), ...stamps, 'END:VEVENT']),
+            vcal(['BEGIN:VEVENT', 'UID:twin@eigen', ...Array<string>(1000).fill('X-PAD:p'), ...stamps, 'END:VEVENT']),
         );
         const twin = ['BEGIN:VEVENT', 'UID:twin@eigen', 'DTSTAMP:20260101T000000Z', 'END:VEVENT'];
         const incoming = parseResource(vcal(Array.from({ length: twins }, () => twin).flat()));
 
-        const cpuMs = cpuClock();
-        restampResource(incoming, stored);
-        expect(cpuMs()).toBeLessThan(2000);
+        // Each read scans the stored VEVENT's properties; one per stamp it can hold is the walk that keys it.
+        let reads = 0;
+        const realReadStamp = icalParse.readStamp;
+        const stampReads = spyOn(icalParse, 'readStamp').mockImplementation((vevent, name) => {
+            if (++reads > 7) throw new Error(`readStamp read ${reads} stamps of one stored VEVENT`);
+            return realReadStamp(vevent, name);
+        });
+        try {
+            restampResource(incoming, stored);
+        } finally {
+            stampReads.mockRestore();
+        }
 
         const lines = (vevent: ICAL.Component) => vevent.getAllProperties().map((prop) => prop.toICALString());
         const vevents = incoming.getAllSubcomponents('vevent');
@@ -727,6 +764,7 @@ describe('stamp trust', () => {
         }
         const ids = vevents.map((vevent) => vevent.getFirstPropertyValue('x-eigen-event-id'));
         expect(new Set(ids).size).toBe(twins);
+        expect(reads).toBe(7);
     });
 
     test('a body that stripped every X- line gets its ids and links back', () => {
@@ -1067,19 +1105,23 @@ describe('a RECURRENCE-ID from its occurrence key', () => {
         expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20260419T000000');
     });
 
-    test('a daily series with a thousand exceptions builds at little cost', () => {
-        const keys = Array.from({ length: 1000 }, (_, i) =>
-            new Date(Date.UTC(2026, 3, 16 + i)).toISOString().slice(0, 10),
-        );
-        const exceptions = keys.map((key, i) =>
-            i % 3 === 2 ? { ...EXCLUSION, id: `x-${key}`, recurrenceDate: key } : override(key),
-        );
+    test('a daily series builds in linear time in its exceptions', async () => {
+        const rows = (rrule: string | null) => [
+            { ...series('FREQ=DAILY', MASTER.startTime), rrule },
+            ...Array.from({ length: 1024 }, (_, i) => {
+                const key = new Date(Date.UTC(2026, 3, 16 + i)).toISOString().slice(0, 10);
+                return i % 3 === 2 ? { ...EXCLUSION, id: `x-${key}`, recurrenceDate: key } : override(key);
+            }),
+        ];
+        expect(overridesOf(buildResource(rows('FREQ=DAILY')))).toHaveLength(683);
 
-        const cpuMs = cpuClock();
-        const resource = buildResource([series('FREQ=DAILY', MASTER.startTime), ...exceptions]);
-        expect(cpuMs()).toBeLessThan(1000);
-
-        expect(overridesOf(resource)).toHaveLength(667);
+        // The same exceptions on a master with no rule, which has no series to walk.
+        const build = (rrule: string | null) => {
+            const events = rows(rrule);
+            return { run: () => buildResource(events) };
+        };
+        const { ratio } = await costRatio(build('FREQ=DAILY'), build(null));
+        expect(ratio).toBeLessThan(4.4);
     });
 });
 
@@ -1419,24 +1461,23 @@ describe('refusals', () => {
 });
 
 describe('stripping', () => {
-    test('sixty-four thousand forged stamp names go in one pass and the rest keep their order', () => {
-        const forged = Array.from({ length: 64_000 }, (_, n) => `X-EIGEN-${n}:forged`);
-        const incoming = parseResource(
-            vcal(
+    test('sixty-four thousand forged stamp names go in one pass and the rest keep their order', async () => {
+        // The same body with names that are no stamp keeps every line, so it strips nothing.
+        const body = (name: string) => {
+            const names = Array.from({ length: 64_000 }, (_, n) => `X-${name}-${n}:${name}`);
+            return vcal(
                 VTZ_AMS,
                 clientSeries(
                     'X-KEEP-FIRST:a',
-                    ...forged.slice(0, 32_000),
+                    ...names.slice(0, 32_000),
                     'ATTENDEE;X-EIGEN-SEQ=9;CN=Bob:mailto:bob@eigen.example',
-                    ...forged.slice(32_000),
+                    ...names.slice(32_000),
                     'X-KEEP-LAST:z',
                 ),
-            ),
-        );
-
-        const cpuMs = cpuClock();
+            );
+        };
+        const incoming = parseResource(body('EIGEN'));
         restampResource(incoming, null);
-        expect(cpuMs()).toBeLessThan(250);
 
         const expected = [
             'uid',
@@ -1458,6 +1499,10 @@ describe('stripping', () => {
         expect(names(incoming)).toEqual(expected);
         expect(names(parseResource(serializeResource(incoming)))).toEqual(expected);
         expect(masterOf(incoming).getFirstProperty('attendee')?.toJSON()[1]).toEqual({ cn: 'Bob' });
+
+        const restamp = (resource: ICAL.Component) => restampResource(resource, null);
+        const { ratio } = await costRatio(onFresh(body('EIGEN'), restamp, 3), onFresh(body('KEEP'), restamp, 3));
+        expect(ratio).toBeLessThan(8);
     });
 
     test('a restamp drops every Eigen line a body carries and changes nothing else', () => {
@@ -1512,107 +1557,133 @@ describe('a removal costs one pass over the list', () => {
             .getAllProperties()
             .map((prop) => prop.name);
 
-    test('a title save over repeated LAST-MODIFIED lines past a long first stretch', () => {
-        const resource = parseResource(
+    test('a title save over repeated LAST-MODIFIED lines past a long first stretch', async () => {
+        // The baseline holds one LAST-MODIFIED among padding of the same length, so it removes one line.
+        const body = (repeats: number) =>
             vcal([
                 'BEGIN:VEVENT',
                 'UID:large@eigen',
                 'DTSTAMP:20260101T000000Z',
-                ...padding(110_000),
+                ...padding(55_000),
                 'DTSTART:20260415T120000Z',
                 'SUMMARY:Large',
-                ...Array<string>(60_000).fill('LAST-MODIFIED:20260101T000000Z'),
-                ...padding(100_000),
+                ...Array<string>(repeats).fill('LAST-MODIFIED:20260101T000000Z'),
+                ...padding(80_000 - repeats),
                 'END:VEVENT',
-            ]),
-        );
-
-        const cpuMs = cpuClock();
-        patchEvent(resource, null, { title: 'New' }, CTX);
-        expect(cpuMs()).toBeLessThan(1_500);
+            ]);
+        const retitle = (resource: ICAL.Component) => patchEvent(resource, null, { title: 'New' }, CTX);
+        const resource = parseResource(body(30_000));
+        retitle(resource);
 
         const names = masterNames(resource);
         expect(names.filter((name) => name === 'last-modified')).toHaveLength(1);
-        expect(names.filter((name) => name === 'x-pad')).toHaveLength(210_000);
+        expect(names.filter((name) => name === 'x-pad')).toHaveLength(105_000);
         expect(masterOf(resource).getFirstPropertyValue('summary')).toBe('New');
+        const { ratio } = await costRatio(onFresh(body(30_000), retitle), onFresh(body(1), retitle));
+        expect(ratio).toBeLessThan(12);
     });
 
-    test('dropping every guest of a long list past a long padding', () => {
-        const resource = parseResource(
-            vcal(series(...padding(30_000), ...Array<string>(30_000).fill('ATTENDEE:mailto:a@b.c'), 'X-LAST:z')),
-        );
-
-        const cpuMs = cpuClock();
-        patchEvent(resource, null, { data: { attendees: [] } }, CTX);
-        expect(cpuMs()).toBeLessThan(800);
+    test('dropping every guest of a long list past a long padding', async () => {
+        const body = (guests: number) =>
+            vcal(
+                series(
+                    ...padding(30_000),
+                    ...Array<string>(guests).fill('ATTENDEE:mailto:a@b.c'),
+                    ...padding(30_000 - guests),
+                    'X-LAST:z',
+                ),
+            );
+        const dropGuests = (resource: ICAL.Component) => patchEvent(resource, null, { data: { attendees: [] } }, CTX);
+        const resource = parseResource(body(30_000));
+        dropGuests(resource);
 
         const names = masterNames(resource);
         expect(names).not.toContain('attendee');
         expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
+        const { ratio } = await costRatio(onFresh(body(30_000), dropGuests, 3), onFresh(body(1), dropGuests, 3));
+        expect(ratio).toBeLessThan(20);
     });
 
-    test('an override over an occurrence named by a long run of repeated EXDATEs', () => {
-        const resource = parseResource(
-            vcal(series(...padding(40_000), ...Array<string>(30_000).fill('EXDATE:20260420T120000Z'), 'X-LAST:z')),
-        );
-
-        const cpuMs = cpuClock();
-        putOverride(resource, { ...OVERRIDE, uid: 'large@eigen', recurrenceDate: '2026-04-20', timezone: null });
-        expect(cpuMs()).toBeLessThan(800);
+    test('an override over an occurrence named by a long run of repeated EXDATEs', async () => {
+        const body = (exdates: number) =>
+            vcal(
+                series(
+                    ...padding(40_000),
+                    ...Array<string>(exdates).fill('EXDATE:20260420T120000Z'),
+                    ...padding(30_000 - exdates),
+                    'X-LAST:z',
+                ),
+            );
+        const overrideIt = (resource: ICAL.Component) =>
+            putOverride(resource, { ...OVERRIDE, uid: 'large@eigen', recurrenceDate: '2026-04-20', timezone: null });
+        const resource = parseResource(body(30_000));
+        overrideIt(resource);
 
         const names = masterNames(resource);
         expect(names).not.toContain('exdate');
         expect(names.indexOf('x-last')).toBe(names.lastIndexOf('x-pad') + 1);
+        const { ratio } = await costRatio(onFresh(body(30_000), overrideIt, 5), onFresh(body(1), overrideIt, 5));
+        expect(ratio).toBeLessThan(50);
     });
 
-    test('a move drops a long run of unreferenced VTIMEZONEs behind many overrides', () => {
-        const resource = parseResource(
-            vcal(series(), overrides(15_000), emptyComponents('VTIMEZONE', 50_000), emptyComponents('X-LAST', 1)),
-        );
-
-        const cpuMs = cpuClock();
-        patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z') }, CTX);
-        expect(cpuMs()).toBeLessThan(800);
+    test('a move drops a long run of unreferenced VTIMEZONEs behind many overrides', async () => {
+        const body = (zones: number) =>
+            vcal(
+                series(),
+                overrides(15_000),
+                emptyComponents('VTIMEZONE', zones),
+                emptyComponents('X-ZONE', 50_000 - zones),
+                emptyComponents('X-LAST', 1),
+            );
+        const move = (resource: ICAL.Component) =>
+            patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z') }, CTX);
+        const resource = parseResource(body(50_000));
+        move(resource);
 
         const names = resource.getAllSubcomponents().map((sub) => sub.name);
         expect(names).not.toContain('vtimezone');
         expect(names).toEqual([...Array<string>(15_001).fill('vevent'), 'x-last']);
+        const { ratio } = await costRatio(onFresh(body(50_000), move), onFresh(body(1), move));
+        expect(ratio).toBeLessThan(8);
     });
 
-    test('a new zone moves a long run of overrides behind its block', () => {
-        const resource = parseResource(vcal(emptyComponents('X-FIRST', 30_000), series(), overrides(6_000)));
-
-        const cpuMs = cpuClock();
-        patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z'), timezone: 'Europe/Amsterdam' }, CTX);
-        expect(cpuMs()).toBeLessThan(800);
+    test('a new zone moves a long run of overrides behind its block', async () => {
+        const ics = vcal(emptyComponents('X-FIRST', 120_000), series(), overrides(6_000));
+        // The same move with no zone to bring leaves every override where it is.
+        const move = (timezone?: string) => (resource: ICAL.Component) =>
+            patchEvent(resource, null, { startTime: new Date('2026-04-15T11:00:00Z'), timezone }, CTX);
+        const resource = parseResource(ics);
+        move('Europe/Amsterdam')(resource);
 
         const names = resource.getAllSubcomponents().map((sub) => sub.name);
         expect(names).toEqual([
-            ...Array<string>(30_000).fill('x-first'),
+            ...Array<string>(120_000).fill('x-first'),
             'vtimezone',
             ...Array<string>(6_001).fill('vevent'),
         ]);
+        const { ratio } = await costRatio(onFresh(ics, move('Europe/Amsterdam'), 2), onFresh(ics, move(), 2));
+        expect(ratio).toBeLessThan(15);
     });
 
-    test('dropping a long run of alarms in front of other subcomponents', () => {
-        const resource = parseResource(
+    test('dropping a long run of alarms in front of other subcomponents', async () => {
+        const body = (alarms: number) =>
             vcal(
                 series(
                     ...emptyComponents('X-FIRST', 110_000),
-                    ...emptyComponents('VALARM', 60_000),
-                    ...emptyComponents('X-LAST', 60_000),
+                    ...emptyComponents('VALARM', alarms),
+                    ...emptyComponents('X-LAST', 120_000 - alarms),
                 ),
-            ),
-        );
-
-        const cpuMs = cpuClock();
-        patchEvent(resource, null, { data: { reminders: [] } }, CTX);
-        expect(cpuMs()).toBeLessThan(800);
+            );
+        const dropAlarms = (resource: ICAL.Component) => patchEvent(resource, null, { data: { reminders: [] } }, CTX);
+        const resource = parseResource(body(60_000));
+        dropAlarms(resource);
 
         const names = masterOf(resource)
             .getAllSubcomponents()
             .map((sub) => sub.name);
         expect(names).toEqual([...Array<string>(110_000).fill('x-first'), ...Array<string>(60_000).fill('x-last')]);
+        const { ratio } = await costRatio(onFresh(body(60_000), dropAlarms, 2), onFresh(body(1), dropAlarms, 2));
+        expect(ratio).toBeLessThan(46);
     });
 });
 
