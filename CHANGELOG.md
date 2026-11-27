@@ -47,6 +47,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Comments in Docs** — a click on a comment in the list scrolls the page to its text again, and closing the column leaves the page where you scrolled it
 - **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
 - **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
 - **This and following events in Calendar** — changing them no longer shows an earlier edited date twice
