@@ -5,21 +5,28 @@
 
 import { colorSurface } from '@workspace/ui/lib/color-surface';
 import { cn } from '@workspace/ui/lib/utils';
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 
 type DetailItemBlockProps = {
     title: string;
     // The color a person picked for the item, such as its calendar's or the card's. Without one the block is muted.
     color?: string | null;
+    // Takes the reader to where the item sits, such as a comment's anchor in its document.
+    onClick?: MouseEventHandler<HTMLDivElement>;
     children?: ReactNode;
 };
 
-export function DetailItemBlock({ title, color, children }: DetailItemBlockProps) {
+export function DetailItemBlock({ title, color, onClick, children }: DetailItemBlockProps) {
     const surface = color ? colorSurface(color, 'panel') : undefined;
     return (
         <div
-            className={cn('eigen-block px-4 py-3', surface?.className ?? 'bg-muted text-foreground')}
+            className={cn(
+                'eigen-block px-4 py-3',
+                surface?.className ?? 'bg-muted text-foreground',
+                onClick && 'cursor-pointer',
+            )}
             style={surface?.style}
+            onClick={onClick}
         >
             <h2 className="text-xl leading-snug font-medium break-words">{title}</h2>
             {children && <div className="mt-1 text-sm">{children}</div>}

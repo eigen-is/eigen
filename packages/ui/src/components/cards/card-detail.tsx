@@ -70,6 +70,8 @@ export type CardDetailProps = {
     onDelete?: (cardId: string) => void;
     // Whether the thread's reply box takes the focus as it shows.
     autoFocus?: boolean;
+    // A click on the card's block brings its anchor into view again.
+    onReveal?: () => void;
     // The frame, given null while no card is open, so a frame that stays, such as a column over its list, keeps its
     // place.
     children: (parts: CardDetailParts | null) => ReactNode;
@@ -93,6 +95,7 @@ export function CardDetail({
     onAssign,
     onDelete,
     autoFocus,
+    onReveal,
     children,
 }: CardDetailProps) {
     const { mediaFolderId } = useMediaResolver();
@@ -221,6 +224,7 @@ export function CardDetail({
             meta={meta}
             color={card.color}
             canWrite={canWrite}
+            onBlockClick={onReveal}
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}
             attachments={
                 card.attachments && card.attachments.length > 0 ? (

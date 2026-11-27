@@ -607,8 +607,10 @@
         border-radius: calc(var(--radius) - 3px);
     }
 
+    /* The text of the comment whose thread is open wears the current match's mark. */
     .eigen-search-match-active,
-    .tiptap .ProseMirror-active-search-match {
+    .tiptap .ProseMirror-active-search-match,
+    .tiptap .comment-open {
         background-color: color-mix(in oklab, var(--warning) 45%, transparent);
         box-shadow: 0 0 0 1px color-mix(in oklab, var(--warning) 65%, transparent);
         border-radius: calc(var(--radius) - 3px);
@@ -961,7 +963,8 @@
     .eigen-search-match,
     .eigen-search-match-active,
     .tiptap .ProseMirror-search-match,
-    .tiptap .ProseMirror-active-search-match {
+    .tiptap .ProseMirror-active-search-match,
+    .tiptap .comment-open {
         background-color: transparent;
         box-shadow: none;
     }

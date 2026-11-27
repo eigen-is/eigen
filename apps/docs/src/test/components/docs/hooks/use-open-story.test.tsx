@@ -797,7 +797,7 @@ test('text typed at the end of a commented run in the open note takes its highli
         [paragraph(text('Claim'), footnote(paragraph(text('Hello', [{ type: 'comment', attrs: { cardId: 'c1' } }]))))],
         [CommentMark],
     );
-    updateCommentDecorations(a, new Set(), new Map([['c1', '#ff0000']]));
+    updateCommentDecorations(a, { resolvedIds: new Set(), colorMap: new Map([['c1', '#ff0000']]), openId: null });
     await open(6);
     const highlighted = () =>
         [...note.view.dom.querySelectorAll('.comment-colored')].map((element) => element.textContent).join('');

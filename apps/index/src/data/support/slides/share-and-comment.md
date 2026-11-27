@@ -6,7 +6,7 @@ category: Sharing
 tags: [slides, sharing, permissions, comments, collaboration]
 related: [slides/get-started, drive/share-a-file]
 order: 80
-updated: 2026-11-25
+updated: 2026-11-27
 ---
 
 Presentations are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you have editor access, you can also leave comments tied to specific objects on a slide.
@@ -75,7 +75,7 @@ To change a comment's title, description or color, click **Edit** (pencil icon) 
 
 Click the **Comments** button (speech bubble icon) in the toolbar to open the comments column on the right, in place of the properties panel. It lists every comment on the presentation, and the **New comment** button (plus icon) at the top adds one that belongs to the presentation as a whole rather than to an object. Use the filter button (funnel icon) at the top of the column to narrow the list by who a comment is **Assigned to**, by color, or by **Status**: **Open**, **Resolved**, or **All**.
 
-Click a comment in the list to go to its slide, select the object it is attached to, and open its thread. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
+Click a comment in the list to go to its slide, select the object it is attached to, and open its thread. The column widens to give the thread more room. Moved away? Click the comment's colored block at the top of the thread to go back to its object. Click **Comments** at the top left of the thread to go back to the list, where you left it.
 
 Click the X (**Close**) to close the column, from the list or from a thread. **Esc** closes it too, unless you are typing a reply. If an object is selected, the first **Esc** deselects it and the next one closes the column.
 

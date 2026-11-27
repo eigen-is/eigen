@@ -108,7 +108,13 @@ test('a commented equation has the corner mark beside its glyphs, which opens it
 // The card's color reaches the view as a decoration alone, with the node unchanged.
 test("a commented equation's mark takes its card's color when the color arrives", async () => {
     const { editor, view } = await mount({ mathml: typed('x'), commentCardId: 'card-1' });
-    await act(async () => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']])));
+    await act(async () =>
+        updateCommentDecorations(editor, {
+            resolvedIds: new Set(),
+            colorMap: new Map([['card-1', '#123456']]),
+            openId: null,
+        }),
+    );
     const mark = view.querySelector<HTMLElement>('button[aria-label="Open comment"] span');
     expect(mark?.style.borderTop).toContain('#123456');
 });

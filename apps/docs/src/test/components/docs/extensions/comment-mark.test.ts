@@ -87,7 +87,36 @@ test('new comment colors for an editor that is gone are dropped', () => {
         content: docOf(text('a', { type: 'comment', attrs: { cardId: 'card-1' } })),
     });
     editor.destroy();
-    expect(() => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']]))).not.toThrow();
+    expect(() =>
+        updateCommentDecorations(editor, {
+            resolvedIds: new Set(),
+            colorMap: new Map([['card-1', '#123456']]),
+            openId: null,
+        }),
+    ).not.toThrow();
+});
+
+// Resolved text has no highlight of its own, so the open thread's mark is what shows its place.
+test("the open comment's text wears the open mark in place of its color, resolved too", () => {
+    const comment = (cardId: string) => ({ type: 'comment', attrs: { cardId } });
+    const editor = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        extensions: [...getDocExtensions({ exclude: ['comment'] }), CommentMark],
+        content: docOf(text('a', comment('card-1')), text('b', comment('card-2'))),
+    });
+    const colorMap = new Map([
+        ['card-1', '#123456'],
+        ['card-2', '#123456'],
+    ]);
+    const marked = () =>
+        [...editor.view.dom.querySelectorAll('.comment-colored, .comment-open')].map(
+            (el) => `${el.textContent}:${el.className}`,
+        );
+    updateCommentDecorations(editor, { resolvedIds: new Set(['card-1']), colorMap, openId: 'card-1' });
+    expect(marked()).toEqual(['a:comment-open', 'b:comment-colored']);
+    updateCommentDecorations(editor, { resolvedIds: new Set(['card-1']), colorMap, openId: null });
+    expect(marked()).toEqual(['b:comment-colored']);
+    editor.destroy();
 });
 
 // The key Insert › Comment shows: on selected text it adds a comment, elsewhere it opens the panel.

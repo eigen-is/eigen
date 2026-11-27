@@ -93,6 +93,7 @@ export function CommentsColumn({
         <CardDetail
             {...lifecycleCardDetailProps(lifecycle, path, canWrite, currentUserEmail)}
             autoFocus={column.focusComposer}
+            onReveal={column.revealOpenCard}
         >
             {(thread) => (
                 <DetailColumn
