@@ -93,7 +93,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Opening files in the browser** — in Drive, Mail and a mounted drive, only pictures, PDFs, sound, video and plain text open as they are. Any other file opens locked down, so nothing in it can run
 - **SVG previews** — an SVG builds in the pictures it names only inside a document, and only pictures, never other files beside it
 - **Who can share and move** — only the owner and people added by name, or through a team, can change who has access, move an item or email its collaborators. Someone who edits through Anyone signed in with the link can still edit. With Editors can share off, only the owner moves the item
-- **Busy servers** — what someone who only views through a link opens, previews or downloads in another format waits behind the work of the people it is shared with, and a document they view is built once per change
+- **Busy servers** — what someone who reaches an item only through a link opens, previews, downloads in another format, converts or imports waits behind the work of the people it is shared with, and a document they view is built once per change
 
 ## [0.4.4] - 2026-11-17
 

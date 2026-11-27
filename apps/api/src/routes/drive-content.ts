@@ -120,9 +120,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
+            const { canWrite, priority } = await drive.readerAccess(params.mountId, params.pathId, user);
+            if (!canWrite) throw new ApiError(403, 'No write permission');
             return await drive.withHomeHeld(async () => {
                 const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
@@ -134,6 +133,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                     Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                     query,
                     user,
+                    priority,
                     request.signal,
                 );
                 return { success: true, summary };
@@ -149,9 +149,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
+            const { canWrite, priority } = await drive.readerAccess(params.mountId, params.pathId, user);
+            if (!canWrite) throw new ApiError(403, 'No write permission');
             return await drive.withHomeHeld(async () => {
                 const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
@@ -166,6 +165,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                     Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                     { mode: body.mode, afterFrameId: body.afterFrameId },
                     user,
+                    priority,
                     request.signal,
                 );
                 return { success: true, summary };
