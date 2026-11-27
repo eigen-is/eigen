@@ -76,6 +76,9 @@ export type CollabDoc = {
     // The server closed with COLLAB_STORAGE_GONE_CLOSE, or answered the stored state with a 410: the stored data is
     // missing, so the hook stopped asking.
     storageGone: boolean;
+    // The stored state failed in a way another try would not change, such as a 413 for a document too large to show:
+    // the server's message, and the hook stopped asking.
+    loadError: string | null;
     // Edits may not have reached the server; render `<UnsyncedEditsGuard active>` so leaving warns first.
     unsyncedEdits: boolean;
 };
@@ -253,7 +256,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     }, [ctx, storedState]);
 
     // The link was closed, as an access-lost close says on a socket: the reload shows the screen that applies now.
-    const storedStatus = stored.error instanceof AppError ? stored.error.status : undefined;
+    const storedError = stored.error instanceof AppError ? stored.error : undefined;
+    const storedStatus = storedError?.status;
     useEffect(() => {
         if (storedStatus === 401 || storedStatus === 403) setReloadNow(() => () => window.location.reload());
     }, [storedStatus]);
@@ -274,6 +278,10 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         // A stored state that failed is asked again for as long as the failure count stands.
         storageUnavailable: storageUnavailable || (stored.isFetching && stored.failureCount > 0),
         storageGone: storageGone || storedStatus === 410,
+        loadError:
+            storedStatus === 401 || storedStatus === 403 || storedStatus === 410
+                ? null
+                : (storedError?.message ?? null),
         unsyncedEdits,
     };
 }

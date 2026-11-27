@@ -12,7 +12,7 @@ import { useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-latched-doc-sea
 import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/board/$ownerId/$mountId/$pathId')({
-    beforeLoad: ({ context, location, params }) => guardLinkRoute(context, location, params),
+    beforeLoad: (match) => guardLinkRoute(match, match.params),
     component: StickiesRoute,
     validateSearch: eigenDocEditorValidateSearch,
 });

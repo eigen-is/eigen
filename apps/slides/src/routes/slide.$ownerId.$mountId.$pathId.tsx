@@ -12,7 +12,7 @@ import { useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-latched-doc-sea
 import { SlideEditor } from '../components/slides/editor';
 
 export const Route = createFileRoute('/slide/$ownerId/$mountId/$pathId')({
-    beforeLoad: ({ context, location, params }) => guardLinkRoute(context, location, params),
+    beforeLoad: (match) => guardLinkRoute(match, match.params),
     component: SlideView,
     validateSearch: eigenDocEditorValidateSearch,
 });

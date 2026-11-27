@@ -548,6 +548,7 @@ function stateServer() {
         stored,
         asked,
         refuse: 0,
+        refusal: 'No read permission',
         epoch: 'epoch-1',
         write: (text: string) => stored.getText('probe').insert(stored.getText('probe').length, text),
     };
@@ -557,7 +558,7 @@ function stateServer() {
         asked.push({ url: String(input), ifNoneMatch });
         // Only the state route answers: an info the test did not load stays loading.
         if (!String(input).endsWith('/state')) return new Promise(() => {});
-        if (server.refuse) return new Response('No read permission', { status: server.refuse });
+        if (server.refuse) return new Response(server.refusal, { status: server.refuse });
         const etag = `"${collabStateVersion(server.epoch, 0, stored.getText('probe').length, 'state-f1')}"`;
         if (ifNoneMatch === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
         return new Response(new Uint8Array(Y.encodeStateAsUpdate(stored)), { headers: { ETag: etag } });
@@ -688,13 +689,32 @@ describe('useCollabDoc for a reader who gets no socket', () => {
     });
 
     // The 413 of a state the server could not build in its time or memory, which it would not build on a retry either.
-    test('a state too large to build is asked for once and reads as no outage', async () => {
+    test("a state too large to build is asked for once and ends in the server's message, with no outage", async () => {
         server.refuse = 413;
+        server.refusal = 'Document too large to show';
         active = mount(OPTIONS, false);
         await settle();
         expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
         expect(active.state.loaded).toBe(false);
         expect(active.state.storageUnavailable).toBe(false);
+        expect(active.state.loadError).toBe('Document too large to show');
+    });
+
+    test('a 404 with no message of its own ends in the status, asked for once', async () => {
+        server.refuse = 404;
+        server.refusal = '';
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        expect(active.state.loadError).toBe('Not found (404)');
+    });
+
+    test('a 503 keeps retrying under the outage badge and ends in nothing', async () => {
+        server.refuse = 503;
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(active.state.storageUnavailable).toBe(true);
+        expect(active.state.loadError).toBeNull();
     });
 
     test('a link closed while the document is open reloads at the next focus', async () => {

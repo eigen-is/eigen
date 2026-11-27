@@ -26,10 +26,7 @@ import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/fs/$ownerId/$mountId/$pathId')({
-    // TanStack's 'stay' is any navigation within this route, such as a row selection or a subfolder: the guard answered
-    // on the way in, and the API still refuses a folder the link does not open.
-    beforeLoad: ({ cause, context, location, params }) =>
-        cause === 'stay' ? undefined : guardLinkRoute(context, location, params.pathId === 'root' ? null : params),
+    beforeLoad: (match) => guardLinkRoute(match, match.params.pathId === 'root' ? null : match.params),
     component: FolderRoute,
     validateSearch: (search: Record<string, unknown>): DriveSearchParams => ({
         ...validateDriveSearch(search),

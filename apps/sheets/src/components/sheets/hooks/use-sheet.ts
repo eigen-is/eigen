@@ -84,7 +84,7 @@ export function useSheet(
 
     // useCollabDoc owns the doc and provider lifecycle, and sheets layers its op log and snapshot on top through onInit
     // and onSync. There is no UndoManager, because the sheet engine's own op stack owns undo.
-    const { docRef, provider, synced, offline, loaded, storageUnavailable, storageGone, unsyncedEdits } = useCollabDoc({
+    const collab = useCollabDoc({
         ownerId,
         mountId,
         pathId,
@@ -175,6 +175,8 @@ export function useSheet(
             if (!loadedRef.current) reset(doc);
         },
     });
+    const { docRef, provider, synced, offline, loaded, storageUnavailable, storageGone, loadError, unsyncedEdits } =
+        collab;
 
     // The grid seeds its workbook as it mounts, before this effect. While the doc still starts with what the seed
     // holds, the grid lacks only the batches after those. Any other change loads the snapshot and the log again.
@@ -218,6 +220,7 @@ export function useSheet(
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
         handleOp,
         docRef,

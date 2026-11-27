@@ -7,27 +7,27 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { arePublicLinksEnabled } from '../config/server-settings';
 import { ApiError } from '../core';
-import type { Home } from '../home';
+import { getHome } from '../home';
 import type { Mount } from '../mount';
 import { canReadByLink } from './acl';
 import type { Drive } from './drive';
 
-export class LinkDrive {
-    private readonly drive: Drive;
+// The owner's drive, with the breadcrumb from the public path down.
+type PublicChain = { drive: Drive; chain: DrivePath[] };
 
-    public constructor(home: Home) {
-        this.drive = home.drive;
+export class LinkDrive {
+    private readonly ownerId: string;
+
+    public constructor(ownerId: string) {
+        this.ownerId = ownerId;
     }
 
     public async canRead(mountId: string, pathId: string): Promise<boolean> {
         return (await this.publicChain(mountId, pathId)) !== null;
     }
 
-    // Every other read starts here, so this is where a refusal is thrown.
     public async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
-        const chain = await this.publicChain(mountId, pathId);
-        if (chain === null) throw new ApiError(403, 'No read permission');
-        return chain.map(withoutAcl);
+        return (await this.readable(mountId, pathId)).chain.map(withoutAcl);
     }
 
     public async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
@@ -35,22 +35,29 @@ export class LinkDrive {
     }
 
     public async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
-        await this.breadCrumb(mountId, pathId);
-        return this.drive.resolveFile(mountId, pathId);
+        return (await this.readable(mountId, pathId)).drive.resolveFile(mountId, pathId);
     }
 
     public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
-        const crumbs = await this.breadCrumb(mountId, pathId);
-        const children = await this.drive.getFolderContents(mountId, pathId);
-        return children.filter((child) => canReadByLink([...crumbs, child]) !== null).map(withoutAcl);
+        const { drive, chain } = await this.readable(mountId, pathId);
+        const children = await drive.getFolderContents(mountId, pathId);
+        return children.filter((child) => canReadByLink([...chain, child]) !== null).map(withoutAcl);
     }
 
-    // The chain from the public path down, or null while public links are off or where the link rule refuses the path.
-    private async publicChain(mountId: string, pathId: string): Promise<DrivePath[] | null> {
+    // Every read starts here, so this is where a refusal is thrown.
+    private async readable(mountId: string, pathId: string): Promise<PublicChain> {
+        const found = await this.publicChain(mountId, pathId);
+        if (found === null) throw new ApiError(403, 'No read permission');
+        return found;
+    }
+
+    // Null while public links are off, asked before the owner's Home is opened, or where the link rule refuses the path.
+    private async publicChain(mountId: string, pathId: string): Promise<PublicChain | null> {
         if (!arePublicLinksEnabled()) return null;
-        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const { drive } = await getHome(this.ownerId); // ownerId-routed: the request is for this owner's home
+        const chain = await drive.breadCrumb(mountId, pathId);
         const publicPath = canReadByLink(chain);
-        return publicPath === null ? null : chain.slice(publicPath);
+        return publicPath === null ? null : { drive, chain: chain.slice(publicPath) };
     }
 }
 

@@ -1,10 +1,11 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import * as home from '../../lib/home';
 import type { TestUser } from '../setup';
 import {
     app,
@@ -211,11 +212,14 @@ describe('files and folders without a login', () => {
                 }
             });
 
-            test(`${route} refuses while public links are off`, async () => {
+            test(`${route} refuses while public links are off, and opens no Home to say so`, async () => {
                 await withPublicLinks(false);
+                const opens = spyOn(home, 'getHome');
                 try {
                     await expectRefused(route, await visit(urlOf(route, inFolder[reads].id)));
+                    expect(opens).not.toHaveBeenCalled();
                 } finally {
+                    opens.mockRestore();
                     await withPublicLinks(true);
                 }
             });

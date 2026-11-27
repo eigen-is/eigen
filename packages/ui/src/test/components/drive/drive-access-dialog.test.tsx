@@ -162,7 +162,7 @@ function PageHarness() {
 // The dialog as an editor route hosts it: Back or Forward swaps the item while Share stays open.
 let showPath = (_path: DrivePath) => {};
 function RouteHarness() {
-    const [path, setPath] = useState(notes);
+    const [path, setPath] = useState(sharedPath);
     const [open, setOpen] = useState(true);
     showPath = setPath;
     return createElement(DriveAccessDialog, {
@@ -424,6 +424,19 @@ test('Anyone with the link waits for Save, with the line under it and no role be
     await click(button('Save'));
     await settle();
     expect(updateACL.mock.calls).toEqual([[expect.objectContaining({ add: [], remove: [], visibility: 'link' })]]);
+});
+
+test('a save that only adds a person sends no general access, so it never reopens a link someone else closed', async () => {
+    sharedPath = { ...notes, visibility: 'link' };
+    ({ unmount } = await renderInDocument(createElement(RouteHarness)));
+    await act(async () => showPath({ ...notes, visibility: 'private' }));
+    await addByEnter('dan@example.com');
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([
+        [expect.objectContaining({ add: [{ id: 'dan@example.com', read: true, write: true }], remove: [] })],
+    ]);
+    expect(updateACL.mock.calls[0]?.[0]).not.toHaveProperty('visibility', expect.anything());
 });
 
 test('Anyone with the link is not offered while public links are off, nor on a chat', async () => {
