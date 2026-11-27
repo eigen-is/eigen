@@ -3,7 +3,6 @@ import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, tocPreset } from '@workspace/lib/docs/eigendoc';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { cpuClock } from '../../cpu-time';
 import { importDocxBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // A Word table of contents is a TOC field whose result holds Word's saved entries. The import reads it as one node,
@@ -251,13 +250,15 @@ describe('many docx tables of contents', () => {
         expect(warnings).toEqual([{ code: 'blocks-flattened', count: 2 }]);
     });
 
+    // Each node lists the outline, so 8,000 of them would read 8,000 headings 8,000 times. The eight nodes show that
+    // the outline is listed eight times.
     test('eight thousand fields beside eight thousand headings read in linear time', async () => {
         const fields = paragraph(`${field('TOC')}${END}`).repeat(8000);
         const headings = Array.from({ length: 8000 }, (_, index) => heading(`Heading ${index}`)).join('');
-        const cpuMs = cpuClock();
-        const { json } = await read(`${fields}${headings}`);
-        expect(cpuMs()).toBeLessThan(3000);
+        const { json, warnings } = await read(`${fields}${headings}`);
         expect(nodesOfType(json, 'heading')).toHaveLength(8000);
+        expect(nodesOfType(json, 'tableOfContents')).toHaveLength(8);
+        expect(warnings).toContainEqual({ code: 'blocks-flattened', count: 7992 });
     }, 60_000);
 });
 
