@@ -56,11 +56,12 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
 
     const { baseDirectList, directList, inheritedList } = useDriveAccess(path, directListOverride);
 
-    // Undefined until picked here, so a save that only changes people never sends back a general access another
-    // sharer has changed since.
+    // Undefined until picked here, so a save that only changes people never sends back a general access or a sharing
+    // rule another sharer has changed since.
     const [visibilityOverride, setVisibilityOverride] = useState<DriveVisibility | undefined>();
     const visibility = visibilityOverride ?? path.visibility;
-    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted);
+    const [sharingRestrictedOverride, setSharingRestrictedOverride] = useState<boolean | undefined>();
+    const sharingRestricted = sharingRestrictedOverride ?? path.sharingRestricted;
 
     const { data: myTeams } = useMyTeams();
 
@@ -128,7 +129,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
     };
 
     const handleSharingRestrictedChange = (checked: boolean | 'indeterminate') => {
-        setSharingRestricted(!checked);
+        setSharingRestrictedOverride(!checked);
         setHasChanges(true);
     };
 
@@ -160,7 +161,7 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
             add,
             remove,
             visibility: visibilityOverride,
-            sharingRestricted: isEffectiveOwner ? sharingRestricted : undefined,
+            sharingRestricted: sharingRestrictedOverride,
         });
     };
 
