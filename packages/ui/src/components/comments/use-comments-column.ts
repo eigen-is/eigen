@@ -34,6 +34,8 @@ export type CommentsColumnState = {
     openChat: (chatName: string) => void;
     back: () => void;
     close: () => void;
+    // A click on the open thread's block, which reveals its anchor again. Unset where nothing reveals.
+    revealOpenCard: (() => void) | undefined;
     // Whether the open thread's reply box takes the focus: only when a click opened it, never on a landing.
     focusComposer: boolean;
     onSearchOpenChange: (open: boolean) => void;
@@ -66,6 +68,7 @@ export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): 
         if (landedCardId) revealLanded(landedCardId);
     }, [landedCardId]);
 
+    const openCardId = lifecycle.openCard?.id;
     const toggle = (next: DocumentPanel) => (open && listPanel === next ? close() : showList(next));
     return {
         lifecycle,
@@ -83,6 +86,7 @@ export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): 
             openChat: (chatName) => lifecycle.openChat(chatName, openThread),
             back: () => showList(listPanel),
             close,
+            revealOpenCard: reveal && openCardId && !isMobile ? () => reveal(openCardId, 0) : undefined,
             focusComposer: clicked,
             // The find bar sits in the document, which the column covers on a phone.
             onSearchOpenChange: (searchOpen) => {

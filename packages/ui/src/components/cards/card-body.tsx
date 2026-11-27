@@ -1,7 +1,8 @@
 // A card as it reads when opened: its title and description on its block in the card's color, a meta line, such as
 // who created it, then its attachments. A reader with write access can tick the boxes of a task list in the description
 // without opening the editor, and ticking the last box of a list now and then celebrates. It is the lead of the
-// card's thread, so it scrolls with the replies in any host, such as the card dialog.
+// card's thread, so it scrolls with the replies in any host, such as the card dialog. A host may make the block a way
+// back to where the card sits, such as the comments column's jump to a comment's anchor.
 
 import { countTaskItems } from '@workspace/lib/html';
 import type { ReactNode } from 'react';
@@ -18,6 +19,8 @@ type CardBodyProps = {
     onDescriptionChange?: (html: string) => void;
     attachments?: ReactNode;
     meta?: ReactNode;
+    // A click on the block, away from a box or a link in the description, such as a comment's jump to its anchor.
+    onBlockClick?: () => void;
 };
 
 export function CardBody({
@@ -28,6 +31,7 @@ export function CardBody({
     onDescriptionChange,
     attachments,
     meta,
+    onBlockClick,
 }: CardBodyProps) {
     const celebrate = useCelebrate();
     // One roll per opening, so re-ticking the last box can't farm it. The refs die with the card, which also disarms a
@@ -66,7 +70,16 @@ export function CardBody({
 
     return (
         <div className="app-gutter-x pt-1 pb-4">
-            <DetailItemBlock title={title} color={color}>
+            <DetailItemBlock
+                title={title}
+                color={color}
+                onClick={
+                    onBlockClick &&
+                    ((e) => {
+                        if (!(e.target instanceof Element && e.target.closest('a, input'))) onBlockClick();
+                    })
+                }
+            >
                 {description && (
                     <div
                         ref={descriptionRef}

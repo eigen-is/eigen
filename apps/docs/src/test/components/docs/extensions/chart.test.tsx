@@ -158,7 +158,13 @@ test('a chart holds its comment card as an attribute, and a comment on it alone 
 // The card's color reaches the view as a decoration alone, with the node unchanged.
 test("a commented chart's mark takes its card's color when the color arrives", async () => {
     const { editor, box } = await mount({ attrs: { commentCardId: 'card-1' } });
-    await act(async () => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']])));
+    await act(async () =>
+        updateCommentDecorations(editor, {
+            resolvedIds: new Set(),
+            colorMap: new Map([['card-1', '#123456']]),
+            openId: null,
+        }),
+    );
     const mark = box.querySelector<HTMLElement>('button[aria-label="Open comment"] span');
     expect(mark?.style.borderTop).toContain('#123456');
 });

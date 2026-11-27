@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -32,7 +32,7 @@ To comment on an equation, click it and press the shortcut. The **Title** starts
 
 Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you. The comments column opens on the right, over the page's margin, in place of any formatting panel. Click **Comments** again or the X at the top of the column to close it. Esc closes it too, when you aren't typing in the document or a reply.
 
-The column lists every comment anchored to the document, each by its title. Click a comment to scroll to its text in the document and open its thread. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
+The column lists every comment anchored to the document, each by its title. Click a comment to scroll to its text in the document and open its thread. The column widens to give the thread more room. While the thread is open, its text is marked in amber, the same mark the find bar gives the current match, even when the comment is resolved. Scrolled away? Click the comment's colored block at the top of the thread to go back to its text. Click **Comments** at the top left of the thread to go back to the list, where you left it.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 

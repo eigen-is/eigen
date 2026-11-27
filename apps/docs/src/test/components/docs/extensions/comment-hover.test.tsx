@@ -98,7 +98,9 @@ test('a hover over plain text reads as left', async () => {
 
 test('a resolved highlight is gone, so a hover over its text reads as left', async () => {
     const { editor, element } = await mount();
-    await act(async () => updateCommentDecorations(editor, new Set(['on-text']), new Map()));
+    await act(async () =>
+        updateCommentDecorations(editor, { resolvedIds: new Set(['on-text']), colorMap: new Map(), openId: null }),
+    );
     await moveOver(element('.comment-highlight'));
     expect(report.mock.calls.at(-1)?.[0]).toBeNull();
 });
@@ -120,7 +122,9 @@ test.each([
     ['an equation', EQUATION_MARK, 'on-equation'],
 ])('the corner mark of %s still names its card once it is resolved, as it still draws', async (_, mark, id) => {
     const { editor, element } = await mount();
-    await act(async () => updateCommentDecorations(editor, new Set([id]), new Map()));
+    await act(async () =>
+        updateCommentDecorations(editor, { resolvedIds: new Set([id]), colorMap: new Map(), openId: null }),
+    );
     await moveOver(element(mark));
     expect(report.mock.calls[0]?.[0]?.cardId).toBe(id);
 });

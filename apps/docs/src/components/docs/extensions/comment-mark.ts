@@ -2,7 +2,7 @@
 // keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
 // anchored text for the card, tells the hover card which anchor the pointer is on, and paints each card's color, until
 // it is resolved, as decorations, which the editor component updates and a figure's node view draws as its corner
-// mark.
+// mark. The anchor of the comment whose thread is open wears the find bar's current-match mark instead.
 
 import type { Hotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/core';
@@ -38,6 +38,7 @@ type CommentMarkOptions = {
 type CommentColors = {
     resolvedIds: ReadonlySet<string>;
     colorMap: ReadonlyMap<string, string>;
+    openId: string | null;
 };
 
 declare module '@tiptap/core' {
@@ -166,11 +167,18 @@ function buildDecorations(state: EditorState, colors: CommentColors): Decoration
         if (cardId) {
             const end = pos + node.nodeSize;
             const color = colors.colorMap.get(cardId);
+            const open = cardId === colors.openId;
+            const figure = isFigureFrameNode(node.type.name);
             // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
             // from this spec, resolved or not, like a commented canvas element.
-            if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
-            // Text, and an equation among it, is highlighted until resolved; the comments column shows a resolved one.
-            if (!isFigureFrameNode(node.type.name) && !colors.resolvedIds.has(cardId) && color) {
+            if (anchorsByAttribute(node)) {
+                const attrs = open && figure ? { class: 'eigen-search-ring-active' } : {};
+                decorations.push(Decoration.node(pos, end, attrs, { commentColor: color }));
+            }
+            // Resolved text has no highlight, so the open mark is all that shows where its comment sits.
+            if (open && !figure) {
+                decorations.push(Decoration.inline(pos, end, { class: 'comment-open' }));
+            } else if (!figure && !colors.resolvedIds.has(cardId) && color) {
                 decorations.push(
                     Decoration.inline(pos, end, {
                         class: 'comment-colored',
@@ -189,7 +197,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentC
     },
 
     addStorage() {
-        return { resolvedIds: new Set<string>(), colorMap: new Map<string, string>() };
+        return { resolvedIds: new Set<string>(), colorMap: new Map<string, string>(), openId: null };
     },
 
     addKeyboardShortcuts() {
@@ -262,16 +270,13 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions, CommentC
     },
 });
 
-export function updateCommentDecorations(
-    editor: Editor,
-    resolvedIds: ReadonlySet<string>,
-    colorMap: ReadonlyMap<string, string>,
-): void {
+export function updateCommentDecorations(editor: Editor, { resolvedIds, colorMap, openId }: CommentColors): void {
     // A destroyed editor has empty storage, and the cards may still change as the page unmounts.
     if (editor.isDestroyed) return;
     // The decoration plugin holds this storage object, so the fields change in place.
     const storage = editor.storage.comment;
     storage.resolvedIds = resolvedIds;
     storage.colorMap = colorMap;
+    storage.openId = openId;
     editor.view.dispatch(editor.view.state.tr.setMeta(decorationKey, true));
 }

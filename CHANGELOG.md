@@ -36,7 +36,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Event details in Calendar** — open in a panel beside the grid instead of over it, with a ring around the event. The panel stays open when you reload or change week, a copied link opens it, and back closes it
 - **Comments in Docs, Sheets, Slides and Vector** — open in a column beside the page, grid, slide or drawing, which widens for a thread, with **Comments** at its top back to the list. A link or a reload keeps it open
 - **Closed comments stay closed** — in every editor, a reload doesn't reopen a comment you closed
-- **Comments in Docs** — the column lies over the page's margin. Clicking a comment's highlighted text opens its thread with the reply box ready to type in
+- **Comments in Docs** — the column lies over the page's margin. Clicking a comment's highlighted text opens its thread with the reply box ready to type in. While a thread is open, its text wears the find bar's amber mark, resolved comments too
+- **Back to a comment's place** — in Docs, Sheets, Slides and Vector, a click on the colored block at the top of an open comment goes back to its text, cell or object
 - **Panels in Sheets** — the comments column and the image and chart panel open under the toolbar, so its formatting buttons stay in view
 - **Activity in Stickies** — opens in a column at the right, on a phone too
 - **Searching comments in Sheets, Slides and Vector** — `doc:` in the command palette (**⌘K**) finds their comments too, and a hit opens the thread and goes to its cell, slide or shape
@@ -51,6 +52,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Comments in Docs** — a click on a comment in the list scrolls the page to its text again, and closing the column leaves the page where you scrolled it
 - **Monthly repeats in Calendar** — an event that starts in the fifth week of its month and repeats "Monthly on the last Friday" now comes back on the last Friday of every month, not only in months with five
 - **Repeats in Calendar** — an event set to repeat weekly, daily or another preset shows that choice again when you edit it, instead of Custom
 - **This and following events in Calendar** — changing them no longer shows an earlier edited date twice

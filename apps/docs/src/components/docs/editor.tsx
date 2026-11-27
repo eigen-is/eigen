@@ -602,8 +602,9 @@ const TiptapEditor = ({
         [editor, pendingMarkRange, createCard, assignComment],
     );
 
-    // A comment highlights its text in its card's color until it is resolved, so the body's decorations learn both
-    // whenever a card or a comment changes.
+    // A comment highlights its text in its card's color until it is resolved, and the open one in the find bar's mark,
+    // so the body's decorations learn all three whenever a card, a comment or the open thread changes.
+    const openCardId = lifecycle.openCard?.id ?? null;
     useEffect(() => {
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
@@ -614,8 +615,8 @@ const TiptapEditor = ({
             const entry = allComments.find((c) => c.chatName === card.chatName);
             if (entry?.status === 'resolved') resolved.add(cardId);
         }
-        updateCommentDecorations(editor, resolved, colorMap);
-    }, [editor, cards, allComments, activeComments.ids]);
+        updateCommentDecorations(editor, { resolvedIds: resolved, colorMap, openId: openCardId });
+    }, [editor, cards, allComments, activeComments.ids, openCardId]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     // Find searches the body, so ⌘F leaves a band.

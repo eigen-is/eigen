@@ -80,7 +80,7 @@ A small triangle appears in the corner of the cell to show it has a comment atta
 
 Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments are assigned to you. The comments column opens on the right, under the toolbar, in place of any image or chart panel. Click **Comments** again or the X at the top of the column to close it.
 
-The column lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread. The column widens to give the thread more room. Click **Comments** at the top left of the thread to go back to the list, where you left it.
+The column lists every comment, on every tab. Each comment shows its title. A comment on another tab shows that tab's name first, such as "Sheet2 · Cell B2". Click a comment to jump to its cell and open its thread. The column widens to give the thread more room. Moved away? Click the comment's colored block at the top of the thread to jump back to its cell. Click **Comments** at the top left of the thread to go back to the list, where you left it.
 
 A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 

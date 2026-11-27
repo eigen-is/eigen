@@ -162,3 +162,25 @@ test('an opened card is its block with title and text, then its meta line, then 
     expect(attachments?.tagName).toBe('SECTION');
     expect(attachments?.textContent).toBe('Attachmentsplan.pdf');
 });
+
+test("a click on the block reveals the card's anchor, and a tick of its box or a link in its text does not", () => {
+    let reveals = 0;
+    act(() =>
+        root.render(
+            createElement(CardBody, {
+                title: 'Shed',
+                description: `${twoItems}<p><a href="#plan">plan</a></p>`,
+                canWrite: true,
+                onDescriptionChange: () => {},
+                onBlockClick: () => {
+                    reveals += 1;
+                },
+            }),
+        ),
+    );
+    act(() => document.querySelector('a')?.click());
+    act(() => document.querySelector('input')?.click());
+    expect(reveals).toBe(0);
+    act(() => document.querySelector('h2')?.click());
+    expect(reveals).toBe(1);
+});
