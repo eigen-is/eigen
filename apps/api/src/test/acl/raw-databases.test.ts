@@ -82,15 +82,6 @@ async function charlieCopies(pathId: string): Promise<Response> {
     });
 }
 
-// The names of every path below a folder of the user's own home.
-async function namesBelow(user: TestUser, folderId: string): Promise<string[]> {
-    const mount = await firstMountId(user.sessionToken, user.id);
-    const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${mount}/folder/${folderId}`);
-    const children: DrivePath[] = await res.json();
-    const below = await Promise.all(children.map((child) => (child.type === 'file' ? [] : namesBelow(user, child.id))));
-    return [...children.map((child) => child.name), ...below.flat()];
-}
-
 // Alice's edit over a real socket, so its row is stored as a member's is. Resolves once the server's document holds it.
 async function aliceEdits(docId: string, change: (doc: Y.Doc) => void): Promise<void> {
     const ws: WebSocket = Reflect.construct(WebSocket, [
@@ -244,21 +235,46 @@ describe('a reader who is not live', () => {
             folderName: `Empty ${crypto.randomUUID()}`,
         });
         const listCopy = Mount.prototype.listCopy;
+        // What the late document held as the copy listed it, asserted after the request so a miss fails the test.
+        let lateParts: string[] = [];
         const spy = spyOn(Mount.prototype, 'listCopy').mockImplementationOnce(async function (this: Mount, pathId) {
             const doc = await drivePost(token, alice.id, mountId, `folder/${folder.id}/create/doc`, {
                 fileName: 'Late',
             });
-            expect((await childrenOf(token, doc.id)).map((child) => child.name)).toContain('data.db');
+            lateParts = (await childrenOf(token, doc.id)).map((child) => child.name);
             return listCopy.call(this, pathId);
         });
         try {
             const res = await charlieCopies(folder.id);
-            const written = res.status === 200 ? await namesBelow(charlie, (await res.json()).id) : [];
-            expect(written).not.toContain('data.db');
+            expect(res.status).toBe(403);
+            expect(await res.text()).toContain('Only people with access can copy this document');
+            expect(lateParts).toContain('data.db');
             expect(spy).toHaveBeenCalled();
         } finally {
             spy.mockRestore();
         }
+    });
+
+    // Charlie may write the folder by name, but reads the document only through its link, so he is not live there.
+    test('cannot WebDAV COPY a document over a file, and the file stays where it was', async () => {
+        const token = alice.sessionToken;
+        const root = await driveGet(token, alice.id, mountId, 'root');
+        const name = `Writable-${crypto.randomUUID()}`;
+        const target = await drivePost(token, alice.id, mountId, `folder/${root.id}`, { folderName: name });
+        await drivePut(token, alice.id, mountId, `path/${target.id}/acl`, {
+            add: [{ id: charlie.email, read: true, write: true }],
+        });
+        const dav = `/webdav/${alice.id}/${mountId}`;
+        const kept = `${dav}/${name}/keep.txt`;
+        expect((await webdavRequest(charlie.email, 'PUT', kept, { body: 'old' })).status).toBe(201);
+        const res = await webdavRequest(charlie.email, 'COPY', `${dav}/${fx.folder.name}/${fx.doc.name}`, {
+            headers: { Destination: `http://localhost${kept}`, Overwrite: 'T' },
+        });
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('Only people with access can copy this document');
+        expect(await (await webdavRequest(charlie.email, 'GET', kept)).text()).toBe('old');
+        const trash = await (await getHome(alice.id)).drive.listTrash(mountId);
+        expect(trash.map((path) => path.name)).not.toContain('keep.txt');
     });
 
     test('still opens the document, its pictures, comments, threads, history, export and members', async () => {
