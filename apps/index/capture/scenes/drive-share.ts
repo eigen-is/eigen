@@ -33,12 +33,19 @@ export const driveShare = {
         const dialog = page.getByRole('dialog');
         await dialog.waitFor();
         await Bun.sleep(1200);
-        await cursor.click(await pointOn(dialog.locator('#new-contact')));
+        await cursor.click(await pointOn(dialog.getByLabel('Add people')));
         await typeLikeAPerson(page, 'sanne@kustkrant.example');
         await Bun.sleep(600);
         await page.keyboard.press('Enter');
         await Bun.sleep(1500);
-        await cursor.click(await pointOn(dialog.getByRole('combobox').last()));
+        await cursor.click(
+            await pointOn(
+                dialog
+                    .getByRole('combobox')
+                    .filter({ hasText: /^(Editor|Viewer)$/ })
+                    .last(),
+            ),
+        );
         await Bun.sleep(700);
         await cursor.click(await pointOn(page.getByRole('option', { name: 'Viewer' })));
         await Bun.sleep(2000);
