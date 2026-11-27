@@ -858,17 +858,17 @@ describe('structure', () => {
         expect(spelled).toBeLessThanOrEqual(MAX_SPELLED);
     }, 20_000);
 
-    // Cut to the label cap when read, a 4 MB lvlText costs 1,000 headings about 2.6 times what a short one does, the
-    // parse of the part; split whole for every heading, 4,700 times.
+    // Cut to the label cap when read, a 4 MB lvlText costs 3,000 headings about 2.4 times what a short one does, the
+    // parse of the part; split whole for every heading, thousands of times.
     test('a 4 MB lvlText costs a heading what a short one does', async () => {
         const numbering = (lvlText: string) =>
             `<w:abstractNum w:abstractNumId="6"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/><w:lvlText w:val="${lvlText}"/></w:lvl></w:abstractNum><w:num w:numId="6"><w:abstractNumId w:val="6"/></w:num>`;
         const heading = paragraph(run('Title'), `<w:pStyle w:val="Heading1"/>${ordered(6)}`);
         const [long, short] = await Promise.all([
-            buildDocxWithBody(heading.repeat(1000), { numbering: numbering('%1'.repeat(2_000_000)) }),
-            buildDocxWithBody(heading.repeat(1000), { numbering: numbering('%1') }),
+            buildDocxWithBody(heading.repeat(3000), { numbering: numbering('%1'.repeat(2_000_000)) }),
+            buildDocxWithBody(heading.repeat(3000), { numbering: numbering('%1') }),
         ]);
-        expect(nodesOfType(docxToPmJson(Buffer.from(long)).json, 'heading')).toHaveLength(1000);
+        expect(nodesOfType(docxToPmJson(Buffer.from(long)).json, 'heading')).toHaveLength(3000);
         const ratio = await costRatio(reading(long), reading(short));
         expect(ratio).toBeLessThan(110);
     }, 30_000);

@@ -1643,7 +1643,7 @@ describe('a removal costs one pass over the list', () => {
         const names = resource.getAllSubcomponents().map((sub) => sub.name);
         expect(names).not.toContain('vtimezone');
         expect(names).toEqual([...Array<string>(15_001).fill('vevent'), 'x-last']);
-        const ratio = await costRatio(onFresh(body(50_000), move), onFresh(body(1), move));
+        const ratio = await costRatio(onFresh(body(50_000), move, 2), onFresh(body(1), move, 2));
         expect(ratio).toBeLessThan(8);
     });
 
