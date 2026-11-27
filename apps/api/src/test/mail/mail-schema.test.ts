@@ -59,28 +59,15 @@ describe('mail.db schema', () => {
         // v1 creates `email_labels` + `emails_to_labels`.
         const v4 = new ManagedDatabase(configAt(4), dbPath, {});
         await v4.open(0);
-        v4.db
-            .insert(schema.emails)
-            .values({
-                id: 'keep-me',
-                filename: '1700000000.keep:2,S',
-                subject: 'Survives the drop',
-                fromShort: 'Sender',
-                fromAddress: 'sender@example.com',
-                toShort: 'Owner',
-                toAddress: 'owner@test.eigen.is',
-                recipientsAll: 'owner@test.eigen.is',
-                textShort: 'body',
-                size: 42,
-                date: new Date(Date.UTC(2021, 0, 1)),
-                mailbox: '',
-            })
-            .run();
         await v4.close({ skipFinalSnapshot: true });
 
         // Populated tables: the drop order has to clear the child before the parent, or the
         // implicit DELETE behind DROP TABLE trips the foreign key (pragma foreign_keys is ON).
         const seed = openRaw(dbPath);
+        seed.run(
+            `INSERT INTO emails (id, filename, subject, fromShort, textShort, size, date, mailbox)
+             VALUES ('keep-me', '1700000000.keep:2,S', 'Survives the drop', 'Sender', 'body', 42, 1609459200, '')`,
+        );
         seed.run("INSERT INTO email_labels (id, name, color) VALUES ('label-1', 'Work', '#ff0000')");
         seed.run("INSERT INTO emails_to_labels (emailId, labelId) VALUES ('keep-me', 'label-1')");
         seed.close();
@@ -129,6 +116,41 @@ describe('mail.db schema', () => {
                 "SELECT e.id FROM emails_fts JOIN emails e ON e.rowid = emails_fts.rowid WHERE emails_fts MATCH 'renamed'",
             );
             expect(hits.all()).toEqual([{ id: 'in' }]);
+        } finally {
+            raw.close();
+        }
+    });
+
+    test('a v6 home gives every row a received time of 0 and pages on the new index alone', async () => {
+        const dbPath = join(TEST_DIR, 'mail-v6.db');
+        const v6 = new ManagedDatabase(configAt(6), dbPath, {});
+        await v6.open(0);
+        await v6.close({ skipFinalSnapshot: true });
+
+        const seed = openRaw(dbPath);
+        seed.run(
+            `INSERT INTO emails (id, filename, subject, fromShort, textShort, date, mailbox)
+             VALUES ('old', 'old:2,S', 'Old', 'A', 'a', 1609459200, 'INBOX')`,
+        );
+        seed.close();
+
+        const v7 = new ManagedDatabase(MAIL_DB_CONFIG, dbPath, {}, true);
+        await v7.open(0);
+        const rows = v7.db.select().from(schema.emails).all();
+        expect(rows.map((row) => [row.id, row.receivedAt.getTime()])).toEqual([['old', 0]]);
+        await v7.close({ skipFinalSnapshot: true });
+
+        const raw = openRaw(dbPath);
+        try {
+            const indexes = raw
+                .query<{ name: string }, []>(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'emails'",
+                )
+                .all()
+                .map((row) => row.name);
+            expect(indexes).toContain('idx_emails_mailbox_receivedAt');
+            expect(indexes).not.toContain('idx_emails_mailbox_date');
+            expect(indexes).not.toContain('idx_emails_date');
         } finally {
             raw.close();
         }

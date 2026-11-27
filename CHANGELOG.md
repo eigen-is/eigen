@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Changed
+
+- **Order in Mail** — the list and search sort by when a message reached your mailbox, as mail apps do, so mail with a wrong date from its sender no longer hides further down. An imported message sits at the time it first arrived
+
 ## [0.4.5] - 2026-11-27
 
 A file, a folder or a document can be shared with anyone who has its address, without an account. Calendar gains Day, 3-day and Schedule views with keyboard shortcuts, and an event opens in a panel beside the grid. Comments in Docs, Sheets, Slides and Vector open in a column beside the page, and forms across the apps save, cancel and ask about unsaved changes the same way. Public links are on after the update, and Admin › Guest access turns them off.

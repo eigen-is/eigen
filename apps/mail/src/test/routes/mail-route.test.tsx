@@ -18,7 +18,7 @@ const elementPrototype = HTMLElement.prototype;
 const clientHeight = Object.getOwnPropertyDescriptor(elementPrototype, 'clientHeight');
 Object.defineProperty(elementPrototype, 'clientHeight', { configurable: true, get: () => 600 });
 
-const email = (id: string, subject: string): Email => ({
+const email = (id: string, subject: string, receivedAt: Date): Email => ({
     id,
     filename: `${id}.eml`,
     subject,
@@ -29,6 +29,7 @@ const email = (id: string, subject: string): Email => ({
     recipientsAll: 'grace@example.com',
     textShort: '',
     date: new Date('2026-01-05T14:30:00Z'),
+    receivedAt,
     isRead: true,
     isFlagged: false,
     isDraft: false,
@@ -40,7 +41,11 @@ const email = (id: string, subject: string): Email => ({
     html: null,
     text: 'Hello',
 });
-const EMAILS = [email('m1', 'Plans'), email('m2', 'Budget')];
+// Newest first, the order the list sorts them in.
+const EMAILS = [
+    email('m1', 'Plans', new Date('2026-01-05T14:30:00Z')),
+    email('m2', 'Budget', new Date('2026-01-05T14:00:00Z')),
+];
 const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
 const session = { user: { id: 'u1', email: 'me@test.eigen.is', name: 'Me' } };
 

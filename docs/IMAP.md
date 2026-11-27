@@ -75,11 +75,21 @@ Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the 
 
 For each folder outside the six, a listing starts a background reconcile, at most once a minute per folder, and the sync's SSE events carry the counts. A listing never waits for it. The throttle exists because every burst of mail SSE events re-lists the mailboxes, and each reconcile takes the lock user mutations need.
 
-`listMessages` waits for the sync only while the mailbox has no rows, so a first open shows content. Otherwise it answers from the index at once and syncs in the background ([MAIL.md § The list pages by keyset](MAIL.md#the-list-pages-by-keyset-and-patches-its-own-mutations)).
+`listMessages` waits for the sync only while the mailbox has no rows, so a first open shows content, or holds a row without a received time, so the first list after the upgrade is in order ([§ A message's received time is its file's mtime](#a-messages-received-time-is-its-files-mtime)). Otherwise it answers from the index at once and syncs in the background ([MAIL.md § The list pages by keyset](MAIL.md#the-list-pages-by-keyset-and-patches-its-own-mutations)).
 
 ## Every file is staged in tmp/ first
 
 `append` writes the bytes to `tmp/`, fsyncs them and renames them into `new/`. It serves every message the store did not write itself: a delivery from Postfix (`POST /mail/deliver/:to`), an import, a copy and the welcome mail. It then reconciles the mailbox, unless the caller passes `skipReconcile`. `saveDraft` stages the same way but renames into `Drafts/cur/` with `D` and `S` set, since Eigen knows the flags. A send moves that draft to Sent and clears `D` in one rename.
+
+## A message's received time is its file's mtime
+
+Dovecot serves a Maildir file's mtime as the message's IMAP INTERNALDATE, the arrival time a mail client sorts by. So the index stores that mtime as `receivedAt`, and the web list sorts by it too ([MAIL.md § The list sorts by when a message arrived](MAIL.md#the-list-sorts-by-when-a-message-arrived-not-by-its-date-header)). The file stays the truth: a rename, which is every flag change, move and `new/` to `cur/`, keeps the mtime, a rebuilt index reads it back with its stat, and a backup's tar and its restore keep it (`lib/backup/archive.ts`, `lib/backup/snapshot-home.ts`).
+
+`append` can backdate a file: `deliver` sets the mtime on the file in `tmp/`, before the rename into `new/`, so no sync ever sees it at the time of the write. A copy, an import and the demo seeder use it ([MAIL.md § The list sorts by when a message arrived](MAIL.md#the-list-sorts-by-when-a-message-arrived-not-by-its-date-header)).
+
+A row from before mail.db v7 has `receivedAt` 0. The next sync of its mailbox stats its file and fills it in, with no re-parse (`MailDB.setReceivedAt`). v7 also recreates the `emails_au` trigger as `AFTER UPDATE OF` the indexed text columns, so that backfill and every flag change re-tokenise nothing in the full-text index.
+
+Accepted: a custom folder nobody has opened or listed since the upgrade dates its messages 1970 in a search across folders until its first sync. Opening the mailbox list syncs it within a minute, and a full backfill at migration would stat every file of every home on the first open. Reopen if users search old folders before the sidebar ever lists them.
 
 ## A sync diffs cur/ against the index
 

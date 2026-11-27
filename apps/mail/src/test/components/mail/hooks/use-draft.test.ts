@@ -28,6 +28,7 @@ function savedDraft(attachments: Attachment[]): EmailDraft {
         recipientsAll: 'bob@test.eigen.is',
         textShort: 'see you',
         date: new Date('2026-09-15T10:00:00Z'),
+        receivedAt: new Date('2026-09-15T10:00:00Z'),
         isRead: true,
         isFlagged: false,
         isDraft: true,

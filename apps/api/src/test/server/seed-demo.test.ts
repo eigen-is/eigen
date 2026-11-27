@@ -255,6 +255,12 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                 'SELECT count(*) AS n FROM emails WHERE hasAttachments = 1',
             );
             expect(withAttachments[0].n).toBeGreaterThanOrEqual(1);
+            // A seeded thread is received when it was sent, days ago, so the list keeps the story's order.
+            const receivedLater = query<{ n: number }>(
+                mailDb,
+                'SELECT count(*) AS n FROM emails WHERE hasAttachments = 1 AND receivedAt != date',
+            );
+            expect(receivedLater[0].n).toBe(0);
 
             // A lead who answered an inbox thread holds the answered message flagged, as a real send leaves it.
             const replier = query<{ id: string }>(

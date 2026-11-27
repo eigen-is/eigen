@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, import, eml]
 related: [mail/download-an-email, mail/get-started, drive/preview-a-file]
 order: 81
-updated: 2026-09-21
+updated: 2026-11-27
 ---
 
 An `.eml` file holds one email, and Mail can read it back. That works whether the file came out of Eigen or out of another mail program, so you can bring an archived message across or keep a copy someone sent you.
@@ -17,7 +17,7 @@ An `.eml` file holds one email, and Mail can read it back. That works whether th
 2. In Drive, right-click the file or click its **⋮** button. For an attachment, right-click the chip, or press and hold it on a phone.
 3. Choose **Import to Mail**.
 
-The message lands in your inbox as an unread message, with its original sender, date, subject, and attachments. It is a copy, so importing the same file twice gives you the message twice.
+The message lands in your inbox as an unread message, with its original sender, date, subject, and attachments. It is a copy, so importing the same file twice gives you the message twice. The list places it by when it first arrived, or by its date when the file doesn't say, so an old message sits among the mail of its day rather than at the top.
 
 To read the file before you import it, select it and press **Space**, or choose **Quick preview** from the same menu. The preview shows the message as it was sent, and the bar at the bottom has the same **Import to Mail** button. See [Preview a file](/support/drive/preview-a-file).
 

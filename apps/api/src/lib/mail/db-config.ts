@@ -1,8 +1,14 @@
+// The migrations of a home's mail.db, the index over its Maildir: the message rows, their full-text index and the
+// triggers that keep the two in step. The mail index runs the ones a file lacks when it opens it. The files stay the
+// truth, so a column a migration adds is filled from them by the next sync.
+
 import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
-// Spelled once: v6 lifts it around a bulk update of an unindexed column and puts it back.
-const EMAILS_AU_TRIGGER = `CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE ON emails BEGIN
+// Spelled once: v6 and v7 drop it and put it back. Only an update of an indexed column re-tokenises the row, so
+// a flag change or a received-time backfill costs no full-text work.
+const EMAILS_AU_TRIGGER = `CREATE TRIGGER IF NOT EXISTS emails_au
+                AFTER UPDATE OF subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort ON emails BEGIN
                     INSERT INTO emails_fts(emails_fts, rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
                     VALUES ('delete', old.rowid, old.subject, old.fromShort, old.fromAddress, old.toShort, old.toAddress, old.recipientsAll, old.textShort);
                     INSERT INTO emails_fts(rowid, subject, fromShort, fromAddress, toShort, toAddress, recipientsAll, textShort)
@@ -11,7 +17,7 @@ const EMAILS_AU_TRIGGER = `CREATE TRIGGER IF NOT EXISTS emails_au AFTER UPDATE O
 
 export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mail',
-    currentVersion: 6,
+    currentVersion: 7,
     schema,
     migrations: [
         {
@@ -122,6 +128,19 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 db.exec(`
                 DROP TRIGGER emails_au;
                 UPDATE emails SET mailbox = 'INBOX' WHERE mailbox = '';
+                ${EMAILS_AU_TRIGGER}
+            `),
+        },
+        {
+            // A row from before v7 has receivedAt 0, and the next sync of its mailbox reads it from the file.
+            version: 7,
+            up: (db) =>
+                db.exec(`
+                ALTER TABLE emails ADD COLUMN receivedAt INTEGER NOT NULL DEFAULT 0;
+                CREATE INDEX IF NOT EXISTS idx_emails_mailbox_receivedAt ON emails(mailbox, receivedAt DESC, id DESC);
+                DROP INDEX IF EXISTS idx_emails_mailbox_date;
+                DROP INDEX IF EXISTS idx_emails_date;
+                DROP TRIGGER emails_au;
                 ${EMAILS_AU_TRIGGER}
             `),
         },

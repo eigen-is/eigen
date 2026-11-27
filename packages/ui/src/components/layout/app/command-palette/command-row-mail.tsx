@@ -1,3 +1,6 @@
+// A mail hit in the command palette, laid out as the mail app's list row: the sender and when it arrived, then the
+// subject, then a snippet. The palette's icon sits to its left, so the row still reads as mail among other kinds.
+
 import { formatDate } from '@workspace/lib/date';
 import type { PaletteResult } from '@workspace/lib/types/command-palette';
 import { CommandItem } from '@workspace/ui/components/command';
@@ -8,10 +11,6 @@ type Props = {
     onSelect: () => void;
 };
 
-// Match the mail app's email-list row (apps/mail/src/components/mail/email-list.tsx):
-// sender + date on the first line, subject on the second, body snippet on the third.
-// Same visual structure, same precedence; the palette icon sits to the left so the row
-// still reads as a mail kind among other kinds in the merged list.
 export function CommandRowMail({ result, onSelect }: Props) {
     const { payload, icon: Icon } = result;
     return (
@@ -23,7 +22,7 @@ export function CommandRowMail({ result, onSelect }: Props) {
                         {payload.fromShort || payload.fromAddress || 'Unknown'}
                     </div>
                     <div className="text-xs text-muted-foreground whitespace-nowrap ml-2">
-                        {formatDate(payload.date)}
+                        {formatDate(payload.receivedAt)}
                     </div>
                 </div>
                 <div className={cn('text-sm truncate mt-0.5 text-foreground', !payload.isRead && 'font-medium')}>

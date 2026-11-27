@@ -51,6 +51,7 @@ const savedForward: EmailDraftType = {
     recipientsAll: 'bob@test.eigen.is',
     textShort: 'quoted',
     date: new Date('2026-09-15T10:00:00Z'),
+    receivedAt: new Date('2026-09-15T10:00:00Z'),
     isRead: true,
     isFlagged: false,
     isDraft: true,

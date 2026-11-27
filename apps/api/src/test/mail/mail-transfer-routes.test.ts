@@ -150,6 +150,48 @@ describe('Mail transfer routes', () => {
         expect((await newMailNotifications(user)).length).toBe(1);
     });
 
+    // The file's own message carries `Date: Mon, 20 Apr 2026 10:00:00 +0000`.
+    const importedReceivedAt = async (received: string[]): Promise<Date | undefined> => {
+        const raw = [...received.map((value) => `Received: ${value}`), message('Imported with a history')].join('\r\n');
+        const { id } = await assertJson<ImportMailResult>(await importRequest(alice, raw));
+        return (await getHome(alice.id)).mail.messageGetSummary(id)?.receivedAt;
+    };
+
+    test('an import is received when the topmost Received header says', async () => {
+        const receivedAt = await importedReceivedAt([
+            'from relay.example by mx.example; Tue, 21 Apr 2026 09:00:00 +0000',
+            'from sender.example by relay.example; Mon, 20 Apr 2026 10:05:00 +0000',
+        ]);
+        expect(receivedAt).toEqual(new Date('2026-04-21T09:00:00Z'));
+    });
+
+    test('an import without a Received header is received at its Date', async () => {
+        expect(await importedReceivedAt([])).toEqual(new Date('2026-04-20T10:00:00Z'));
+    });
+
+    test('an import whose Received date is garbage or in the future falls back to its Date', async () => {
+        const garbage = await importedReceivedAt(['from relay.example by mx.example; not a date']);
+        expect(garbage).toEqual(new Date('2026-04-20T10:00:00Z'));
+        const future = await importedReceivedAt(['from relay.example by mx.example; Fri, 1 Jan 2999 00:00:00 +0000']);
+        expect(future).toEqual(new Date('2026-04-20T10:00:00Z'));
+        const beforeEpoch = await importedReceivedAt([
+            'from relay.example by mx.example; Thu, 1 Jan 1960 00:00:00 +0000',
+        ]);
+        expect(beforeEpoch).toEqual(new Date('2026-04-20T10:00:00Z'));
+    });
+
+    test('an import with no believable date is received now', async () => {
+        const raw = message('Dated in the future').replace(
+            'Date: Mon, 20 Apr 2026 10:00:00 +0000',
+            'Date: Fri, 1 Jan 2999 00:00:00 +0000',
+        );
+        const before = Math.floor(Date.now() / 1000) * 1000;
+        const { id } = await assertJson<ImportMailResult>(await importRequest(alice, raw));
+        const receivedAt = (await getHome(alice.id)).mail.messageGetSummary(id)?.receivedAt.getTime() ?? 0;
+        expect(receivedAt).toBeGreaterThanOrEqual(before);
+        expect(receivedAt).toBeLessThanOrEqual(Date.now());
+    });
+
     test('an invitation inside an imported file creates no calendar event', async () => {
         const uid = `imported-invite-${crypto.randomUUID()}@external.com`;
         const boundary = 'eml-import-invite';
