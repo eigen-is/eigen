@@ -332,6 +332,16 @@ describe.skipIf(isWindows)('Received time', () => {
         expect(rows[0].date).toEqual(new Date('2020-01-01T00:00:00Z'));
     });
 
+    // What the v7 migration leaves on every row it finds.
+    const clearReceivedAt = (id: string): void => {
+        const db = new Database(join(mailRootOf(user.id), 'mail.db'));
+        try {
+            db.run('UPDATE emails SET receivedAt = 0 WHERE id = ?', [id]);
+        } finally {
+            db.close();
+        }
+    };
+
     test('a row from before received times existed gets its file time on the next open', async () => {
         const box = `Legacy-${Date.now()}`;
         seedMaildirFolder(user.id, box);
@@ -340,13 +350,7 @@ describe.skipIf(isWindows)('Received time', () => {
         const home = await getHome(user.id);
         expect((await home.mail.mailboxGet(box)).length).toBe(1);
 
-        // What the v7 migration leaves on every row it finds.
-        const db = new Database(join(mailRootOf(user.id), 'mail.db'));
-        try {
-            db.run('UPDATE emails SET receivedAt = 0 WHERE id = ?', [id]);
-        } finally {
-            db.close();
-        }
+        clearReceivedAt(id);
         expect(home.mail.messageGetSummary(id)?.receivedAt.getTime()).toBe(0);
 
         const rows = await home.mail.mailboxGet(box);
@@ -368,6 +372,37 @@ describe.skipIf(isWindows)('Received time', () => {
             (row) => row.subject === 'Copied along',
         );
         expect(archived.receivedAt).toEqual(new Date('2024-02-02T08:00:00Z'));
+    });
+
+    // 0 means "not read from the file yet", so a file stamped at the epoch must store as something else.
+    test('a file stamped in the first second of 1970 still gets a received time', async () => {
+        const box = `Epoch-${Date.now()}`;
+        seedMaildirFolder(user.id, box);
+        const id = `${Date.now()}.epoch`;
+        fileAt(box, id, makeEml('Stamped at the epoch'), new Date(0));
+        const home = await getHome(user.id);
+        expect((await home.mail.mailboxGet(box)).map((row) => row.receivedAt)).toEqual([new Date(1000)]);
+
+        clearReceivedAt(id);
+        expect((await home.mail.mailboxGet(box)).map((row) => row.receivedAt)).toEqual([new Date(1000)]);
+    });
+
+    test('a copy reads the received time from its source file, not from a row still without one', async () => {
+        const box = `CopyLegacy-${Date.now()}`;
+        seedMaildirFolder(user.id, box);
+        const id = `${Date.now()}.copiedlegacy`;
+        fileAt(box, id, makeEml('Copied before its backfill'), new Date('2023-03-03T09:00:00Z'));
+        const home = await getHome(user.id);
+        await home.mail.mailboxGet(box);
+        clearReceivedAt(id);
+
+        await home.mail.messageCopy(id, MAILBOX_ARCHIVE);
+
+        const archived = findOrFail(
+            await home.mail.mailboxGet(MAILBOX_ARCHIVE),
+            (row) => row.subject === 'Copied before its backfill',
+        );
+        expect(archived.receivedAt).toEqual(new Date('2023-03-03T09:00:00Z'));
     });
 
     test('a saved draft is received when its file was written', async () => {

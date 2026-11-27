@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -64,6 +64,28 @@ describe('writeAtomic', () => {
 
         // Only a process death leaves debris for sweepAtomicTemps: a write that fails on its own tidies up.
         expect(readdirSync(base)).toEqual([]);
+    });
+});
+
+describe('writeDurable', () => {
+    test('a given modified time is on the file before the fsync, so the fsync makes it durable too', async () => {
+        const store = nextStore();
+        const filePath = join(TEST_DIR, `store-${counter - 1}`, 'mail', 'backdated.eml');
+        const modifiedAt = new Date('2024-02-02T08:00:00Z');
+        const proto = await syncProto();
+        const mtimesAtSync: number[] = [];
+        const realSync = proto.sync;
+        const spy = spyOn(proto, 'sync').mockImplementation(async function (this: unknown) {
+            mtimesAtSync.push(statSync(filePath).mtimeMs);
+            return realSync.call(this);
+        });
+        try {
+            await store.writeDurable('mail/backdated.eml', 'bytes', modifiedAt);
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(mtimesAtSync).toEqual([modifiedAt.getTime()]);
     });
 });
 

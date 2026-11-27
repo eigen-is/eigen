@@ -182,10 +182,14 @@ export class Mail {
         mailbox: string,
         opts?: { limit?: number; beforeReceivedAt?: number; beforeId?: string },
     ): Promise<EmailSummary[]> {
-        const limit = opts?.limit ?? 200;
+        const { limit = 200, beforeReceivedAt, beforeId } = opts ?? {};
+        // Half a cursor, such as a tab on an older build sends, would serve the first page over and over.
+        if ((beforeReceivedAt === undefined) !== (beforeId === undefined)) {
+            throw new ApiError(400, 'A page cursor needs both beforeReceivedAt and beforeId');
+        }
         const before =
-            opts?.beforeReceivedAt != null && opts?.beforeId != null
-                ? { receivedAt: new Date(opts.beforeReceivedAt), id: opts.beforeId }
+            beforeReceivedAt !== undefined && beforeId !== undefined
+                ? { receivedAt: new Date(beforeReceivedAt), id: beforeId }
                 : undefined;
         return this.store.listMessages(canonicalMailbox(mailbox), { limit, before });
     }
@@ -250,15 +254,17 @@ export class Mail {
 
     public async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
         targetMailbox = canonicalMailbox(targetMailbox);
-        const source = this.store.getSummary(messageId);
-        if (!source) throw new ApiError(404, `Message '${messageId}' not found`);
+        if (!this.store.getSummary(messageId)) throw new ApiError(404, `Message '${messageId}' not found`);
         if (!(await this.store.mailboxExists(targetMailbox))) {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
         // Raw bytes, not a `.text()` round-trip: decoding corrupts non-UTF-8 mail, and a copy is not mail arriving.
-        const bytes = Buffer.from(await this.store.getRawMessage(messageId));
-        await this.store.append(targetMailbox, bytes, { arrival: false, receivedAt: source.receivedAt });
+        const [bytes, receivedAt] = await Promise.all([
+            this.store.getRawMessage(messageId),
+            this.store.getReceivedAt(messageId),
+        ]);
+        await this.store.append(targetMailbox, Buffer.from(bytes), { arrival: false, receivedAt });
     }
 
     public async messageSetRead(messageId: string, read: boolean): Promise<void> {

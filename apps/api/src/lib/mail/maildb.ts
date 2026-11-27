@@ -35,6 +35,15 @@ export function readMailIndexSize(dbPath: string): number {
 // Left out of a default search. A search can still name them.
 const SEARCH_EXCLUDED_MAILBOXES = [MAILBOX_TRASH, MAILBOX_JUNK];
 
+// A row's received time until a sync reads it from the file. Every stored time is at least a second later, so a file
+// stamped in 1970's first second can't pass for a row still waiting.
+export const RECEIVED_AT_MISSING = new Date(0);
+const EARLIEST_RECEIVED_AT = new Date(1000);
+
+function storedReceivedAt(receivedAt: Date): Date {
+    return receivedAt < EARLIEST_RECEIVED_AT ? EARLIEST_RECEIVED_AT : receivedAt;
+}
+
 // A list or search response carries the preview only; the FULL textShort stays in the DB for FTS5.
 function cutPreview(row: typeof schema.emails.$inferSelect): EmailSummary {
     return row.textShort.length > MAIL_PREVIEW_CHARS
@@ -56,6 +65,12 @@ export class MailDB {
         this.db = this.managedDb.db;
     }
 
+    public async destruct(): Promise<void> {
+        if (this.managedDb) {
+            await this.managedDb.close();
+        }
+    }
+
     // By name, because callers hand in a full parsed Email, whose extra fields have no column here.
     private toRecord(email: EmailSummary) {
         const now = new Date();
@@ -70,7 +85,7 @@ export class MailDB {
             recipientsAll: email.recipientsAll,
             textShort: email.textShort,
             date: email.date,
-            receivedAt: email.receivedAt,
+            receivedAt: storedReceivedAt(email.receivedAt),
             size: email.size,
             isRead: email.isRead,
             isFlagged: email.isFlagged,
@@ -166,13 +181,12 @@ export class MailDB {
             .all();
     }
 
-    // A row the v7 migration found has no received time until a sync reads its file.
     public hasRowsWithoutReceivedAt(mailbox: string): boolean {
         return (
             this.db
                 .select({ id: schema.emails.id })
                 .from(schema.emails)
-                .where(and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.receivedAt, new Date(0))))
+                .where(and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.receivedAt, RECEIVED_AT_MISSING)))
                 .limit(1)
                 .get() !== undefined
         );
@@ -182,7 +196,10 @@ export class MailDB {
         if (rows.length === 0) return;
         this.db.transaction((tx) => {
             for (const { id, receivedAt } of rows) {
-                tx.update(schema.emails).set({ receivedAt }).where(eq(schema.emails.id, id)).run();
+                tx.update(schema.emails)
+                    .set({ receivedAt: storedReceivedAt(receivedAt) })
+                    .where(eq(schema.emails.id, id))
+                    .run();
             }
         });
     }
@@ -293,11 +310,5 @@ export class MailDB {
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
         const byId = new Map(rows.map((r) => [r.id, cutPreview(r)]));
         return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
-    }
-
-    public async destruct(): Promise<void> {
-        if (this.managedDb) {
-            await this.managedDb.close();
-        }
     }
 }

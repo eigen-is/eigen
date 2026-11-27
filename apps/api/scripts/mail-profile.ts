@@ -5,6 +5,7 @@
 //   N=10000 bun apps/api/scripts/mail-profile.ts
 //
 // Scratch data goes to $TMPDIR/eigen-mail-profile and is removed afterwards.
+
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -55,9 +56,8 @@ const tp0 = performance.now();
 for (const f of files) {
     const id = getMailIDfromFileName(f);
     const file = storage.file(path.join('cur', f));
-    const p = await parseEml(id, '', file);
+    const p = { ...(await parseEml(id, '', file)), filename: f, receivedAt: (await file.stat()).mtime };
     applyFlagsFromFilename(p, f);
-    p.filename = f;
     parsed.push(p);
 }
 const tParse = performance.now() - tp0;

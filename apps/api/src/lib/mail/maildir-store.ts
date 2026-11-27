@@ -21,7 +21,7 @@ import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem } from '../core'
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
 import type { MailFlag, MailSearchOptions, MailStoreEvents } from './mail-store';
-import { MailDB, readMailIndexSize } from './maildb';
+import { MailDB, RECEIVED_AT_MISSING, readMailIndexSize } from './maildb';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,
@@ -233,8 +233,8 @@ export class MaildirStore {
         if (!(await this.mailboxExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
-        // Only the first open blocks, and the first after an upgrade left rows without a received time: afterwards the
-        // DB answers at once and the sync's SSE events carry what changed.
+        // Only an open that finds no rows, or a row without a received time, blocks: otherwise the DB answers at once and
+        // the sync's SSE events carry what changed.
         if (this.db.getEmailsCount(mailbox) === 0 || this.db.hasRowsWithoutReceivedAt(mailbox)) {
             await this.reconcileMailbox(mailbox);
         } else {
@@ -266,8 +266,14 @@ export class MaildirStore {
             this.getMessageFile(cached.mailbox, cached.filename),
             cached.isDraft,
         );
-        applyFlagsFromFilename(parsed, cached.filename);
         return { ...parsed, ...cached };
+    }
+
+    // From the file, the truth, because a row may not have read it yet.
+    public async getReceivedAt(messageId: string): Promise<Date> {
+        const email = this.db.getEmail(messageId);
+        if (!email) throw new ApiError(404, `Email '${messageId}' not found`);
+        return (await this.getMessageFile(email.mailbox, email.filename).stat()).mtime;
     }
 
     public async getRawMessage(messageId: string): Promise<ArrayBuffer> {
@@ -308,7 +314,7 @@ export class MaildirStore {
 
     public async saveDraft(bytes: Buffer, messageId: string): Promise<Email> {
         // Parsed off the lock: these bytes are exactly what parseEml would read back from the delivered file.
-        const parsed: Email = parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes);
+        const parsed = parseEmlBytes(messageId, MAILBOX_DRAFTS, bytes);
 
         // The file write and the row stay one step, or a watcher sync ingests the draft first and fires a spurious received.
         return this.storeLock.run(async () => {
@@ -323,20 +329,21 @@ export class MaildirStore {
                 { draft: true, seen: true },
                 bytes.byteLength,
             );
-            await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes);
+            // The save's own clock: a stat after the rename fails once a client renames the file first.
+            const receivedAt = new Date();
+            await this.deliver(MAILBOX_DRAFTS, PATHS.MAIL.CUR, filename, bytes, receivedAt);
 
-            applyFlagsFromFilename(parsed, filename);
-            parsed.filename = filename;
-            parsed.receivedAt = (await this.getMessageFile(MAILBOX_DRAFTS, filename).stat()).mtime;
-            this.db.insertEmails([parsed]);
-            this.indexBytes += parsed.size - (replaced?.size ?? 0);
+            const saved: Email = { ...parsed, filename, receivedAt };
+            applyFlagsFromFilename(saved, filename);
+            this.db.insertEmails([saved]);
+            this.indexBytes += saved.size - (replaced?.size ?? 0);
             // The old file goes last, so a crash leaves the draft twice and never not at all. A sync keeps the newer.
             if (replaced) {
                 await this.storage.unlinkDurable(
                     path.join(this.mailboxDir(replaced.mailbox), PATHS.MAIL.CUR, replaced.filename),
                 );
             }
-            return parsed;
+            return saved;
         });
     }
 
@@ -464,10 +471,12 @@ export class MaildirStore {
                 // One unreadable .eml must not drop the rest of the chunk, and an ENOENT is a benign mid-sync race.
                 try {
                     const file = this.getMessageFile(mailbox, fileName);
-                    const p = await parseEml(id, mailbox, file);
+                    const p = {
+                        ...(await parseEml(id, mailbox, file)),
+                        filename: fileName,
+                        receivedAt: (await file.stat()).mtime,
+                    };
                     applyFlagsFromFilename(p, fileName);
-                    p.filename = fileName;
-                    p.receivedAt = (await file.stat()).mtime;
                     parsed.push(p);
                 } catch (e: unknown) {
                     this.deliveries.delete(id);
@@ -489,11 +498,11 @@ export class MaildirStore {
             }
         }
 
-        // A row the v7 migration found reads its received time from its file, as a rebuilt index would.
+        // A row without a received time reads it from its file, as a rebuilt index would.
         const received: { id: string; receivedAt: Date }[] = [];
         for (const record of dbRecords) {
             const fileName = diskFiles.get(record.id);
-            if (record.receivedAt.getTime() !== 0 || !fileName) continue;
+            if (record.receivedAt.getTime() !== RECEIVED_AT_MISSING.getTime() || !fileName) continue;
             try {
                 received.push({
                     id: record.id,
@@ -708,8 +717,7 @@ export class MaildirStore {
     ): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         const tmpPath = path.join(mailboxPath, PATHS.MAIL.TMP, filename);
-        await this.storage.writeDurable(tmpPath, bytes);
-        if (receivedAt) await this.storage.setModifiedTime(tmpPath, receivedAt);
+        await this.storage.writeDurable(tmpPath, bytes, receivedAt);
         await this.storage.renameDurable(tmpPath, path.join(mailboxPath, subdir, filename));
     }
 

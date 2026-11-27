@@ -152,4 +152,13 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         expect(filtered.mail.map((h) => h.id)).toEqual([longId]);
         expect(filtered.mail[0].textShort.length).toBeLessThanOrEqual(200);
     });
+
+    // A tab on an older bundle sends its own cursor names. Half a cursor would serve page 1 again and again.
+    test('a cursor with only one of its two halves is refused', async () => {
+        const at = Date.UTC(2021, 0, 1);
+        for (const query of [`beforeId=x`, `beforeReceivedAt=${at}`, `beforeDate=${at}&beforeId=x`]) {
+            const res = await authedRequest(token, `/mail/${ownerId}/mailbox/${box}?limit=5&${query}`);
+            expect(res.status).toBe(400);
+        }
+    });
 });

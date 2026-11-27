@@ -14,8 +14,10 @@ import { cutDraftReferences } from './reference-links';
 // <form> DOMPurify would keep by default can post the reader's input anywhere.
 export const READER_SANITIZE_CONFIG = { FORCE_BODY: true, ADD_ATTR: ['target'], FORBID_TAGS: ['form'] };
 
+// A parse knows the bytes, not the file, so the file's name and received time are the store's to add.
+type ParsedEmail = Omit<Email, 'filename' | 'receivedAt'>;
 // Everything but the reader: `html: null` by type, so an unsanitized body cannot be served by mistake.
-export type IndexedEmail = Email & { html: null };
+export type IndexedEmail = ParsedEmail & { html: null };
 
 // Throws on a genuine read or parse fault, and each caller decides the policy: a single read lets it reach a 500, and a
 // sync logs it, so one bad message can't abort the batch. It never masks a fault as a missing message.
@@ -35,7 +37,7 @@ export async function parseEmlForReader(
     mailbox: string,
     file: BunFile,
     isDraft: boolean,
-): Promise<Email> {
+): Promise<ParsedEmail> {
     const parsedMail = parseMail(Buffer.from(await file.arrayBuffer()));
     const draft = isDraft ? cutDraftReferences(parsedMail.html ?? '') : undefined;
     if (draft) parsedMail.html = draft.html;
@@ -45,17 +47,14 @@ export async function parseEmlForReader(
     return { ...toEmail(messageId, mailbox, parsedMail, file.size), driveReferences: draft?.driveReferences };
 }
 
-function toEmail(messageId: string, mailbox: string, parsedMail: ParsedMail, size: number): Email {
+function toEmail(messageId: string, mailbox: string, parsedMail: ParsedMail, size: number): ParsedEmail {
     const { toShort, toAddress, recipientsAll } = buildRecipientSummary(parsedMail.to, parsedMail.cc);
 
     return {
         ...parsedMail,
         subject: parsedMail.subject ?? '',
         date: parsedMail.date ?? new Date(),
-        // The file's mtime: the store that read the file sets it, as it sets the filename.
-        receivedAt: new Date(),
         id: messageId,
-        filename: '',
         mailbox,
         size,
         isRead: false,
