@@ -9,6 +9,8 @@ Two ways, the first one preferred:
 - **GitHub private vulnerability reporting**: [Report a vulnerability](https://github.com/eigen-is/eigen/security/advisories/new).
 - **Email**: [reinder@eigen.is](mailto:reinder@eigen.is).
 
+Please say what the problem is and what it lets someone do, give the smallest steps that show it, and name the Eigen version if you know it.
+
 I try to reply within a week, and to give a rough timeline for a fix once I've looked at it. Problems that put user data at risk come first; smaller ones can take longer. Eigen has one maintainer, so replies can be slower, for example around holidays. If you haven't heard back within two weeks, please send a reminder.
 
 ## What counts
