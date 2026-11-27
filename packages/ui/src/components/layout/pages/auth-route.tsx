@@ -29,13 +29,18 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
 }
 
 // The item is the one the URL names, or null where it names none, such as Drive's root alias. A failed answer, such
-// as the 404 of an unknown owner, sends the visitor to log in as a closed item does.
+// as the 404 of an unknown owner, sends the visitor to log in as a closed item does. TanStack's 'stay' is any
+// navigation within the route, another item included: the guard answered on the way in, and the API still refuses an
+// item the link does not open.
 export async function guardLinkRoute(
-    { auth }: RouterAppContext,
-    location: { publicHref: string },
+    {
+        cause,
+        context,
+        location,
+    }: { cause: 'preload' | 'enter' | 'stay'; context: RouterAppContext; location: { publicHref: string } },
     item: DrivePathRef | null,
 ): Promise<void> {
-    if (auth.user) return;
+    if (cause === 'stay' || context.auth.user) return;
     const canRead = item
         ? await fetchPathPermissions(item).then(
               (permissions) => permissions.canRead,

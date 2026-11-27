@@ -232,6 +232,16 @@ export function editorVisitorTests({
         expect(server.permissionReads()).toEqual([`/drive/${OWNER}/default/path/pub/permissions`]);
     });
 
+    test(`a search change on a public ${noun}, such as opening the comments, asks no permissions again`, async () => {
+        const router = await open(urlOf('pub'));
+        const { act } = await import('react');
+        await act(async () => {
+            await router.navigate({ href: `${urlOf('pub')}?panel=comments` });
+        });
+        expect(router.state.location.pathname).toBe(urlOf('pub'));
+        expect(server.permissionReads()).toEqual([`/drive/${OWNER}/default/path/pub/permissions`]);
+    });
+
     test(`a visitor lands on login, with the way back, for a ${noun} the link does not open`, async () => {
         const router = await open(urlOf('secret'));
         expect(router.state.location.pathname).toBe('/login');

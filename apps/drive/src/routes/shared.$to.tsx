@@ -16,14 +16,15 @@ import { guardLinkRoute } from '@workspace/ui/components/layout/pages';
 export const Route = createFileRoute('/shared/$to')({
     component: SharedRoute,
     validateSearch: validateDriveSearch,
-    beforeLoad: ({ context, location, params, search: { uid, mid, pid } }) =>
-        guardLinkRoute(
-            context,
-            location,
-            params.to === 'with-me' && uid && pid
+    beforeLoad: (match) => {
+        const { uid, mid, pid } = match.search;
+        return guardLinkRoute(
+            match,
+            match.params.to === 'with-me' && uid && pid
                 ? { ownerId: uid, mountId: mid || DEFAULT_MOUNT_ID, pathId: pid }
                 : null,
-        ),
+        );
+    },
 });
 
 function SharedRoute() {

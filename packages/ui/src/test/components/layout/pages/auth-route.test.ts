@@ -90,8 +90,8 @@ describe('guardLinkRoute', () => {
     const item: DrivePathRef = { ownerId: 'alice', mountId: 'default', pathId: 'report' };
     const location = { publicHref: '/shared/with-me?pid=report&uid=alice' };
     const wayBack = 'http://localhost:3000/shared/with-me?pid=report&uid=alice';
-    const guard = (signedIn: AuthUser | null, target: DrivePathRef | null) =>
-        guardLinkRoute(contextOf(signedIn), location, target);
+    const guard = (signedIn: AuthUser | null, target: DrivePathRef | null, cause: 'enter' | 'stay' = 'enter') =>
+        guardLinkRoute({ cause, context: contextOf(signedIn), location }, target);
 
     test('a signed-in user passes without a request', async () => {
         await guard(user, item);
@@ -102,6 +102,13 @@ describe('guardLinkRoute', () => {
     test('a visitor passes to a readable item, after asking its permissions', async () => {
         await guard(null, item);
         expect(asked).toEqual(['/drive/alice/default/path/report/permissions']);
+    });
+
+    test('a navigation that stays on the route, such as a search change, asks nothing and sends no visitor away', async () => {
+        answer.canRead = false;
+        await guard(null, item, 'stay');
+        await guard(null, null, 'stay');
+        expect(asked).toEqual([]);
     });
 
     test('a visitor goes to /login with the way back on an item they may not read', async () => {
