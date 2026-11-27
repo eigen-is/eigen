@@ -16,6 +16,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **General access in Share** — one dropdown of Restricted, Anyone signed in with the link and Anyone with the link, in place of the lock and Unrestricted
 - **Viewing through a link** — in Docs, Sheets, Slides, Stickies and Vector, Can view through Anyone signed in with the link shows newer edits after a reload or a return to the tab. People added by name and editors see changes live
+- **Copying through a link** — a document, spreadsheet, presentation, board, drawing or chat you can only view through Anyone with the link or Anyone signed in with the link can't be copied, and neither can a folder that holds one. Other files still copy
 - **Log in from a shared page** — the top bar's Log in brings you back to the page you were on
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 - **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row

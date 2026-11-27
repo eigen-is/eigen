@@ -76,6 +76,11 @@ describe('SharedDrive gating enumeration', () => {
         sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
         requireWriteByName: { gate: 'private-helper', reason: 'write held by name, for sharing and moving' },
         requireShare: { gate: 'private-helper', reason: 'the gate for ACL changes: write held by name' },
+        requireCopy: {
+            gate: 'private-helper',
+            reason: 'the read gate of a copy, and no document for a reader not live',
+        },
+        holdsDocument: { gate: 'private-helper', reason: 'whether a copy source is or holds a document' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },
@@ -194,7 +199,7 @@ describe('SharedDrive gating enumeration', () => {
         },
         withDatabase: {
             gate: 'denies',
-            reason: 'read-gated (opening a container db reads it)',
+            reason: 'read-gated on the container whose db it opens',
             call: (sd) => sd.withDatabase(mountId, probeDbConfig, docId, async () => {}),
         },
         listVersions: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.listVersions(mountId, docId) },

@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -43,6 +43,8 @@ When the copy is done, a message says **1 item copied** (or **3 items copied**, 
 If some of the items fail, a message says how many and why, and the **Copy to** dialog stays open with only those items left. Click **Copy here** again to retry them. The ones that already copied are not copied a second time.
 
 Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to. A single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents. The copy starts its own version history and does not get the original's. The copy leaves out the images and comments you deleted from the original, which only its earlier versions could bring back. The same goes for **Duplicate**.
+
+You can't copy a document, spreadsheet, presentation, board, drawing or chat that you can only view because its sharing is set to **Anyone with the link** or **Anyone signed in with the link**, and you can't copy a folder that holds one. Eigen refuses the copy, because it would carry the original's whole edit history, deleted text included. You can still open it, download it, and copy the other files there. To make a copy, ask the owner to add you by name.
 
 ## Duplicate a file in place
 
