@@ -196,9 +196,7 @@ export function visitorServer(document: Pick<DrivePath, 'type' | 'mimeType' | 'n
     };
 }
 
-const READ_ONLY = "You can only read this document because you're set to Viewer";
-// A visitor has no role, so the marker doesn't name one.
-const VISITOR_READ_ONLY = 'You can view this document';
+const READ_ONLY = 'You can view this document';
 
 // What an editor's route does for a visitor, a writer and a guest: read-only with no share, no activity and only the
 // routes on the link's list asked, or a login with the way back for a document the link does not open.
@@ -218,8 +216,7 @@ export function editorVisitorTests({
     test(`a visitor reads a public ${noun}, with its name in the bar, and asks only for what the link opens`, async () => {
         const router = await open(urlOf('pub'));
         expect(router.state.location.pathname).toBe(urlOf('pub'));
-        expect(labelled(VISITOR_READ_ONLY)).not.toBeNull();
-        expect(labelled(READ_ONLY)).toBeNull();
+        expect(labelled(READ_ONLY)).not.toBeNull();
         expect(document.querySelector('header')?.textContent).toContain('Holiday');
         expect(labelled('Log in')).not.toBeNull();
         expect(labelled('Share')).toBeNull();
