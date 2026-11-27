@@ -4,6 +4,7 @@
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
 import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
+import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
@@ -26,7 +27,7 @@ import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
 import type { ReaderAccess } from './acl';
-import { canonicalACLId, canReadFromAncestors } from './acl';
+import { canonicalACLId, canReadFromAncestors, isRawDatabase, readerAccess } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -177,9 +178,13 @@ export class SharedDrive {
         return this.drive.resolveFile(mountId, pathId);
     }
 
+    // A reader who is not live can't read a container's raw databases, so its listing leaves them out.
     public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
-        await this.requireRead(mountId, pathId);
-        return this.drive.getFolderContents(mountId, pathId);
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const access = readerAccess(chain, this.user, await getMemberships(this.user.id), this.drive.publicLinks);
+        if (!access.canRead) throw new ApiError(403, 'No read permission');
+        const children = await this.drive.getFolderContents(mountId, pathId);
+        return access.live ? children : children.filter((child) => !isRawDatabase([...chain, child]));
     }
 
     public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
@@ -322,7 +327,7 @@ export class SharedDrive {
         to: CopyTarget,
         desiredName: string | undefined,
     ): Promise<DrivePath> {
-        await this.requireRead(mountId, srcPathId, undefined, 'No read permission on source');
+        await this.requireCopy(mountId, srcPathId);
         return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
     }
 
@@ -334,10 +339,28 @@ export class SharedDrive {
         name: string,
         checkedId: string | null,
     ): Promise<DrivePath> {
-        const memberships = await getMemberships(this.user.id);
-        await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
-        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        await this.requireCopy(mountId, srcPathId);
+        await this.requireWrite(mountId, destParentId, undefined, 'No write permission on target folder');
         return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
+    }
+
+    // A copy writes each document's raw databases, so only a live reader copies a document, on its own or in a folder.
+    private async requireCopy(mountId: string, srcPathId: string): Promise<void> {
+        const access = await this.readerAccess(mountId, srcPathId, this.user);
+        if (!access.canRead) throw new ApiError(403, 'No read permission on source');
+        if (access.live) return;
+        const src = await this.drive.getPath(mountId, srcPathId);
+        if (src && (await this.holdsDocument(mountId, src))) {
+            throw new ApiError(403, 'Only people with access can copy this document');
+        }
+    }
+
+    private async holdsDocument(mountId: string, path: DrivePath): Promise<boolean> {
+        if (isDocumentType(path.type)) return true;
+        if (!isFolderType(path.type)) return false;
+        const children = await this.drive.getFolderContents(mountId, path.id);
+        const held = await Promise.all(children.map((child) => this.holdsDocument(mountId, child)));
+        return held.includes(true);
     }
 
     // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its
@@ -576,15 +599,17 @@ export class SharedDrive {
 
     // ---- Document databases ----
 
-    // A document's databases, such as its comments.db, hold what the document holds. So opening one
-    // needs read access.
+    // A document's databases, such as its comments.db, hold what the document holds, and the server answers from them
+    // without handing them over. So opening one needs read access to its document, which a reader who is not live has.
     public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
         fn: (db: ManagedDatabase<S>) => Promise<T>,
     ): Promise<T> {
-        await this.requireRead(mountId, pathId);
+        const database = await this.drive.getPath(mountId, pathId);
+        if (!database?.parentId) throw new ApiError(403, 'No read permission');
+        await this.requireRead(mountId, database.parentId);
         return this.drive.withDatabase(mountId, config, pathId, fn);
     }
 }

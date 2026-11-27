@@ -1,4 +1,4 @@
-// The preview cache: a file's previews, each built once per version and kept in the mount's previewsDir. The drive,
+// The preview cache: a file's previews, each built for one version and kept in the mount's previewsDir. The drive,
 // mail and collab routes call it, for example through getTextPreview, getScreenPreview and getCollabState. A collab
 // document's or a card's preview is built in the transform process, a plain text file's and an image's here. A name
 // stamped with the version and the format lets a new version or renderer write a new file, so a response can be
@@ -132,29 +132,35 @@ async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise
 }
 
 // The generation running for each cache name, so a folder grid of N tiles for one just-added image or
-// just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority.
-const inFlightBytes = new Map<string, Promise<Buffer | null>>();
-const inFlightTexts = new Map<string, Promise<PreviewResult | null>>();
+// just-edited doc starts one job instead of N. A request that joins a job waits at that job's priority, so a foreground
+// request never joins a background job: it starts its own, which takes the name's place, and both write the same file.
+type InFlight<T> = { task: Promise<T | null>; priority: TransformPriority };
+const inFlightBytes = new Map<string, InFlight<Buffer>>();
+const inFlightTexts = new Map<string, InFlight<PreviewResult>>();
 
 function generateOnce<T>(
-    inFlight: Map<string, Promise<T | null>>,
+    inFlight: Map<string, InFlight<T>>,
     previewsDir: string,
     pathId: string,
     cacheName: string,
-    generate: () => Promise<T | null>,
+    priority: TransformPriority,
+    generate: (priority: TransformPriority) => Promise<T | null>,
     serialize: (result: T) => Buffer | string,
 ): Promise<T | null> {
     const existing = inFlight.get(cacheName);
-    if (existing) return existing;
+    if (existing && (priority === 'background' || existing.priority === 'foreground')) return existing.task;
     const cacheFile = path.join(previewsDir, cacheName);
     const task = (async () => {
-        const result = await generate().catch((err: unknown) => rememberIfRepeatable(cacheFile, err));
+        const result = await generate(priority).catch((err: unknown) => rememberIfRepeatable(cacheFile, err));
         if (result === null) return null;
         await writeCacheFile(cacheFile, serialize(result));
         pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         return result;
-    })().finally(() => inFlight.delete(cacheName));
-    inFlight.set(cacheName, task);
+    })().finally(() => {
+        if (inFlight.get(cacheName) === entry) inFlight.delete(cacheName);
+    });
+    const entry = { task, priority };
+    inFlight.set(cacheName, entry);
     return task;
 }
 
@@ -165,7 +171,8 @@ async function getOrCacheBytes(
     previewsDir: string,
     pathId: string,
     cacheName: string,
-    generate: () => Promise<Buffer | null>,
+    firstMiss: MissPriority,
+    generate: (priority: TransformPriority) => Promise<Buffer | null>,
 ): Promise<Readable | null> {
     const cacheFile = path.join(previewsDir, cacheName);
     const cached = fs.createReadStream(cacheFile);
@@ -178,9 +185,20 @@ async function getOrCacheBytes(
     );
     if (opened) return cached;
     if (failedRecently(cacheFile)) return null;
-    const data = await generateOnce(inFlightBytes, previewsDir, pathId, cacheName, generate, (bytes) => bytes);
+    const data = await generateOnce(
+        inFlightBytes,
+        previewsDir,
+        pathId,
+        cacheName,
+        await firstMiss(),
+        generate,
+        (bytes) => bytes,
+    );
     return data && Readable.from([data]);
 }
+
+// An image is built outside the transform queue, so every request for one joins its one build.
+const IMAGE_PRIORITY: MissPriority = async () => 'foreground';
 
 async function getOrCacheImage(
     previewsDir: string,
@@ -189,7 +207,7 @@ async function getOrCacheImage(
     contentType: string,
     generate: () => Promise<Buffer | null>,
 ): Promise<ImagePreview | null> {
-    const body = await getOrCacheBytes(previewsDir, pathId, cacheName, generate);
+    const body = await getOrCacheBytes(previewsDir, pathId, cacheName, IMAGE_PRIORITY, generate);
     return body && { type: 'image', data: await buffer(body), contentType };
 }
 
@@ -249,7 +267,7 @@ async function getOrCacheText<T>(
     if (current !== null) return fresh(current);
     const failed = failedRecently(cacheFile);
     const generateText = (priority: TransformPriority) =>
-        generateOnce(inFlightTexts, previewsDir, pathId, cacheName, () => generate(priority), JSON.stringify).catch(
+        generateOnce(inFlightTexts, previewsDir, pathId, cacheName, priority, generate, JSON.stringify).catch(
             (err: unknown) => {
                 // Overload is not "no preview", and neither is a file the renderer refused: a controlled status
                 // reaches the client instead of a 404.
@@ -367,13 +385,12 @@ export async function getCollabState(
     version: string,
     firstMiss: MissPriority,
 ): Promise<ReadableStream<Uint8Array>> {
-    const state = await getOrCacheBytes(mount.previewsDir, drivePath.id, `${drivePath.id}-${version}.yjs`, async () =>
-        runTransformToCollabState(
-            mount,
-            drivePath,
-            { kind: 'collab-state', documentType },
-            { priority: await firstMiss() },
-        ),
+    const state = await getOrCacheBytes(
+        mount.previewsDir,
+        drivePath.id,
+        `${drivePath.id}-${version}.yjs`,
+        firstMiss,
+        (priority) => runTransformToCollabState(mount, drivePath, { kind: 'collab-state', documentType }, { priority }),
     );
     if (state === null) throw new ApiError(413, TOO_LARGE_TO_SHOW);
     // A response body is a web stream, so the bytes go over chunk by chunk, and a reader who hangs up closes the file.
