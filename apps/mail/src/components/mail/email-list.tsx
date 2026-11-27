@@ -58,7 +58,7 @@ export function EmailListToolbar({ searchQuery, onSearchChange, inputRef, onShow
 }
 
 type EmailListProps = {
-    // The mail route holds these through useMailList, already filtered and sorted.
+    // The mail route holds these through useMailList, in the order they show.
     orderedEmails: EmailSummary[];
     selection: UseListSelectionReturn<EmailSummary>;
     cursorIndex: number;

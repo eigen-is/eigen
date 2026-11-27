@@ -920,9 +920,7 @@ async function main(): Promise<void> {
         const persona = resolvePersona(message.from);
         return { name: persona.name, address: emailFor(persona.key, MAIL_DOMAIN) };
     };
-    // Threads one flow's messages: the date, the Re: prefix, the reference chain and the quote. A reply quotes the
-    // message before it and its text part is the text of its HTML, both as Eigen's composer writes a reply. The date
-    // comes back beside the bytes, so the delivery is received when it was sent.
+    // Threads one flow's messages as Eigen's composer writes a reply: the date, Re: prefix, references and quote.
     const threadState = (subject: string) => {
         const references: string[] = [];
         let previous: { id: string; from: { name: string; address: string }; date: Date; html: string } | undefined;
