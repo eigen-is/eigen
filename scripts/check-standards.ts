@@ -1,7 +1,8 @@
 // Counts the mechanical code standards that Biome can't express, over apps and packages, for `bun run check`. A hard
-// zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file: one total, or
-// for casts and `!` one allowance per file, so a new one can't hide behind a removal elsewhere. Every run lowers an
-// allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints each file's counts.
+// zero fails on any hit. A ratcheted count fails when it rises above its allowance in the baseline file: one total,
+// or one allowance per file, as for casts, `!` and a test's clock reads, so a new one can't hide behind a removal
+// elsewhere. Every run lowers an allowance to a count that fell, so a cleanup needs no second step. `--verbose`
+// prints each file's counts.
 
 import { dialogFooterHits } from './dialog-footer';
 import { sentenceCaseHits } from './sentence-case';
@@ -31,6 +32,11 @@ const RAW_COLOR = new RegExp(
     'g',
 );
 const APP_LAYER = /\b(?:useQuery|useMutation|useInfiniteQuery)\(|\btoast\.(?:error|success)\(/g;
+// A test's clocks, read on the raw text since a child script's clock sits in a string. The ratio helper is exempt.
+const CPU_CLOCK = /\bprocess\.(?:cpuUsage|threadCpuUsage)\b|\bcpuClock\(|\bBun\.nanoseconds\b/g;
+const COST_RATIO = 'packages/lib/src/test/cost-ratio.ts';
+const TIME_BOUND_FIX =
+    'Assert a cost on the output, or count the work, or compare two runs with costRatio from @workspace/lib/test/cost-ratio. See docs/CODE-EXAMPLES.md § Standards Gates.';
 
 // Every Eigen document MIME, read from the one file that declares them, so a new type needs no second list here. The
 // drag and clipboard formats, `application/eigen-*`, are not document MIMEs, hence the `(?!-)`.
@@ -47,7 +53,7 @@ if (CANONICAL_MIMES.size === 0) {
 }
 
 // Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
-// non-test sources of apps and packages.
+// sources of apps and packages, the clock ratchets in their tests and the rest outside them.
 const sources: SourceFile[] = [];
 for (const path of (await Bun.$`git ls-files --deduplicate apps packages scripts docker`.text()).split('\n')) {
     if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
@@ -182,6 +188,8 @@ type Metric = {
     hardZero: boolean;
     // Ratcheted per file: a file without an allowance is allowed none.
     perFile?: true;
+    // Counted in test files, and only there.
+    tests?: true;
     count: (file: SourceFile) => number;
     // What the author does about a hit, printed under the failure.
     fix?: string;
@@ -368,6 +376,24 @@ const METRICS: readonly Metric[] = [
         count: ({ path, code }) => (path.startsWith('packages/formula/src/') ? countMatches(code, ENGINE_STATE) : 0),
         fix: 'The engine keeps nothing between calls and computes the same on every machine: hold state on the Evaluator or a Frame, take a draw through the RANDOM parameter, and order and show text by rules of its own. See docs/CODE-EXAMPLES.md § Standards Gates.',
     },
+    {
+        id: 'test-cpu-clocks',
+        label: 'CPU-clock reads in tests',
+        hardZero: false,
+        perFile: true,
+        tests: true,
+        count: ({ path, text }) => (path === COST_RATIO ? 0 : countMatches(text, CPU_CLOCK)),
+        fix: TIME_BOUND_FIX,
+    },
+    {
+        id: 'test-performance-now',
+        label: '`performance.now` reads in tests',
+        hardZero: false,
+        perFile: true,
+        tests: true,
+        count: ({ text }) => countMatches(text, /\bperformance\.now\b/g),
+        fix: TIME_BOUND_FIX,
+    },
 ];
 
 const exportsMaps: ExportsMaps = {};
@@ -384,8 +410,10 @@ const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [
 
 for (const file of sources) {
     const { path } = file;
-    if (!/^(?:apps|packages)\/.*\.tsx?$/.test(path) || /\/src\/test\/|\.d\.ts$|\.test\.tsx?$/.test(path)) continue;
+    if (!/^(?:apps|packages)\/.*\.tsx?$/.test(path) || path.endsWith('.d.ts')) continue;
+    const isTest = /\/src\/test\/|\.test\.tsx?$/.test(path);
     for (const metric of METRICS) {
+        if (isTest !== (metric.tests ?? false)) continue;
         const hits = metric.count(file);
         if (hits === 0) continue;
         counts.set(metric.id, (counts.get(metric.id) ?? 0) + hits);
@@ -490,6 +518,7 @@ for (const metric of failed) {
     if (files) {
         console.error(`  ${metric.label}, per file:`);
         for (const [path, hits, allowed] of files) console.error(`      ${path}: ${hits} allowed ${allowed}`);
+        if (metric.fix) console.error(`      ${metric.fix}`);
         continue;
     }
     console.error(
