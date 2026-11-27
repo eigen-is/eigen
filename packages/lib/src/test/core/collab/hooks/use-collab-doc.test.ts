@@ -841,6 +841,21 @@ describe('useCollabDoc for a reader who gets no socket', () => {
             expect(active.state.loadError).toBe('Document too large to show');
         });
 
+        test('a refusal after a good load stops the interval too', async () => {
+            server.write('stored');
+            active = mount(OPTIONS, false);
+            await advance(0);
+            expect(stateAsks()).toBe(1);
+
+            server.refuse = 413;
+            server.refusal = 'Document too large to show';
+            await advance(REFRESH_MS);
+            expect(stateAsks()).toBe(2);
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(2);
+            expect(active.state.loadError).toBe('Document too large to show');
+        });
+
         test('a reader who becomes live, or whose editor goes, asks no more', async () => {
             active = mount(OPTIONS, false);
             const h = active;

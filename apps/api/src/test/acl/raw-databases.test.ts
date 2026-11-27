@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import * as encoding from 'lib0/encoding';
@@ -7,6 +7,7 @@ import * as Y from 'yjs';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { canReadFromAncestors, isRawDatabase } from '../../lib/drive/acl';
 import { getHome } from '../../lib/home/get-home';
+import { Mount } from '../../lib/mount';
 import type { User } from '../../lib/user';
 import { getUserByEmail } from '../../lib/user';
 import type { TestUser } from '../setup';
@@ -64,6 +65,21 @@ function named(children: readonly DrivePath[], name: string): DrivePath {
     const found = children.find((child) => child.name === name);
     if (!found) throw new Error(`No ${name} among ${children.map((child) => child.name).join(', ')}`);
     return found;
+}
+
+// Charlie's copy of one of Alice's paths into his own home.
+async function charlieCopies(pathId: string): Promise<Response> {
+    const home = await driveGet(
+        charlie.sessionToken,
+        charlie.id,
+        await firstMountId(charlie.sessionToken, charlie.id),
+        'root',
+    );
+    return authedRequest(charlie.sessionToken, drive('path', pathId, 'copy'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetOwnerId: charlie.id, targetMountId: home.mountId, targetParentId: home.id }),
+    });
 }
 
 // Alice's edit over a real socket, so its row is stored as a member's is. Resolves once the server's document holds it.
@@ -196,22 +212,6 @@ describe('a reader who is not live', () => {
     });
 
     test('cannot copy a document, a folder holding one, its saved versions or a database, and still copies a plain file', async () => {
-        const home = await driveGet(
-            charlie.sessionToken,
-            charlie.id,
-            await firstMountId(charlie.sessionToken, charlie.id),
-            'root',
-        );
-        const copy = (pathId: string) =>
-            authedRequest(charlie.sessionToken, drive('path', pathId, 'copy'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    targetOwnerId: charlie.id,
-                    targetMountId: home.mountId,
-                    targetParentId: home.id,
-                }),
-            });
         for (const pathId of [
             fx.doc.id,
             fx.folder.id,
@@ -219,12 +219,62 @@ describe('a reader who is not live', () => {
             fx.versions.id,
             ...fx.databases.map((db) => db.id),
         ]) {
-            const res = await copy(pathId);
+            const res = await charlieCopies(pathId);
             expect([pathId, res.status]).toEqual([pathId, 403]);
         }
-        expect(await (await copy(fx.doc.id)).text()).toContain('Only people with access can copy this document');
-        expect((await copy(fx.png.id)).status).toBe(200);
-        expect((await copy(fx.picture.id)).status).toBe(200);
+        expect(await (await charlieCopies(fx.doc.id)).text()).toContain(
+            'Only people with access can copy this document',
+        );
+        expect((await charlieCopies(fx.png.id)).status).toBe(200);
+        expect((await charlieCopies(fx.picture.id)).status).toBe(200);
+    });
+
+    test('cannot copy a document that lands in the folder while the copy lists it', async () => {
+        const token = alice.sessionToken;
+        const folder = await drivePost(token, alice.id, mountId, `folder/${fx.folder.id}`, {
+            folderName: `Empty ${crypto.randomUUID()}`,
+        });
+        const listCopy = Mount.prototype.listCopy;
+        // What the late document held as the copy listed it, asserted after the request so a miss fails the test.
+        let lateParts: string[] = [];
+        const spy = spyOn(Mount.prototype, 'listCopy').mockImplementationOnce(async function (this: Mount, pathId) {
+            const doc = await drivePost(token, alice.id, mountId, `folder/${folder.id}/create/doc`, {
+                fileName: 'Late',
+            });
+            lateParts = (await childrenOf(token, doc.id)).map((child) => child.name);
+            return listCopy.call(this, pathId);
+        });
+        try {
+            const res = await charlieCopies(folder.id);
+            expect(res.status).toBe(403);
+            expect(await res.text()).toContain('Only people with access can copy this document');
+            expect(lateParts).toContain('data.db');
+            expect(spy).toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    // Charlie may write the folder by name, but reads the document only through its link, so he is not live there.
+    test('cannot WebDAV COPY a document over a file, and the file stays where it was', async () => {
+        const token = alice.sessionToken;
+        const root = await driveGet(token, alice.id, mountId, 'root');
+        const name = `Writable-${crypto.randomUUID()}`;
+        const target = await drivePost(token, alice.id, mountId, `folder/${root.id}`, { folderName: name });
+        await drivePut(token, alice.id, mountId, `path/${target.id}/acl`, {
+            add: [{ id: charlie.email, read: true, write: true }],
+        });
+        const dav = `/webdav/${alice.id}/${mountId}`;
+        const kept = `${dav}/${name}/keep.txt`;
+        expect((await webdavRequest(charlie.email, 'PUT', kept, { body: 'old' })).status).toBe(201);
+        const res = await webdavRequest(charlie.email, 'COPY', `${dav}/${fx.folder.name}/${fx.doc.name}`, {
+            headers: { Destination: `http://localhost${kept}`, Overwrite: 'T' },
+        });
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('Only people with access can copy this document');
+        expect(await (await webdavRequest(charlie.email, 'GET', kept)).text()).toBe('old');
+        const trash = await (await getHome(alice.id)).drive.listTrash(mountId);
+        expect(trash.map((path) => path.name)).not.toContain('keep.txt');
     });
 
     test('still opens the document, its pictures, comments, threads, history, export and members', async () => {
