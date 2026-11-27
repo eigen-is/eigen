@@ -367,6 +367,31 @@ describe("a visitor's preview miss", () => {
         }
         // Nine transform children run one after another.
     }, 30_000);
+
+    test("a member's miss on the file a visitor's miss is building starts its own build", async () => {
+        const card = await seed(PREVIEWED[1]);
+        const real = documentTransformRunner.run.bind(documentTransformRunner);
+        const gate = Promise.withResolvers<void>();
+        const started: TransformPriority[] = [];
+        const run = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            started.push(opts.priority);
+            if (opts.priority === 'background') await gate.promise;
+            return real(request, opts);
+        });
+        try {
+            const visitor = visit(previewUrl('vcard-preview', card.id));
+            await eventually(async () => (started.includes('background') ? true : undefined));
+            const member = authedRequest(memberToken, previewUrl('vcard-preview', card.id));
+            const answered = await Promise.race([member.then(() => 'answered'), Bun.sleep(3000).then(() => 'waited')]);
+            expect(answered).toBe('answered');
+            expect((await member).status).toBe(200);
+            gate.resolve();
+            expect((await visitor).status).toBe(200);
+        } finally {
+            gate.resolve();
+            run.mockRestore();
+        }
+    }, 30_000);
     for (const entry of PREVIEWED) {
         test(`${entry.route} runs a miss in the background for whoever reads only through the link`, async () => {
             const readers = [

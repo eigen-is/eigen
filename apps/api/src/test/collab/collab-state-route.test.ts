@@ -12,6 +12,7 @@ import * as schema from '../../lib/collab/schema';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core/errors';
 import * as collabSource from '../../lib/document/transform/collab-source';
+import type { TransformPriority } from '../../lib/document/transform/runner';
 import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
 import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
@@ -81,6 +82,13 @@ function newDoc(parentId = root.id): Promise<DrivePath> {
 async function newPublicDoc(): Promise<DrivePath> {
     const doc = await newDoc();
     await putACL(doc.id, { visibility: 'link' });
+    return doc;
+}
+
+// A public document Charlie also reads by name, so his miss is foreground work.
+async function newPublicDocForCharlie(): Promise<DrivePath> {
+    const doc = await newDoc();
+    await putACL(doc.id, { visibility: 'link', add: [{ id: charlie.email, read: true, write: false }] });
     return doc;
 }
 
@@ -154,6 +162,33 @@ async function member(pathId: string) {
 // The transform jobs the route enqueued, read off the runner's calls.
 function stateJobs(run: ReturnType<typeof spyOn<typeof documentTransformRunner, 'run'>>) {
     return run.mock.calls.filter(([request]) => request.kind === 'collab-state');
+}
+
+// Holds every state job of the given priorities before it reaches the runner, until released or failed, and counts the
+// state jobs of each priority that started.
+function holdStateJobs(...held: TransformPriority[]) {
+    const real = documentTransformRunner.run.bind(documentTransformRunner);
+    const gates = new Map(held.map((priority) => [priority, Promise.withResolvers<void>()]));
+    const started = { foreground: 0, background: 0 };
+    const run = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+        if (request.kind === 'collab-state') {
+            started[opts.priority] += 1;
+            await gates.get(opts.priority)?.promise;
+        }
+        return real(request, opts);
+    });
+    const release = (priority?: TransformPriority) => {
+        for (const [held, gate] of gates) if (!priority || held === priority) gate.resolve();
+    };
+    return {
+        started: (priority: TransformPriority) => started[priority],
+        release,
+        fail: (priority: TransformPriority) => gates.get(priority)?.reject(new Error('The held job failed')),
+        restore: () => {
+            release();
+            run.mockRestore();
+        },
+    };
 }
 
 describe('the body is the merged state', () => {
@@ -360,6 +395,71 @@ describe('one version is built once and then served from its file', () => {
             run.mockRestore();
         }
     });
+
+    test("a named reader's miss starts its own build instead of waiting on a visitor's", async () => {
+        const doc = await newPublicDoc();
+        const { write } = await member(doc.id);
+        await write('raced');
+        const held = holdStateJobs('background');
+        try {
+            const visitor = visit(doc.id);
+            await eventually(async () => (held.started('background') === 1 ? true : undefined));
+            const owner = authedRequest(alice.sessionToken, stateUrl(doc.id));
+            const answered = await Promise.race([owner.then(() => 'answered'), Bun.sleep(3000).then(() => 'waited')]);
+            expect(answered).toBe('answered');
+            expect(held.started('foreground')).toBe(1);
+            held.release();
+            const [visited, owned] = await Promise.all([visitor, owner]);
+            expect((await docOf(visited)).getText('probe').toString()).toBe('raced');
+            expect((await docOf(owned)).getText('probe').toString()).toBe('raced');
+        } finally {
+            held.restore();
+        }
+        expect((await cachedFiles(doc.id)).filter((name) => name.endsWith('.yjs')).length).toBe(1);
+    }, 30_000);
+
+    test("a visitor joins a named reader's build, and so does a second named reader", async () => {
+        const doc = await newPublicDocForCharlie();
+        const { write } = await member(doc.id);
+        await write('joined');
+        const held = holdStateJobs('foreground');
+        try {
+            const first = authedRequest(alice.sessionToken, stateUrl(doc.id));
+            await eventually(async () => (held.started('foreground') === 1 ? true : undefined));
+            const second = authedRequest(charlie.sessionToken, stateUrl(doc.id));
+            const visitor = visit(doc.id);
+            await Bun.sleep(200);
+            held.release();
+            const answers = await Promise.all([first, second, visitor]);
+            expect(answers.map((res) => res.status)).toEqual([200, 200, 200]);
+            expect([held.started('foreground'), held.started('background')]).toEqual([1, 0]);
+        } finally {
+            held.restore();
+        }
+    }, 30_000);
+
+    // The visitor's build ends first and must not take the named build's place with it.
+    test("a named reader after a visitor's build failed joins the named build still running", async () => {
+        const doc = await newPublicDocForCharlie();
+        const { write } = await member(doc.id);
+        await write('after');
+        const held = holdStateJobs('background', 'foreground');
+        try {
+            const visitor = visit(doc.id);
+            await eventually(async () => (held.started('background') === 1 ? true : undefined));
+            const owner = authedRequest(alice.sessionToken, stateUrl(doc.id));
+            await eventually(async () => (held.started('foreground') === 1 ? true : undefined));
+            held.fail('background');
+            expect((await visitor).status).toBe(500);
+            const late = authedRequest(charlie.sessionToken, stateUrl(doc.id));
+            await Bun.sleep(200);
+            held.release('foreground');
+            expect([(await owner).status, (await late).status]).toEqual([200, 200]);
+            expect(held.started('foreground')).toBe(1);
+        } finally {
+            held.restore();
+        }
+    }, 30_000);
 
     test('with the queue full a miss answers what a preview route answers', async () => {
         const doc = await newPublicDoc();

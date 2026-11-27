@@ -423,7 +423,7 @@ describe('document transform (eigensheets preview)', () => {
         }
     }, 60_000);
 
-    test('a request that finds no previous version joins the in-flight regeneration instead of starting a second job', async () => {
+    test("an owner's request that finds no previous version builds in the foreground beside the background regeneration", async () => {
         const sheetsPath = await seedDoc('cache-regen-landed');
         const first = await previewRequest(sheetsPath.id);
         expect(first.status).toBe(200);
@@ -434,12 +434,9 @@ describe('document transform (eigensheets preview)', () => {
         // Hold the background regeneration open so the second request arrives while it is
         // in flight — the moment a landing regeneration's prune can take the previous version.
         const real = documentTransformRunner.run.bind(documentTransformRunner);
-        let release: (() => void) | undefined;
-        const held = new Promise<void>((resolve) => {
-            release = resolve;
-        });
+        const held = Promise.withResolvers<void>();
         const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
-            if (request.kind === 'preview') await held;
+            if (request.kind === 'preview' && opts.priority === 'background') await held.promise;
             return real(request, opts);
         });
         try {
@@ -451,15 +448,15 @@ describe('document transform (eigensheets preview)', () => {
             for (const name of await fs.promises.readdir(mount.previewsDir)) {
                 if (name.startsWith(`${sheetsPath.id}-`)) await fs.promises.unlink(path.join(mount.previewsDir, name));
             }
-            const pending = previewRequest(sheetsPath.id);
-            await Bun.sleep(50);
-            release?.();
-            const fresh = await pending;
+            const fresh = await previewRequest(sheetsPath.id);
             expect(fresh.status).toBe(200);
             expect(fresh.headers.get('cache-control')).not.toBe('no-store');
-            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
+            expect(callsOfKind(runSpy, 'preview').map(([, opts]) => opts.priority)).toEqual([
+                'background',
+                'foreground',
+            ]);
         } finally {
-            release?.();
+            held.resolve();
             runSpy.mockRestore();
         }
     }, 60_000);
