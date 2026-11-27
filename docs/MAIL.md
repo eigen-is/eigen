@@ -53,13 +53,19 @@ Custom folders have no watcher, so a listing reconciles them in the background (
 
 At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 KB (`apps/api/scripts/mail-bench.ts`). So the list never fetches all of it, and a mutation never refetches it:
 
-- `MailDB.listMessages` pages on a `(date, id)` cursor over the `(mailbox, date DESC, id DESC)` index.
+- `MailDB.listMessages` pages on a `(receivedAt, id)` cursor over the `(mailbox, receivedAt DESC, id DESC)` index, sent as `beforeReceivedAt` and `beforeId`. The column holds whole seconds, so ties are common and the id breaks them.
 - Move, read, flag and delete patch the cached pages by message id (`patchEmailInLists`) and roll back on error, instead of invalidating.
 - The patch is applied twice: before the request and again when the server answers (`confirmMailMutation`). A page the server read before it stored the change can land after the first patch and undo it, and the echo that would correct it is skipped. A mail opened from the bell hits this, since its list is still loading. So the answer cancels every list fetch still running, patches again and restarts the cancelled ones. The cancel comes first, because TanStack lets a refetch of a list with no data join the fetch already running.
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
-- `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
+- `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox or of one with rows from before the received time ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 
 A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail). The row goes read once the inbox holds no unread mail, whether the app or an IMAP client read the last message.
+
+## The list sorts by when a message arrived, not by its Date header
+
+A message's `date` is the sender's `Date:` header, which their clock or a day in a queue can push far back, and a list sorted by it hides that mail below what came after. So the list, its paging and the search results sort by `receivedAt`, then id. That is when the file reached the Maildir, the same value an IMAP client sees, so the web app and Apple Mail or Thunderbird agree on the order ([IMAP.md § A message's received time is its file's mtime](IMAP.md#a-messages-received-time-is-its-files-mtime)). The list row shows `receivedAt`. The message view and the reply quote keep `date`, because that is what the sender wrote.
+
+A message Eigen places itself sets its received time on purpose. A copy keeps its source's. An `.eml` import takes the date the topmost `Received:` header ends in (after its last `;`), the last server's stamp, else its `Date:`, else now, and skips a value in the future or before 1970 (`Mail.messageImport`), so an old message lands among the mail of its day. A draft's received time is its last save, and a send keeps it, since the move to Sent is a rename. The demo seeder delivers each thread at its story time.
 
 ## A draft's `.eml` is its only copy
 
