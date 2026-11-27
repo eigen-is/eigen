@@ -54,9 +54,12 @@ const root = path({ name: 'My Drive', type: 'folder', mimeType: 'folder', parent
 const sharedDoc = path({ ...doc, acl: [{ id: 'friend@example.com', read: true, write: false }] });
 
 function idsFor(subject: Partial<DriveActionSubject> & { items: DrivePath[] }): DriveActionId[] {
-    return driveActionsFor({ capabilities: browse, isSharedWithMe: () => false, ...subject }).map(
-        (action) => action.id,
-    );
+    return driveActionsFor({
+        capabilities: browse,
+        isSharedWithMe: () => false,
+        isEffectiveOwnerOf: () => false,
+        ...subject,
+    }).map((action) => action.id);
 }
 
 describe('driveActionsFor on one item', () => {
@@ -170,7 +173,12 @@ describe('driveActionsFor on a multi-selection', () => {
     });
 
     test('every row a set gets has a plural label with its count', () => {
-        for (const action of driveActionsFor({ items, capabilities: browse, isSharedWithMe: () => false })) {
+        for (const action of driveActionsFor({
+            items,
+            capabilities: browse,
+            isSharedWithMe: () => false,
+            isEffectiveOwnerOf: () => false,
+        })) {
             expect(action.pluralLabel).toContain('{n}');
         }
     });
@@ -182,7 +190,12 @@ test('no items offer no rows', () => {
 
 // A shared document in a browse view offers every row, the delete row aside, which turns on the share.
 const everyRow = (sharedWithMe: boolean) =>
-    driveActionsFor({ items: [sharedDoc], capabilities: browse, isSharedWithMe: () => sharedWithMe });
+    driveActionsFor({
+        items: [sharedDoc],
+        capabilities: browse,
+        isSharedWithMe: () => sharedWithMe,
+        isEffectiveOwnerOf: () => false,
+    });
 
 test('the guest and mail flags sit on the rows whose routes need them', () => {
     const flagged = (flag: 'guestDenied' | 'mailOnly') =>

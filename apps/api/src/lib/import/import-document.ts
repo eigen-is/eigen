@@ -42,6 +42,7 @@ import {
     runImportToSnapshotJson,
     runInsertToSheetsBatch,
 } from '../document/transform/run-transform';
+import type { TransformPriority } from '../document/transform/runner';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
@@ -67,11 +68,13 @@ export async function convertToDocument(
     if (!isConvertSource(sourcePath.name, targetType)) {
         throw new ApiError(400, `Only .${format} files can be converted to ${EIGEN_DOC_TYPE_INFO[type].labelPlural}`);
     }
-    // The create checks write too, but only after the transform: a reader would pay for one to get a 403.
-    if (!(await drive.canWrite(sourcePath.mountId, parentId, user))) throw new ApiError(403, 'No write permission');
+    // The create checks write too, but only after the transform: a reader would pay for one to get a 403. The new
+    // document lands in the folder, so the folder's access decides the lane too.
+    const { canWrite, priority } = await drive.readerAccess(sourcePath.mountId, parentId, user);
+    if (!canWrite) throw new ApiError(403, 'No write permission');
     // Buffering the source, possibly an S3 GET, is the costliest preparation here, so a job the runner won't admit
     // is refused before it.
-    documentTransformRunner.assertAdmissible('foreground');
+    documentTransformRunner.assertAdmissible(priority);
     assertWithinByteCap(sourcePath.size, format);
     // The upload limit may have been higher when the file was stored, so it applies here too.
     if (sourcePath.size > maxBytes) throw payloadTooLarge();
@@ -85,7 +88,7 @@ export async function convertToDocument(
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 
     if (targetType === 'eigensheets') {
-        const { snapshotJson, images } = await importXlsxSnapshot(buffer);
+        const { snapshotJson, images } = await importXlsxSnapshot(buffer, priority);
         // Refused before the create, so a file whose pictures can't fit makes no document. saveImportedImages charges
         // again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
@@ -96,7 +99,7 @@ export async function convertToDocument(
     if (targetType === 'eigenslides') {
         // No deck: the new one takes the slide size nearest the file's and the file's width, so a 4:3 file makes a 4:3
         // deck.
-        const { update, images } = await importPptxUpdate(buffer, undefined);
+        const { update, images } = await importPptxUpdate(buffer, undefined, priority);
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
         // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
@@ -105,7 +108,7 @@ export async function convertToDocument(
         );
     }
 
-    const { update, page, style, images } = await importDocxUpdate(buffer);
+    const { update, page, style, images } = await importDocxUpdate(buffer, priority);
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
     return fillNewDocument(drive, newPath, user, images, (doc) =>
@@ -121,6 +124,7 @@ export async function importIntoDocument(
     buffer: Buffer,
     { mode, afterFrameId }: DocumentImportOptions,
     user: User,
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<string | null> {
     // The container's type gates the dispatch, as exportDocument's does. The mime type is the caller's on an upload,
@@ -129,11 +133,11 @@ export async function importIntoDocument(
     const commit = { drive, path, user, signal };
     if (containerMime === DRIVE_MIME_SHEETS) {
         if (mode === 'insert') {
-            const { batch, images, warnings } = await insertXlsxSheets(drive, path, buffer, signal);
+            const { batch, images, warnings } = await insertXlsxSheets(drive, path, buffer, priority, signal);
             await commitImport(commit, images, false, (doc) => sheetsOpLog(doc).push([batch]));
             return lossSummary(warnings, 'import');
         }
-        const { snapshotJson, images, warnings } = await importXlsxSnapshot(buffer, signal);
+        const { snapshotJson, images, warnings } = await importXlsxSnapshot(buffer, priority, signal);
         await commitImport(commit, images, true, (doc) => {
             writeSheetsSnapshot(doc, snapshotJson, null);
             resetSheetsCompactionFailures(path);
@@ -144,7 +148,7 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_DOC) {
         // The file's page setup, Normal style and bands can't sit beside the doc's, so a docx only ever replaces.
         if (mode !== 'replace') throw new ApiError(400, 'A document import replaces the document');
-        const { update, page, style, images, warnings } = await importDocxUpdate(buffer, signal);
+        const { update, page, style, images, warnings } = await importDocxUpdate(buffer, priority, signal);
         await commitImport(commit, images, true, (doc) => {
             commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         });
@@ -154,11 +158,11 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_SLIDES) {
         // Refused before the deck is opened for its page. An insert fits a file of another size into the deck's frame,
         // letterboxed. A replace takes the slide size nearest the file's and the file's width, as Convert does.
-        documentTransformRunner.assertAdmissible('foreground');
+        documentTransformRunner.assertAdmissible(priority);
         assertWithinByteCap(buffer.byteLength, 'pptx');
         const deck =
             mode === 'insert' ? readSlidePage((await drive.getCollabDocument(path.mountId, path.id)).doc) : undefined;
-        const { update, images, warnings } = await importPptxUpdate(buffer, deck, signal);
+        const { update, images, warnings } = await importPptxUpdate(buffer, deck, priority, signal);
         // A file with no slides has no pictures either, so nothing is saved or written.
         const scene = readSlidesUpdate(new Uint8Array(update));
         if (scene.frames.length === 0) return PRESENTATION_EMPTY;
@@ -189,8 +193,12 @@ async function commitImport(
 
 // A job the runner won't admit is refused before the copy: a view over a larger pool is copied out, and IPC copies the
 // upload again. The runner checks again when it runs the job.
-function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<SheetsImportSnapshot> {
-    documentTransformRunner.assertAdmissible('foreground');
+function importXlsxSnapshot(
+    buffer: Buffer,
+    priority: TransformPriority,
+    signal?: AbortSignal,
+): Promise<SheetsImportSnapshot> {
+    documentTransformRunner.assertAdmissible(priority);
     assertWithinByteCap(buffer.byteLength, 'xlsx');
     const job: SheetsImportJob = {
         kind: 'import',
@@ -198,7 +206,7 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<Sheet
         targetType: 'eigensheets',
         maxMediaBytes: getMaxUploadSize(),
     };
-    return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
+    return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { priority, signal });
 }
 
 // The workbook is read only once the job would be admitted. The transform replays its log, weighs the file with it and
@@ -207,9 +215,10 @@ async function insertXlsxSheets(
     drive: DriveLike,
     path: DrivePath,
     buffer: Buffer,
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<SheetsInsertBatch> {
-    documentTransformRunner.assertAdmissible('foreground');
+    documentTransformRunner.assertAdmissible(priority);
     assertWithinByteCap(buffer.byteLength, 'xlsx');
     const { doc } = await drive.getCollabDocument(path.mountId, path.id);
     const workbook = {
@@ -225,12 +234,12 @@ async function insertXlsxSheets(
             workbook,
         },
         toTransferableBuffer(buffer),
-        { signal },
+        { priority, signal },
     );
 }
 
-function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportResult> {
-    documentTransformRunner.assertAdmissible('foreground');
+function importDocxUpdate(buffer: Buffer, priority: TransformPriority, signal?: AbortSignal): Promise<DocImportResult> {
+    documentTransformRunner.assertAdmissible(priority);
     assertWithinByteCap(buffer.byteLength, 'docx');
     const job: DocImportJob = {
         kind: 'import',
@@ -239,20 +248,21 @@ function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImpo
         publicOrigin: getPublicOrigin(),
         maxMediaBytes: getMaxUploadSize(),
     };
-    return runImportToDocumentUpdate(job, toTransferableBuffer(buffer), { signal });
+    return runImportToDocumentUpdate(job, toTransferableBuffer(buffer), { priority, signal });
 }
 
 function importPptxUpdate(
     buffer: Buffer,
     deck: SlidesImportJob['deck'],
+    priority: TransformPriority,
     signal?: AbortSignal,
 ): Promise<SlidesImportTransformResult & { warnings: TransformWarning[] }> {
-    documentTransformRunner.assertAdmissible('foreground');
+    documentTransformRunner.assertAdmissible(priority);
     assertWithinByteCap(buffer.byteLength, 'pptx');
     return runImportToSlidesUpdate(
         { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', deck, maxMediaBytes: getMaxUploadSize() },
         toTransferableBuffer(buffer),
-        { signal },
+        { priority, signal },
     );
 }
 

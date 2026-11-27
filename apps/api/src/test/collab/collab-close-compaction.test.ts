@@ -874,7 +874,7 @@ describe('CollabDocument compacts a workbook at close', () => {
             await giveUp();
             const { path } = await home.drive.resolveFile(mountId, sheet.id);
             const xlsx = Buffer.from(xlsxFixture({ sheets: [{ name: 'Sheet1', data: rowsXml([['A1', 5]]) }] }));
-            await importIntoDocument(home.drive, path, xlsx, { mode: 'replace' }, home.user);
+            await importIntoDocument(home.drive, path, xlsx, { mode: 'replace' }, home.user, 'foreground');
             await pushEdit();
             expect(await sheet.closeOnce(fail)).toBe(true);
 

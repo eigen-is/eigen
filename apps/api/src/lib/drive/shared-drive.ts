@@ -297,11 +297,12 @@ export class SharedDrive {
         return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
     }
 
-    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does. In a folder the
-    // mover holds by name the item would be theirs to share, so the move needs write held by name, as sharing does.
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does. The folder it
+    // lands in can open it to more people, so the move asks what sharing asks.
     private async requireMove(mountId: string, pathId: string, targetParentId: string): Promise<void> {
         const memberships = await getMemberships(this.user.id);
         const path = await this.requireWriteByName(mountId, pathId, memberships, 'No permission to move this item');
+        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Moving is restricted by the owner');
         if (!path.parentId) throw new ApiError(403, 'No write permission on source folder');
         await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');

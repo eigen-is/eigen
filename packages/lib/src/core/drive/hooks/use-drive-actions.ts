@@ -10,14 +10,15 @@ import type { DriveCapabilities } from '@workspace/lib/types/drive-view';
 import { useAuth, useIsGuest } from '../../auth';
 import { useMailEnabled } from '../../public';
 import { driveActionsFor } from '../drive-actions';
-import { useIsSharedWithMe } from './use-drive-access';
+import { useIsEffectiveOwnerOf, useIsSharedWithMe } from './use-drive-access';
 
 type ViewerFlags = Pick<DriveAction, 'guestDenied' | 'mailOnly' | 'visitorAllowed'>;
 
 export function useDriveActionsFor(capabilities: DriveCapabilities): (items: readonly DrivePath[]) => DriveAction[] {
     const isSharedWithMe = useIsSharedWithMe();
+    const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
     const mayUse = useViewerMayUse();
-    return (items) => driveActionsFor({ items, capabilities, isSharedWithMe }).filter(mayUse);
+    return (items) => driveActionsFor({ items, capabilities, isSharedWithMe, isEffectiveOwnerOf }).filter(mayUse);
 }
 
 // Whether this viewer on this server may use a catalog row: a visitor only the rows marked for them, a guest none

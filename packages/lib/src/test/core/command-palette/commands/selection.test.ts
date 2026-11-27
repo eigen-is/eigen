@@ -63,9 +63,12 @@ const browse: DriveCapabilities = {
 
 // A published row for a Drive catalog row, as a page binds it to its selection.
 function row(id: DriveActionId, run: PaletteSelectionAction['run'] = () => {}): PaletteSelectionAction {
-    const action = driveActionsFor({ items: [doc], capabilities: browse, isSharedWithMe: () => false }).find(
-        (a) => a.id === id,
-    );
+    const action = driveActionsFor({
+        items: [doc],
+        capabilities: browse,
+        isSharedWithMe: () => false,
+        isEffectiveOwnerOf: () => false,
+    }).find((a) => a.id === id);
     if (!action) throw new Error(`No Drive action ${id}`);
     return { action, run };
 }
