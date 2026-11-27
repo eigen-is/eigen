@@ -7,16 +7,20 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { useContextMenu } = await import('@workspace/ui/components/context-menu');
 const { SlidePanel } = await import('../../../components/slides/slide-panel');
 
 const deck = (size: SlideSize): VectorFrame[] =>
     ['f1', 'f2'].map((id, i) => ({ id, index: `a${i}`, name: '', ...SLIDE_SIZES[size], background: '' }));
 
-// The editor owns the drag id; this harness owns it the same way, so the overlay mounts on a real drag.
-function Rail({ frames }: { frames: VectorFrame[] }) {
+// The editor owns the drag id and the slide menu, which a reader doesn't get; this harness owns them the same way, so
+// the overlay mounts on a real drag.
+function Rail({ frames, canEdit = true }: { frames: VectorFrame[]; canEdit?: boolean }) {
     const [dragActiveId, setDragActiveId] = useState<string | null>(null);
+    const slideMenu = useContextMenu<string>();
     return createElement(SlidePanel, {
         frames,
+        slideMenu: canEdit ? slideMenu : undefined,
         elements: [],
         activeFrameId: 'f1',
         onSelectFrame: () => {},
@@ -34,11 +38,11 @@ function pointer(type: string, target: EventTarget, clientY: number) {
 }
 
 // The overlay a drag picks up, shaped like the slide it carries.
-function dragOverlayRatio(size: SlideSize): string {
+function dragOverlayRatio(size: SlideSize, canEdit = true): string {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
-    act(() => root.render(createElement(Rail, { frames: deck(size) })));
+    act(() => root.render(createElement(Rail, { frames: deck(size), canEdit })));
     const slide = container.querySelector('[aria-roledescription="sortable"]');
     if (!slide) throw new Error('the rail rendered no sortable slide');
     pointer('pointerdown', slide, 10);
@@ -59,4 +63,8 @@ describe('SlidePanel drag overlay', () => {
     test('a 4:3 slide drags as a 4:3 card', () => {
         expect(dragOverlayRatio('4:3')).toBe('1920/1440');
     });
+});
+
+test("a reader's rail picks up no slide, so their deck keeps its order", () => {
+    expect(dragOverlayRatio('16:9', false)).toBe('');
 });

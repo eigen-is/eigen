@@ -82,6 +82,7 @@ export function StickiesBoard({
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
         yjsDoc,
         undoManager,
@@ -280,7 +281,11 @@ export function StickiesBoard({
 
     // `loaded` stays true once set, so a dropped connection keeps the board mounted.
     return (
-        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
+        <CollabDocumentGate
+            collab={{ loaded, storageUnavailable, storageGone, loadError }}
+            path={path}
+            canWrite={canWrite}
+        >
             <UnsyncedEditsGuard active={unsyncedEdits} />
             <ColumnLayout>
                 <PhoneDetail detail={activityColumn}>
@@ -311,7 +316,10 @@ export function StickiesBoard({
                                         filter={commentFilter}
                                         members={members}
                                         currentUserEmail={currentUserEmail}
-                                        onToggleActivity={() => (activityOpen ? close() : showList('activity'))}
+                                        // A visitor without a login gets no activity, since it lists the history.
+                                        onToggleActivity={
+                                            user ? () => (activityOpen ? close() : showList('activity')) : undefined
+                                        }
                                         activityOpen={activityOpen}
                                     />
                                 }

@@ -6,7 +6,7 @@ import { EML_MIME } from '@workspace/lib/types/file-kinds';
 import type { Attachment, EmailSummary } from '@workspace/lib/types/mail';
 import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';
-import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scriptableInlineHeaders } from '../core';
+import { ApiError, answerRevalidated, contentDisposition, rangeResponse, servedFileHeaders } from '../core';
 import type { Mail } from './mail-domain';
 
 // A message other than a draft never changes under its id, so a 304 is answered before the .eml is read.
@@ -66,10 +66,8 @@ export function serveMailPart(
     const headers: Record<string, string> = {
         'Content-Type': servedType,
         'Content-Disposition': contentDisposition(disposition, mailAttachmentName(att, index)),
-        'X-Content-Type-Options': 'nosniff',
         'Accept-Ranges': 'bytes',
-        // Inline from the API's own origin, so a scriptable part gets the sandbox CSP.
-        ...(disposition === 'inline' && scriptableInlineHeaders(contentType)),
+        ...servedFileHeaders(contentType, disposition),
     };
 
     const size = att.content.byteLength;

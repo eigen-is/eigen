@@ -65,19 +65,21 @@ export function useCommentLifecycle({
     const [deleteCardId, requestDelete] = useState<string | null>(null);
 
     const { user } = useAuth();
-    const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, pathId);
+    // A visitor, with no login, reads the cards in the document and not the server's index rows or members.
+    const indexPathId = user ? pathId : '';
+    const { data: allComments = [], isPending: commentsPending } = useComments(ownerId, mountId, indexPathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
     const assignComment = useAssignComment(ownerId, mountId, pathId);
-    const { data: members = [] } = useEffectiveMembers(ownerId, mountId, pathId);
+    const { data: members = [] } = useEffectiveMembers(ownerId, mountId, indexPathId);
     const cards = useCommentCards(doc, mapName);
     const createCard = useCreateCommentCard(ownerId, mountId, pathId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
     const assignedCount = useAssignedCommentCount(cards, allComments, activeCardIds, user?.email ?? '');
     const isCardDeleted = useIsCardDeleted(activeCardIds, ready);
 
-    // A chat waits for the index rows too, or a comment whose card is gone would read as not found. It is looked up
-    // on every render, so a card that comes back, such as through an undo, opens live.
-    const shown = ready && !commentsPending ? chat : undefined;
+    // A chat waits for the index rows too, which a visitor never reads, or a comment whose card is gone would read as
+    // not found. It is looked up on every render, so a card that comes back, such as through an undo, opens live.
+    const shown = ready && (!user || !commentsPending) ? chat : undefined;
     const openCardId = shown ? findCardIdByChatName(cards, shown) : undefined;
     const openCard = openCardId ? cards[openCardId] : null;
     const openEntry = shown ? allComments.find((e) => e.chatName === shown) : undefined;

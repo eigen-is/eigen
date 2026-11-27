@@ -31,7 +31,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
     const navigate = useNavigate();
 
     const routeMatch = useMatch({
-        from: '/_auth/fs/$ownerId/$mountId/$pathId',
+        from: '/fs/$ownerId/$mountId/$pathId',
         shouldThrow: false,
     });
 

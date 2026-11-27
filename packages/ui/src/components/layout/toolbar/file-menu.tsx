@@ -2,14 +2,15 @@
 // creates, opens, copies, renames, downloads, shares and trashes the document, and opens its version history.
 // Open recent lists the newest files of the same kind from the viewer's recent list, which Drive's Recent page reads.
 // Its Drive rows, such as Rename and Move to trash, come from the Drive action catalog with Drive's
-// gates. It also hands the document and those rows to the command palette, so both offer the same ones.
+// gates. It also hands the document and those rows to the command palette, so both offer the same ones. A visitor
+// without a login keeps only the editor's own rows, such as Print.
 
 import { useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
-import { useIsGuest } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useDriveActionsFor, useMakeCopy, useRecentPaths } from '@workspace/lib/drive';
+import { useDriveActionsFor, useMakeCopy, useRecentPaths, useWritesByName } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -87,6 +88,7 @@ export function FileMenu({
     children,
     onCloseAutoFocus,
 }: FileMenuProps) {
+    const { user } = useAuth();
     const [createOpen, setCreateOpen] = useState(false);
     const [openPickerOpen, setOpenPickerOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
@@ -102,7 +104,9 @@ export function FileMenu({
     const navigate = useNavigate();
     // The document stands where Drive's folder browser stands on a folder: the viewer's write access
     // to it gates the writes, and an item shared with the viewer is removed rather than trashed.
-    const actionsFor = useDriveActionsFor(browseCapabilities(canWrite));
+    const actionsFor = useDriveActionsFor(
+        browseCapabilities(canWrite, useWritesByName(path.ownerId, path.mountId, path.id)),
+    );
     const { mutate: makeCopy } = useMakeCopy();
 
     // The Drive rows this menu can run, through the dialogs it owns. Copy link and Mail to go to the palette
@@ -133,6 +137,14 @@ export function FileMenu({
         const row = rows.find(({ action }) => action.id === id);
         return row && <DriveActionMenuItem action={row.action} count={1} onClick={() => row.run()} />;
     };
+    if (!user) {
+        return children ? (
+            <AppBarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
+                {children}
+            </AppBarMenu>
+        ) : null;
+    }
+
     const remove = rowFor('trash') ?? rowFor('remove-shared');
     // A copy lands beside the original, so it is offered where Drive offers Duplicate.
     const canCopy = actions.some((action) => action.id === 'duplicate');

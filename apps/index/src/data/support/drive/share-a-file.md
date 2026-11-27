@@ -6,10 +6,10 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/get-started]
 order: 20
-updated: 2026-11-25
+updated: 2026-11-27
 ---
 
-Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with everyone on your Eigen server who has the link, and decide whether they can view it or also make changes.
+Everything in Drive is private to you until you share it. You can share a file or folder with specific people, with a whole team, or with anyone who has the link, and decide whether they can view it or also make changes.
 
 ## Share with specific people
 
@@ -32,11 +32,16 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a file starts as **Restricted**. Only the people you've added can open it.
 
-To share more widely, click the lock icon to switch it to **Unrestricted**, then choose **Can view** or **Can edit**. Use the **Copy link** button to copy the link and send it to whoever you like.
+To share more widely, pick another choice from the dropdown under **General access**:
+
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open it. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the file or folder, but not who has access. They also can't move it to another folder or email the people it's shared with. Only the owner and people added by name, or through a team, can do those things.
+- **Anyone with the link**: anyone who has the link can view it, with no account and no sign-in. [Share with a public link](/support/drive/share-with-a-public-link) explains what they see.
+
+Use the **Copy link** button to copy the link, then click **Save** and send the link to whoever you like.
 
 <div class="eigen-callout">
 
-An **Unrestricted** link still requires the other person to sign in to Eigen. It isn't open to the public web. There's no anonymous, sign-in-free sharing.
+With **Anyone signed in with the link**, the other person still signs in to Eigen. Only **Anyone with the link** opens a file or folder to someone without an account, and only to view it.
 
 </div>
 
@@ -46,4 +51,4 @@ In the **Share** dialog, click the **Email collaborators** button to open a comp
 
 ## Control who can change sharing
 
-If you own the file, you can stop editors from re-sharing it. In the **Share** dialog, turn off **Editors can share**. With it off, only you can add or remove people. Editors can still work on the file, but they can't change who else has access.
+If you own the file, you can stop editors from re-sharing it. In the **Share** dialog, turn off **Editors can share**. With it off, only you can add or remove people or move it to another folder, since a folder can open it to more people. Editors can still work on the file, but they can't change who else has access.

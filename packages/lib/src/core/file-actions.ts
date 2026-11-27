@@ -39,8 +39,16 @@ const FILE_ACTIONS: readonly FileAction[] = [
         group: 'open',
         applies: (_info, subject) => !subject.drive || !isFolderType(subject.drive.type),
         shortcut: QUICK_LOOK_HOTKEY,
+        visitorAllowed: true,
     },
-    { id: 'download', label: 'Download', icon: Download, group: 'output', applies: (info) => !!info.downloadUrl },
+    {
+        id: 'download',
+        label: 'Download',
+        icon: Download,
+        group: 'output',
+        applies: (info) => !!info.downloadUrl,
+        visitorAllowed: true,
+    },
     {
         id: 'save-to-drive',
         label: 'Save to Drive…',

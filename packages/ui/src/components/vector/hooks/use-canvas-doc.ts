@@ -69,6 +69,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId,
@@ -285,6 +286,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
     };
 };

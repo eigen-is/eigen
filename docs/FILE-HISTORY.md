@@ -30,7 +30,7 @@ The fan-out finds the watchers to notify by walking up the parent chain from the
 - Trash captures the old breadcrumb and the old effective members before `trashPath` re-parents the item to the root and strips its shares. After the trash neither resolves.
 - Permanent delete only notifies. The FK cascade would delete a row at once, so it collects the watchers and the `trashedFrom` chain before the delete.
 - Upload writes one row per file and fans out once per batch, so a 100-file upload is one notification.
-- Copy records `copied` for the root and every descendant, and fans out only at the root, since fresh paths have no watchers yet.
+- Copy records `copied` for the root and every descendant, and fans out only at the root, since fresh paths have no watchers yet. The event names no source, because whoever can read the copy must not learn the original's id; older rows still carry it.
 
 ## Collab edits are attributed on the server
 

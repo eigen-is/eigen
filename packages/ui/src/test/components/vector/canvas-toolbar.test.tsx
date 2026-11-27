@@ -1,12 +1,23 @@
 // The File menu takes the host's own rows above Move to trash: Slides adds Page setup, Vector adds nothing. Only the
 // deck brings slides in from a file, so its File menu alone holds Import…. The Edit menu acts on the canvas's selection
 // as Google Slides' does, and keeps the tools, which below the compact breakpoint no button reaches.
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { menuRows, rowLabel } from '../../menu-rows';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
+
+// A signed-in editor: a visitor without a login is offered no Drive rows.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
+const user = { id: 'owner-1', email: 'me@test.eigen.is', name: 'Me' };
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({ user, isAuthenticated: true, isLoading: false }),
+}));
+afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
+});
 
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');

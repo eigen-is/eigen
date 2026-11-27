@@ -1,7 +1,7 @@
 // The read-only view of who can open a Drive item: the people with access, each with their role, and the link's
-// general access. A long list collapses under a header that counts the roles. It shows where someone may look but
-// not edit, such as an item's details pane or the Share dialog of a viewer. The general access line is shared with
-// the Share dialog's form, so both say the same thing.
+// general access. A long list collapses under a header that counts the roles. It shows where someone may look but not
+// edit, such as an item's details pane. GENERAL_ACCESS and GeneralAccess name and draw the general access wherever it
+// shows, such as in the Share dialog's form, so every place says the same thing.
 
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -9,11 +9,22 @@ import type { DriveACL, DriveAccessItem, DriveVisibility } from '@workspace/lib/
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { cn } from '@workspace/ui/lib/utils';
-import { Lock, Unlock, UserRoundPlus } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Globe, Lock, Unlock, UserRoundPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { TooltipButton } from '../layout/toolbar';
 import { CollapsibleUserList } from '../user/collapsible-user-list';
 import { UserItem } from '../user/user-item';
+
+const SIGNED_IN = { label: 'Anyone signed in with the link', description: 'They sign in to open it', icon: Unlock };
+
+// What each general access is called, by the value stored: a signed-in link also stores whether it lets people edit.
+export const GENERAL_ACCESS: Record<DriveVisibility, { label: string; description: string; icon: LucideIcon }> = {
+    private: { label: 'Restricted', description: 'Only people with access', icon: Lock },
+    'public-read': SIGNED_IN,
+    'public-write': SIGNED_IN,
+    link: { label: 'Anyone with the link', description: 'No sign-in needed', icon: Globe },
+};
 
 export type DriveAccessListProps = {
     path: DrivePath;
@@ -61,12 +72,7 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
             </div>
             <div className="shrink-0 pt-4">
                 <h4 className="text-sm font-medium mb-2">General access</h4>
-                <GeneralAccess
-                    visibility={visibility}
-                    icon={
-                        <AvatarIcon className="w-8 h-8">{visibility === 'private' ? <Lock /> : <Unlock />}</AvatarIcon>
-                    }
-                >
+                <GeneralAccess visibility={visibility}>
                     {visibility !== 'private' && (
                         <span className="text-xs text-muted-foreground">
                             {visibility === 'public-write' ? 'Can edit' : 'Can view'}
@@ -80,23 +86,24 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
 
 type GeneralAccessProps = {
     visibility: DriveVisibility;
-    // The lock: a plain icon where the viewer may only look, a button that flips it in the Share dialog's form.
-    icon: ReactNode;
-    // What the link lets someone do, on the right: as text, or the picker that changes it.
+    // A control in place of the name, and words in place of the short line under it.
+    choice?: ReactNode;
+    description?: ReactNode;
+    // What the general access lets someone do, on the right: as text, or the picker that changes it.
     children?: ReactNode;
 };
 
-// The link's general access, which the read-only list and the Share dialog's form both draw.
-export function GeneralAccess({ visibility, icon, children }: GeneralAccessProps) {
+export function GeneralAccess({ visibility, choice, description, children }: GeneralAccessProps) {
+    const { label, description: shortDescription, icon: Icon } = GENERAL_ACCESS[visibility];
     return (
-        <div className="flex items-center justify-between">
-            <div className="flex items-center">
-                {icon}
+        <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start">
+                <AvatarIcon className="w-8 h-8 shrink-0">
+                    <Icon />
+                </AvatarIcon>
                 <div className="ml-3">
-                    <p className="text-sm font-medium">{visibility === 'private' ? 'Restricted' : 'Unrestricted'}</p>
-                    <p className="text-xs text-muted-foreground">
-                        {visibility === 'private' ? 'Only people with access' : 'Anyone signed in with the link'}
-                    </p>
+                    {choice ?? <p className="text-sm font-medium">{label}</p>}
+                    <p className="text-xs text-muted-foreground">{description ?? shortDescription}</p>
                 </div>
             </div>
             {children}

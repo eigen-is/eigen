@@ -1,9 +1,9 @@
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types/drive';
-import type { CollabTransformJob } from './transform/protocol';
+import type { CollabPreviewJob } from './transform/protocol';
 
 // The collab document types a transform reads, keyed by the mime Drive stores. One
 // list per fact: preview generation and search extraction both dispatch off it.
-export type CollabDocumentType = CollabTransformJob['documentType'];
+export type CollabDocumentType = CollabPreviewJob['documentType'];
 
 // Map, not Record: mimeType is document data — object lookup would resolve prototype keys.
 export const COLLAB_DOCUMENT_TYPES = new Map<string, CollabDocumentType>([

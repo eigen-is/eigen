@@ -1,6 +1,7 @@
 // The open thread is the host's ?chat=: while it names a chat, the open comment is the card that holds it, else the
 // index row that keeps it, which opens as deleted. A chat waits for the host to be ready and for the rows, and then a
 // chat that names neither reads as missing, so the host can drop it.
+// A visitor without a login reads only the cards in the document, never the server's index rows or members.
 import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import * as Y from 'yjs';
@@ -9,9 +10,10 @@ import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
 
+const session: { user: { id: string; email: string } | null } = { user: { id: 'owner-1', email: 'ada@example.com' } };
 const realAuthContextModule = await import('../../../../core/auth/auth-context');
 mock.module('../../../../core/auth/auth-context', () => ({
-    useAuth: () => ({ user: { id: 'owner-1', email: 'ada@example.com' } }),
+    useAuth: () => session,
 }));
 afterAll(() => {
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
@@ -131,4 +133,26 @@ test('a chat waits for the host and the rows, and then a chat nothing names is m
 test('no chat opens nothing and misses nothing', async () => {
     const { lifecycle } = await mountBoard({ rows });
     expect([lifecycle().openCard, lifecycle().openEntry, lifecycle().chatMissing]).toEqual([null, undefined, false]);
+});
+
+test('a visitor lands on a card by its chat name and asks for no index row or member', async () => {
+    session.user = null;
+    fetchSpy.mockClear();
+    try {
+        const { lifecycle } = await mountBoard({ chat: 'kept.eigenchat' });
+        expect(lifecycle().openCard?.id).toBe('card-1');
+        expect(lifecycle().allComments).toEqual([]);
+        expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+        session.user = { id: 'owner-1', email: 'ada@example.com' };
+    }
+});
+
+test('a signed-in reader still reads the index rows and the members', async () => {
+    fetchSpy.mockClear();
+    await mountBoard({});
+    const asked = fetchSpy.mock.calls.map(
+        ([input]) => new URL(String(input instanceof Request ? input.url : input)).pathname,
+    );
+    expect(asked.some((pathname) => pathname.endsWith('/board-1/comments'))).toBe(true);
 });

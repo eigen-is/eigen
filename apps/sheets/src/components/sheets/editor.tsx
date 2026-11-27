@@ -95,6 +95,7 @@ export function SheetEditor({
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
         handleOp,
         docRef,
@@ -368,7 +369,11 @@ export function SheetEditor({
     const slotPx = useColumnWidthPx(column.open ? column.width : 'small');
 
     return (
-        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
+        <CollabDocumentGate
+            collab={{ loaded, storageUnavailable, storageGone, loadError }}
+            path={path}
+            canWrite={canWrite}
+        >
             <UnsyncedEditsGuard active={unsyncedEdits} />
             {mediaFolderId && (
                 <DrivePickerWithUpload

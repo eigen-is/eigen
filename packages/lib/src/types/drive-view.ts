@@ -22,6 +22,9 @@ export type DriveCapabilities = {
     canRename: boolean;
     canMove: boolean;
     canShare: boolean;
+    // Whether the viewer holds write on a listed item by name, which Move, Share and Email collaborators also need. A
+    // view whose rows have no folder chain leaves that to the server.
+    writesByName?: (item: DrivePath) => boolean;
     showBreadcrumb: boolean;
     // Omit to allow creating every EigenDocType; an empty set disables create entirely.
     createTypes?: ReadonlySet<EigenDocType>;

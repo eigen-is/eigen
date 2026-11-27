@@ -10,9 +10,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Link previews** — a link to the public site in Slack, LinkedIn or X shows a picture: the eigen wordmark over the apps, or on an About page that app's own screen
 - **Day, 3-day and schedule views in Calendar** — the toolbar's view menu on a computer, and the sidebar on a phone, offers **Day**, **3 days**, **Week**, **Month** and **Schedule**, a list of the next four weeks' events, day by day. Day, 3 days and Week draw events as blocks on an hour grid, side by side where they overlap, with a line at the current time. Month draws a trip as one bar across its days, shows titles on a phone, and fits as many events as a day has room for. Click an empty time to start a new event there, an hour long, or drag over a range with a mouse to pick its start and end. Drag an event with a mouse to another time or day, or its bottom edge to change when it ends. Calendar opens on a week on a computer and on 3 days on a phone, then on the view you last picked on each
 - **Keyboard shortcuts in Calendar** — as in Google Calendar: **t** for today, **j** and **k** or the arrows to step, **d**, **x**, **w**, **m** and **a** for the views, and **c** for a new event
+- **Public links** — **Anyone with the link** under General access in Share lets anyone with the address view a file, a folder and what is in it, or a document, without signing in, with newer edits showing up within about 30 seconds. Admin › Guest access can turn it off
 
 ### Changed
 
+- **General access in Share** — one dropdown of Restricted, Anyone signed in with the link and Anyone with the link, in place of the lock and Unrestricted
+- **Viewing through a link** — in Docs, Sheets, Slides, Stickies and Vector, Can view through Anyone signed in with the link shows newer edits within about 30 seconds, or on a return to the tab. People added by name and editors see changes live
+- **Copying through a link** — a document, spreadsheet, presentation, board, drawing or chat you can only view through Anyone with the link or Anyone signed in with the link can't be copied, and neither can a folder that holds one. Other files still copy
+- **Log in from a shared page** — the top bar's Log in brings you back to the page you were on
 - **App switcher** — on a computer, resting the mouse on the grid button at the top left opens the list of apps. A click opens it too
 - **Dialogs** — a dialog you type in is wide and a short question stays narrow. A wide dialog keeps its buttons in view under a line while you scroll, and on a phone the buttons stay in one row
 - **Forms** — every form in every app behaves the same. Save waits for what you typed, and a switch saves at once. Esc, the X or a click outside asks "Discard changes?" when something changed, and so does leaving a page with unsaved changes. A problem shows under its field and Save stays clickable. Save shows a spinner while it works, and Cmd+Enter (Ctrl+Enter on Windows) submits from any field. Buttons say Save, Create, Apply or the verb of the job. Delete asks unless you can undo it, and rich-text fields show their placeholder
@@ -88,6 +93,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Security
 
 - **Server runtime** — the server runs on Bun 1.4.5, which fixes security issues in its web server, its encrypted connections, its DNS lookups and its decompression
+- **Opening files in the browser** — in Drive, Mail and a mounted drive, only pictures, PDFs, sound, video and plain text open as they are. Any other file opens locked down, so nothing in it can run
+- **SVG previews** — an SVG builds in the pictures it names only inside a document, and only pictures, never other files beside it
+- **Who can share and move** — only the owner and people added by name, or through a team, can change who has access, move an item or email its collaborators. Someone who edits through Anyone signed in with the link can still edit. With Editors can share off, only the owner moves the item
+- **Busy servers** — what someone who reaches an item only through a link opens, previews, downloads in another format, converts or imports waits behind the work of the people it is shared with, and a document they view is built once per change
 
 ## [0.4.4] - 2026-11-17
 

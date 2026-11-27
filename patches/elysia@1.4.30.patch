@@ -1,0 +1,21 @@
+diff --git a/dist/ws/index.mjs b/dist/ws/index.mjs
+index 4a3587b8e51b89187c81a363ef1d6c6625279d80..a3a2612ae5e412b8cff9fa596ce3510d1eb77d58 100644
+--- a/dist/ws/index.mjs
++++ b/dist/ws/index.mjs
+@@ -95,15 +95,7 @@ class ElysiaWS {
+ const createWSMessageParser = (parse) => {
+   const parsers = typeof parse == "function" ? [parse] : parse;
+   return async function(ws, message) {
+-    if (typeof message == "string") {
+-      const start = message?.charCodeAt(0);
+-      if (start === 34 || start === 47 || start === 91 || start === 123)
+-        try {
+-          message = JSON.parse(message);
+-        } catch {
+-        }
+-      else isNumericString(message) ? message = +message : message === "true" ? message = !0 : message === "false" ? message = !1 : message === "null" && (message = null);
+-    }
++    // Patched (Eigen, patches/): a text frame reaches the route as the string it is, never JSON-parsed or coerced.
+     if (parsers)
+       for (let i = 0; i < parsers.length; i++) {
+         let temp = parsers[i](ws, message);

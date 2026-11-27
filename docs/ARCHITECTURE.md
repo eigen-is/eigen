@@ -12,7 +12,7 @@ Paths are under `apps/api/src/` unless they say otherwise.
 |---|---|---|
 | **Home** | `lib/home/home.ts` | One instance per owner: `UserHome`, `TeamHome`, `OrgHome`, `GuestHome` ([STORAGE.md](STORAGE.md)) |
 | **Domain classes** | `lib/[domain]/[domain].ts` | Each domain's business logic, called straight from the routes |
-| **Routes** | `routes/[domain].ts` | Thin Elysia routers; `{auth: true}` guards a route |
+| **Routes** | `routes/[domain].ts` | Thin Elysia routers; `{auth: true}` guards a route, and `{linkAuth: true}` lets a read route answer a visitor with no login ([ACL.md](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)) |
 | **Databases** | `lib/[domain]/schema.ts`, `db-config.ts`, `lib/core/managed-database.ts` | A Drizzle schema and versioned migrations per database, opened by `ManagedDatabase` ([DATABASE.md](DATABASE.md)) |
 | **Blob store** | `lib/core/blob-store.ts` | Base of the CalDAV and CardDAV stores: the blob is the truth, every column a projection ([CALENDAR.md](CALENDAR.md), [CONTACTS.md](CONTACTS.md)) |
 | **Instance lock** | `instance-lock.ts`, `lib/config/data-lock.ts` | One API process per data folder, `./eigen restore` included ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) |
@@ -76,7 +76,8 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 - **Mount** (`lib/mount/mount.ts`): storage and `metadata.db` of one mount over one of three backends; trash, copy, search, sizes and temp files are sibling modules, and versioning is `lib/versioning/` ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
 - **Drive** (`lib/drive/drive.ts`): the API over a Home's mounts, with ACL propagation, the collab document lifecycle, SSE and sharing.
 - **SharedDrive** (`lib/drive/shared-drive.ts`): the ACL-checking wrapper, by composition. `getSharedDrive()` returns the raw `Drive` for the caller's own drive and a `SharedDrive` for another owner's, so a `Drive` method without a wrapper is a type error at the route.
-- **Routes** (`routes/drive.ts` for the tree, with `drive-listings.ts`, `drive-sharing.ts` and `drive-content.ts` beside it): thin handlers through `getSharedDrive`.
+- **LinkDrive** (`lib/drive/link-drive.ts`): the wrapper for a visitor with no login, holding only the reads a public link opens, each behind `canReadByLink`. Fourteen read routes, the collab info and stored state among them, opt in with the `linkAuth` macro (`routes/auth.ts`), which resolves `user: User | null`, and call `getReadDrive(ownerId, user)`: a `SharedDrive` or the owner's `Drive` for a user, a `LinkDrive` for a visitor. A `LinkDrive` has no write method, so a write route can't take one. Every other route keeps `auth: true`, the collab socket included ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)).
+- **Routes** (`routes/drive.ts` for the tree, with `drive-listings.ts`, `drive-sharing.ts` and `drive-content.ts` beside it): thin handlers through `getSharedDrive`, or `getReadDrive` on a `linkAuth` route.
 
 A few owner-only routes, such as `/shared/by-me`, call `requireSelf` and then `getDrive(user)`; other unwrapped Drive methods serve server code (collab, chat, the relay). A new route that needs one gets a `SharedDrive` wrapper, not this escape hatch.
 
@@ -131,7 +132,7 @@ Every Eigen document is a Drive folder with its own `data.db` and `media/`. The 
 | **Layout** | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` and `Column`, one column on a phone ([LAYOUT.md](LAYOUT.md), [MOBILE.md](MOBILE.md)) |
 | **Detail column** | `packages/ui/src/components/layout/app/detail-column.tsx`, `phone-detail.tsx`, `packages/ui/src/hooks/use-detail-history.ts`, `use-focus-in-detail.ts` | `DetailColumn`, `PhoneDetail`, `useDetailHistory` and `useFocusInDetail`: one opened thing at the right under the spanning bar, named by the URL, full screen on a phone, with the keymaps standing down while it has the focus ([LAYOUT.md](LAYOUT.md#a-detail-column-opens-at-the-right-under-the-bar-that-spans-the-screen)) |
 | **Tiles and opened items** | `.eigen-block` in `packages/ui/src/styles/globals.css`, `packages/ui/src/components/layout/app/detail-item.tsx` | One square, flat shape for every tile and block, and `DetailItemBlock`, `DetailMeta` and `DetailSection` for an opened card, comment or event ([LAYOUT.md](LAYOUT.md#an-item-is-one-square-block-and-an-opened-item-reads-block-meta-sections)) |
-| **Routing** | `apps/[name]/src/routes/` | TanStack Router, file-based; `_auth.tsx` guards |
+| **Routing** | `apps/[name]/src/routes/` | TanStack Router, file-based; `_auth.tsx` guards, and a page a public link opens sits outside `_auth` behind `guardLinkRoute` ([LAYOUT.md](LAYOUT.md)) |
 | **Command palette** | `packages/lib/src/core/command-palette/` | The ⌘K dialog ([COMMAND-PALETTE.md](COMMAND-PALETTE.md)) |
 | **In-document search** | `packages/lib/src/doc-search/`, `packages/ui/src/components/search/` | The ⌘F find bar of every eigendoc editor ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md)) |
 | **Search** | `apps/api/src/lib/mount/search-index.ts`, `packages/lib/src/core/search/` | Full-text indexes of mail and drive ([SEARCH.md](SEARCH.md)) |
@@ -194,7 +195,7 @@ Two names mislead: `download` is a leaf subpath but needs `document`, so it is f
 These caused bugs in more than one domain. `scripts/check-standards.ts` gates the MIME strings, `:ownerId` and hover without touch ([CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates)).
 
 - **Query keys include `ownerId`** for owner-scoped data ([CODE-STANDARDS.md § Key Patterns](CODE-STANDARDS.md#key-patterns)).
-- **Every route-callable `Drive` method has a `SharedDrive` wrapper** with its permission check (`requireRead`, `requireWrite` or `requireDriveOwner`) ([§ Drive Architecture](#drive-architecture)).
+- **Every route-callable `Drive` method has a `SharedDrive` wrapper** with its permission check (`requireRead`, `requireWrite` or `requireDriveOwner`), and one a `linkAuth` route calls also has a `LinkDrive` read that runs the link rule ([§ Drive Architecture](#drive-architecture)).
 - **MIME strings come from the constants** ([§ Eigen file types](#eigen-file-types), gated).
 - **`validateSearch` in a shared route extracts every URL param the route uses**: a missing one, such as `uid`, silently breaks the shared item's detail pane.
 - **Never mutate the TanStack Query cache in place**: use `setQueryData()` or `invalidateQueries()`.

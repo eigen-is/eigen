@@ -1,7 +1,8 @@
 // The Drive HTTP routes that read or rewrite what is inside a file, such as its previews and thumbnail,
 // an export to another format, a conversion into an Eigen document and an import into an open document.
-// Each resolves the file through getSharedDrive, which checks the access. The long jobs among them switch
-// off the server's idle timeout, because they send nothing while they wait and run.
+// Each resolves the file through getSharedDrive, which checks the access, and a few reads also answer a visitor
+// without a login. The long jobs among them switch off the server's idle timeout, because they send nothing while
+// they wait and run.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DocumentImportOptions, DriveImportSource, ImportResult } from '@workspace/lib/types/drive-convert';
@@ -16,10 +17,10 @@ import {
     answerPreview,
     contentDisposition,
     readBoundedBodyBytes,
-    scriptableInlineHeaders,
+    servedFileHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
-import { getSharedDrive, readImportSourceBytes } from '../lib/drive';
+import { getReadDrive, getReaderAccess, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -78,9 +79,12 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const { priority } = await drive.readerAccess(params.mountId, params.pathId, user);
             // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or stop
             // its Worker.
-            const result = await drive.withHomeHeld(() => exportDocument(mount, path, params.format, request.signal));
+            const result = await drive.withHomeHeld(() =>
+                exportDocument(mount, path, params.format, priority, request.signal),
+            );
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             set.headers['Content-Security-Policy'] = EXPORT_CSP;
@@ -116,9 +120,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
+            const { canWrite, priority } = await drive.readerAccess(params.mountId, params.pathId, user);
+            if (!canWrite) throw new ApiError(403, 'No write permission');
             return await drive.withHomeHeld(async () => {
                 const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
@@ -130,6 +133,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                     Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                     query,
                     user,
+                    priority,
                     request.signal,
                 );
                 return { success: true, summary };
@@ -145,9 +149,8 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
-                throw new ApiError(403, 'No write permission');
-            }
+            const { canWrite, priority } = await drive.readerAccess(params.mountId, params.pathId, user);
+            if (!canWrite) throw new ApiError(403, 'No write permission');
             return await drive.withHomeHeld(async () => {
                 const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
                 // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
@@ -162,6 +165,7 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
                     Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                     { mode: body.mode, afterFrameId: body.afterFrameId },
                     user,
+                    priority,
                     request.signal,
                 );
                 return { success: true, summary };
@@ -175,16 +179,16 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, request, user }): Promise<Response> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return serveFile(mount, path, 'inline', request.headers.get('range'), request.headers.get('if-none-match'));
         },
-        { auth: true },
+        { linkAuth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/preview',
         async ({ params, user, set }): Promise<Buffer | undefined> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
             const result = await getScreenPreview(mount, path, embedUrl);
@@ -195,68 +199,92 @@ export const driveContentRouter = new Elysia({ name: 'drive-content' })
             }
             setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = result.contentType;
-            // An SVG preview is the user's own bytes, shown inline on the API origin. So a payload that can
-            // run script gets the same sandbox CSP as /embed.
-            Object.assign(set.headers, scriptableInlineHeaders(result.contentType));
+            // An SVG preview is the user's own bytes, so it goes out as /embed would serve it.
+            Object.assign(set.headers, servedFileHeaders(result.contentType, 'inline'));
             return result.data;
         },
-        { auth: true },
+        { linkAuth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return answerPreview(request, set, path, TEXT_FORMAT, () => getTextPreview(mount, path));
+            return answerPreview(request, set, path, TEXT_FORMAT, () =>
+                getTextPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
+            );
         },
         // updatedAt only makes the URL new. The browser cache and the query key both go by the URL, so
         // an old URL would serve old content after an inline edit.
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // A .vcf answers with its contact cards instead of a body, and the preview draws them.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, request, user, set }): Promise<VCardPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, VCARD_FORMAT, () => getVCardPreview(mount, path));
+            return answerPreview(request, set, path, VCARD_FORMAT, () =>
+                getVCardPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
+            );
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // An .eml answers with the message it holds: its headers, its sanitized body and its parts.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
         async ({ params, request, user, set }): Promise<EmlPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, EML_FORMAT, () => getEmlPreview(mount, path));
+            return answerPreview(request, set, path, EML_FORMAT, () =>
+                getEmlPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
+            );
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // An .ics answers with the events it holds, and the preview draws them as cards.
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
         async ({ params, request, user, set }): Promise<IcsPreview | ElysiaCustomStatusResponse<304>> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
-            return answerPreview(request, set, path, ICS_FORMAT, () => getIcsPreview(mount, path));
+            return answerPreview(request, set, path, ICS_FORMAT, () =>
+                getIcsPreview(
+                    mount,
+                    path,
+                    async () => (await getReaderAccess(params.ownerId, params.mountId, params.pathId, user)).priority,
+                ),
+            );
         },
-        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
+        { linkAuth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     .get(
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }): Promise<BunFile> => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            const drive = await getReadDrive(params.ownerId, user);
             const pathId = params.fileName.split('.')[0];
             const { mount } = await drive.resolveFile(params.mountId, pathId);
             const file = await getThumbnail(mount.thumbsDir, pathId);
             if (!file) throw new ApiError(404, 'No thumbnail available');
             setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = 'image/webp';
+            Object.assign(set.headers, servedFileHeaders('image/webp', 'inline'));
             return file;
         },
-        { auth: true },
+        { linkAuth: true },
     );

@@ -24,7 +24,8 @@ type DetailColumnProps = {
     // Back from an item to the list it was opened from inside the column.
     onBack?: () => void;
     actions?: ReactNode;
-    onClose: () => void;
+    // Left out where there is nothing to close back to, such as a visitor's lone file: no X, back or Esc.
+    onClose?: () => void;
     // The body fills the column and scrolls itself, such as a comment thread over its pinned composer.
     fill?: boolean;
     children: ReactNode;
@@ -37,13 +38,15 @@ export function DetailColumn({ width, title, onBack, actions, onClose, fill, chi
 
     // On the window, so every document listener hears the key first and one that uses it calls preventDefault.
     useEffect(() => {
-        if (dialogOpen || menuOpen) return;
+        if (!onClose || dialogOpen || menuOpen) return;
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && !e.defaultPrevented && !isTypingTarget()) onClose();
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [dialogOpen, menuOpen, onClose]);
+
+    const back = onBack ?? (isMobile ? onClose : undefined);
 
     // Column gets no onBack: its own phone back would be a second "‹" beside this one.
     return (
@@ -57,14 +60,14 @@ export function DetailColumn({ width, title, onBack, actions, onClose, fill, chi
                 )}
                 toolbar={
                     <>
-                        {onBack || isMobile ? (
-                            <BackButton onClick={onBack ?? onClose} label={title} />
+                        {back ? (
+                            <BackButton onClick={back} label={title} />
                         ) : (
                             title && <ToolbarTitle>{title}</ToolbarTitle>
                         )}
                         <div className="flex flex-1 items-center justify-end gap-1">
                             {actions}
-                            {!isMobile && (
+                            {!isMobile && onClose && (
                                 <TooltipButton icon={X} tooltipText="Close" className="ml-2" onClick={onClose} />
                             )}
                         </div>

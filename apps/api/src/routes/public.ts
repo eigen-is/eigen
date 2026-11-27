@@ -3,12 +3,12 @@
 // unauthenticated: do not add `auth: true` or `.use(betterAuth)`.
 
 import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
-import type { PublicUser } from '@workspace/lib/types/public';
+import type { PublicConfig, PublicUser } from '@workspace/lib/types/public';
 import { MAX_EMAIL_LENGTH, MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { isDemo, isMailAppEnabled } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
-import { getServerSettings } from '../lib/config/server-settings';
+import { arePublicLinksEnabled, getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo } from '../lib/space/public';
@@ -81,7 +81,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             }),
         },
     )
-    .get('/p/config', async () => {
+    .get('/p/config', async (): Promise<PublicConfig> => {
         const config = getPublicConfig();
         const settings = getServerSettings();
         return {
@@ -91,5 +91,6 @@ export const publicRouter = new Elysia({ name: 'public' })
             showInstall: settings.landing.showInstall,
             demoMode: isDemo(),
             mailEnabled: isMailAppEnabled(),
+            publicLinks: arePublicLinksEnabled(),
         };
     });

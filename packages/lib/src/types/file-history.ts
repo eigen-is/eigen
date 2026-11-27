@@ -12,7 +12,6 @@ export type FileEventDetailsMap = {
     uploaded: { size: number };
     renamed: { oldName: string; newName: string };
     moved: { oldParentId: string; newParentId: string };
-    copied: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string };
     'acl-changed': { added: string[]; removed: string[] };
     'version-restored': { versionName: string };
     // A row may lack chatName, and then its link opens the document.
@@ -33,6 +32,7 @@ export type FileEventType =
     | 'restored'
     | 'deleted'
     | 'versions-deleted'
+    | 'copied'
     | keyof FileEventDetailsMap;
 
 // More than the two lines an activity row shows, so a clip is never visible. The route caps a posted detail at it.

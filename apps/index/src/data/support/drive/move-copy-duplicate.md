@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-11-25
+updated: 2026-11-27
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -44,6 +44,8 @@ If some of the items fail, a message says how many and why, and the **Copy to** 
 
 Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to. A single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked, and nothing in the Trash. If someone added their own files to the folder while it copied, the folder goes to the Trash instead, so those files can be restored. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents. The copy starts its own version history and does not get the original's. The copy leaves out the images and comments you deleted from the original, which only its earlier versions could bring back. The same goes for **Duplicate**.
 
+You can't copy a document, spreadsheet, presentation, board, drawing or chat that you can only view because its sharing is set to **Anyone with the link** or **Anyone signed in with the link**, and you can't copy a folder that holds one. Eigen refuses the copy, because it would carry the original's whole edit history, deleted text included. You can still open it, download it, and copy the other files there. To make a copy, ask the owner to add you by name.
+
 ## Duplicate a file in place
 
 To make a second copy next to the original, right-click it and choose **Duplicate**. The new item appears in the same folder, named **Copy of** followed by the original name. Eigen shows no message when it is done.
@@ -57,6 +59,8 @@ With a document, spreadsheet, presentation, board, or drawing open, choose **Fil
 Select more than one item first. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add items one at a time. Right-click the selection and the menu counts them for you: **Move 3 items to…**, **Copy 3 items to…**, **Duplicate 3 items**, or **Mail 3 items to…**.
 
 **Move to…** isn't offered in a list of files from several folders, such as a type filter. **Copy to…** and **Duplicate** are.
+
+Moving needs edit access given to you by name: the item is yours or your team's, or someone added you or your team as an **Editor** of it or of a folder it's in. In a folder you can edit only through **Anyone signed in with the link**, **Move to…** isn't offered. You can still rename, copy, and duplicate there.
 
 ## What happens to sharing
 

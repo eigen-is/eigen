@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { promises as fsPromises, mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import * as nodeFs from 'node:fs';
+import { promises as fsPromises, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -11,7 +12,9 @@ import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
 import sharp from 'sharp';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
+import type { TransformPriority } from '../../lib/document/transform/runner';
 import { documentTransformRunner } from '../../lib/document/transform/runner';
+import { SharedDrive } from '../../lib/drive/shared-drive';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
@@ -33,7 +36,20 @@ import {
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { createTestMountConfig, overwriteFile, seedFile } from '../mount-test-helpers';
-import { authedRequest, driveGet, drivePost, driveUpload, eventually, getTestContext, TEST_PNG_BYTES } from '../setup';
+import {
+    app,
+    authedRequest,
+    createTestGuest,
+    driveGet,
+    drivePost,
+    driveUpload,
+    eventually,
+    getTestContext,
+    TEST_PNG_BYTES,
+} from '../setup';
+
+// The cache's own tests read as a member's request: a miss runs in the foreground.
+const foreground = async (): Promise<TransformPriority> => 'foreground';
 
 describe('Preview', () => {
     let token: string;
@@ -119,6 +135,7 @@ describe('Preview', () => {
         expect(res.headers.get('content-type')).toBe('image/webp');
         // Rasterised previews carry no sandbox CSP — it exists only for the scriptable SVG case.
         expect(res.headers.get('content-security-policy')).toBeNull();
+        expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     });
 
     test('svg preview is served as-is under a sandbox CSP', async () => {
@@ -236,6 +253,253 @@ describe('Preview', () => {
         expect(thumbRes.status).toBe(200);
         expect(thumbRes.headers.get('content-type')).toBe('image/webp');
     });
+
+    test("an empty document's text preview runs the transform once for two requests", async () => {
+        const doc = await drivePost(token, ownerId, mountId, `folder/${rootId}/create/doc`, { fileName: 'Empty' });
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (let i = 0; i < 2; i++) {
+                const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${doc.id}/text-preview`);
+                expect(res.status).toBe(404);
+            }
+            expect(run).toHaveBeenCalledTimes(1);
+        } finally {
+            run.mockRestore();
+        }
+    });
+});
+
+// A miss of someone who reads only through the link waits behind every member's job, signed in or not, so a burst of
+// link views can't take the queue from the people the files are shared with.
+describe("a visitor's preview miss", () => {
+    const VCARD = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n';
+    const EML = 'From: ada@example.com\r\nTo: bob@example.com\r\nSubject: Hello\r\n\r\nA body.\r\n';
+    const ICS =
+        'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:1@test\r\nDTSTAMP:20260105T100000Z\r\n' +
+        'DTSTART:20260105T100000Z\r\nDTEND:20260105T110000Z\r\nSUMMARY:Standup\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n';
+    const PREVIEWED = [
+        { route: 'text-preview', name: 'doc' },
+        { route: 'vcard-preview', name: 'card.vcf', type: 'text/vcard', body: VCARD },
+        { route: 'eml-preview', name: 'mail.eml', type: 'message/rfc822', body: EML },
+        { route: 'ics-preview', name: 'cal.ics', type: 'text/calendar', body: ICS },
+    ];
+
+    let token: string;
+    let ownerId: string;
+    const mountId = 'default';
+    let folderId: string;
+    // A guest and a signed-in non-member read the folder only through its link, and a member reads it by name.
+    let guestToken: string;
+    let strangerToken: string;
+    let memberToken: string;
+
+    function visit(path: string): Promise<Response> {
+        return app.handle(new Request(`http://localhost${path}`));
+    }
+
+    function previewUrl(route: string, pathId: string): string {
+        return `/drive/${ownerId}/${mountId}/file/${pathId}/${route}`;
+    }
+
+    async function seed(entry: (typeof PREVIEWED)[number]): Promise<DrivePath> {
+        const name = `${crypto.randomUUID()}-${entry.name}`;
+        if (!entry.type) return drivePost(token, ownerId, mountId, `folder/${folderId}/create/doc`, { fileName: name });
+        return driveUpload(token, ownerId, mountId, folderId, new File([entry.body], name, { type: entry.type }));
+    }
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+        folderId = (await drivePost(token, ownerId, mountId, `folder/${root.id}`, { folderName: 'Visitor Folder' })).id;
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/path/${folderId}/acl`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                visibility: 'link',
+                add: [{ id: ctx.charlie.user.email, read: true, write: false }],
+            }),
+        });
+        expect(res.status).toBe(200);
+        guestToken = (await createTestGuest('Link Guest')).sessionToken;
+        strangerToken = ctx.bob.user.sessionToken;
+        memberToken = ctx.charlie.user.sessionToken;
+    });
+
+    // Each request's own calls are read, since a document's search reindex enqueues background jobs of its own.
+    for (const entry of PREVIEWED) {
+        test(`${entry.route} runs a visitor's miss in the background and a member's in the foreground`, async () => {
+            const [forVisitor, forMember] = [await seed(entry), await seed(entry)];
+            const run = spyOn(documentTransformRunner, 'run');
+            const priorities = () => run.mock.calls.splice(0).map(([, opts]) => opts.priority);
+            try {
+                await visit(previewUrl(entry.route, forVisitor.id));
+                const visitor = priorities();
+                expect(visitor.length).toBeGreaterThan(0);
+                expect(visitor.every((priority) => priority === 'background')).toBe(true);
+                await authedRequest(token, previewUrl(entry.route, forMember.id));
+                expect(priorities()).toContain('foreground');
+            } finally {
+                run.mockRestore();
+            }
+        });
+    }
+
+    test("a member's preview is served while visitors' misses fill the queue", async () => {
+        const docs: DrivePath[] = [];
+        for (let i = 0; i < 12; i++) docs.push(await seed(PREVIEWED[0]));
+        const card = await seed(PREVIEWED[1]);
+        const run = spyOn(documentTransformRunner, 'run');
+        let refused = 0;
+        try {
+            const visitors = docs.map(async (doc) => {
+                const res = await visit(previewUrl('text-preview', doc.id));
+                if (res.status === 503) refused += 1;
+            });
+            // Every visitor is queued or refused: one job runs and eight wait, past the wait a foreground job admits under.
+            await eventually(async () => (run.mock.calls.length + refused >= docs.length ? true : undefined));
+            const member = await authedRequest(token, previewUrl('vcard-preview', card.id));
+            expect(member.status).toBe(200);
+            await Promise.all(visitors);
+        } finally {
+            run.mockRestore();
+        }
+        // Nine transform children run one after another.
+    }, 30_000);
+
+    test("a member's miss on the file a visitor's miss is building starts its own build", async () => {
+        const card = await seed(PREVIEWED[1]);
+        const real = documentTransformRunner.run.bind(documentTransformRunner);
+        const gate = Promise.withResolvers<void>();
+        const started: TransformPriority[] = [];
+        const run = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            started.push(opts.priority);
+            if (opts.priority === 'background') await gate.promise;
+            return real(request, opts);
+        });
+        try {
+            const visitor = visit(previewUrl('vcard-preview', card.id));
+            await eventually(async () => (started.includes('background') ? true : undefined));
+            const member = authedRequest(memberToken, previewUrl('vcard-preview', card.id));
+            const answered = await Promise.race([member.then(() => 'answered'), Bun.sleep(3000).then(() => 'waited')]);
+            expect(answered).toBe('answered');
+            expect((await member).status).toBe(200);
+            gate.resolve();
+            expect((await visitor).status).toBe(200);
+        } finally {
+            gate.resolve();
+            run.mockRestore();
+        }
+    }, 30_000);
+    for (const entry of PREVIEWED) {
+        test(`${entry.route} runs a miss in the background for whoever reads only through the link`, async () => {
+            const readers = [
+                ['a guest', guestToken, 'background'],
+                ['a non-member', strangerToken, 'background'],
+                ['a member', memberToken, 'foreground'],
+                ['the owner', token, 'foreground'],
+            ] as const;
+            const files = await Promise.all(readers.map(() => seed(entry)));
+            const run = spyOn(documentTransformRunner, 'run');
+            const priorities = () => run.mock.calls.splice(0).map(([, opts]) => opts.priority);
+            try {
+                for (const [i, [who, reader, expected]] of readers.entries()) {
+                    await authedRequest(reader, previewUrl(entry.route, files[i].id));
+                    const seen = priorities();
+                    expect([who, seen.length > 0]).toEqual([who, true]);
+                    if (expected === 'background') expect([who, seen.includes('foreground')]).toEqual([who, false]);
+                    else expect([who, seen.includes('foreground')]).toEqual([who, true]);
+                }
+            } finally {
+                run.mockRestore();
+            }
+        });
+    }
+
+    test("a member's preview is served while a signed-in guest's misses fill the queue", async () => {
+        const docs: DrivePath[] = [];
+        for (let i = 0; i < 20; i++) docs.push(await seed(PREVIEWED[0]));
+        const card = await seed(PREVIEWED[1]);
+        const run = spyOn(documentTransformRunner, 'run');
+        let refused = 0;
+        try {
+            const guests = docs.map(async (doc) => {
+                const res = await authedRequest(guestToken, previewUrl('text-preview', doc.id));
+                if (res.status === 503) refused += 1;
+            });
+            await eventually(async () => (run.mock.calls.length + refused >= docs.length ? true : undefined));
+            const members = await Promise.all(
+                Array.from({ length: 5 }, () => authedRequest(memberToken, previewUrl('vcard-preview', card.id))),
+            );
+            expect(members.map((res) => res.status)).toEqual([200, 200, 200, 200, 200]);
+            await Promise.all(guests);
+        } finally {
+            run.mockRestore();
+        }
+    }, 60_000);
+
+    // The priority reads the file's ancestors and the reader's teams, which a cached answer never needs.
+    for (const entry of PREVIEWED) {
+        test(`${entry.route} decides no priority for a cached answer`, async () => {
+            const file = await seed(entry);
+            await authedRequest(memberToken, previewUrl(entry.route, file.id));
+            const breadCrumb = spyOn(SharedDrive.prototype, 'breadCrumb');
+            try {
+                const res = await authedRequest(memberToken, previewUrl(entry.route, file.id));
+                expect(res.status).toBe(entry.type ? 200 : 404);
+                expect(breadCrumb).not.toHaveBeenCalled();
+            } finally {
+                breadCrumb.mockRestore();
+            }
+        });
+    }
+
+    test('an export runs in the background for whoever reads only through the link', async () => {
+        const readers = [
+            ['a guest', guestToken, 'background'],
+            ['a member', memberToken, 'foreground'],
+            ['the owner', token, 'foreground'],
+        ] as const;
+        const docs = await Promise.all(readers.map(() => seed(PREVIEWED[0])));
+        const run = spyOn(documentTransformRunner, 'run');
+        try {
+            for (const [i, [who, reader, expected]] of readers.entries()) {
+                const res = await authedRequest(reader, previewUrl('export/html', docs[i].id));
+                expect([who, res.status]).toEqual([who, 200]);
+                const exports = run.mock.calls.splice(0).filter(([request]) => request.kind === 'export');
+                expect([who, exports.map(([, opts]) => opts.priority)]).toEqual([who, [expected]]);
+            }
+        } finally {
+            run.mockRestore();
+        }
+    }, 30_000);
+
+    test("a member's export and preview are served while a signed-in guest's exports fill the queue", async () => {
+        const docs: DrivePath[] = [];
+        for (let i = 0; i < 12; i++) docs.push(await seed(PREVIEWED[0]));
+        const [memberDoc, memberPreview] = [await seed(PREVIEWED[0]), await seed(PREVIEWED[0])];
+        const run = spyOn(documentTransformRunner, 'run');
+        let refused = 0;
+        try {
+            const guests = docs.map(async (doc) => {
+                const res = await authedRequest(guestToken, previewUrl('export/html', doc.id));
+                if (res.status === 503) refused += 1;
+            });
+            await eventually(async () => (run.mock.calls.length + refused >= docs.length ? true : undefined));
+            const members = await Promise.all([
+                ...Array.from({ length: 3 }, () => authedRequest(memberToken, previewUrl('export/html', memberDoc.id))),
+                ...Array.from({ length: 2 }, () =>
+                    authedRequest(memberToken, previewUrl('text-preview', memberPreview.id)),
+                ),
+            ]);
+            // An empty document has no text preview, so its answer is a 404 rather than the queue's 503.
+            expect(members.map((res) => res.status)).toEqual([200, 200, 200, 404, 404]);
+            await Promise.all(guests);
+        } finally {
+            run.mockRestore();
+        }
+    }, 60_000);
 });
 
 describe('generateImagePreview', () => {
@@ -409,25 +673,75 @@ describe('isExiftoolCandidate', () => {
     });
 });
 
-// Each write leaves one version of a path behind, whatever its kind, and never touches another path's.
+// Each write leaves one version of each kind of a path behind, and never touches another path's. The kind is the
+// extension, so a format bump within a kind prunes the earlier format.
 describe('a written preview', () => {
-    test('prunes the older versions of its path and keeps other paths', async () => {
+    test("prunes the older versions of its kind and keeps its path's other kinds and other paths", async () => {
         const bytes = Buffer.from('current');
         const { mount, path } = await previewMount('prune-old-versions', 'notes.txt', 'text/plain', bytes);
         const other = `00000000-0000-0000-0000-000000000000-100.${TEXT_FORMAT}.json`;
-        writeFileSync(join(mount.previewsDir, `${path.id}-100.screen.webp`), 'x');
-        writeFileSync(join(mount.previewsDir, `${path.id}-100.${VCARD_FORMAT}.json`), '{}');
-        writeFileSync(join(mount.previewsDir, other), '{}');
+        const screen = `${path.id}-100.screen.webp`;
+        const state = `${path.id}-epoch.0.1.state-f1.yjs`;
+        const olderFormat = `${path.id}-100.f1.json`;
+        for (const name of [screen, state, other]) writeFileSync(join(mount.previewsDir, name), 'x');
+        for (const name of [olderFormat, `${olderFormat}.failed`, `${path.id}-100.${VCARD_FORMAT}.json`]) {
+            writeFileSync(join(mount.previewsDir, name), '{}');
+        }
 
-        expect((await getTextPreview(mount, path))?.value.body).toContain('current');
+        expect((await getTextPreview(mount, path, foreground))?.value.body).toContain('current');
         const kept = await eventually(async () => {
             const ofPath = readdirSync(mount.previewsDir).filter((name) => name.startsWith(`${path.id}-`));
-            return ofPath.length === 1 ? ofPath : undefined;
+            return ofPath.length === 3 ? ofPath.sort() : undefined;
         }, 'the prune of older versions');
-        expect(kept).toEqual([`${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`]);
+        expect(kept).toEqual([state, screen, `${path.id}-${path.updatedAt.getTime()}.${TEXT_FORMAT}.json`].sort());
         expect(readdirSync(mount.previewsDir)).toContain(other);
     });
+
+    // A copy cached before the inliner changed what it may take in holds what it took then, under the same stamp.
+    test('an svg screen preview cached under the untagged name is not served, and the new one prunes it', async () => {
+        const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>');
+        const { mount, path } = await previewMount('svg-untagged-name', 'drawing.svg', 'image/svg+xml', svg);
+        const untagged = `${path.id}-${path.updatedAt.getTime()}.screen.svg`;
+        writeFileSync(join(mount.previewsDir, untagged), '<svg>a neighbour inlined by the old renderer</svg>');
+
+        const served = await getScreenPreview(mount, path, '');
+        if (served?.type !== 'image') throw new Error('no svg screen preview');
+        expect(served.data.toString()).toBe(svg.toString());
+        await eventually(
+            async () => (readdirSync(mount.previewsDir).includes(untagged) ? undefined : true),
+            'the prune of the untagged copy',
+        );
+    });
+
+    // Another version's write prunes this one's file at any moment, such as between a look at the file and its read.
+    test('a screen preview whose file goes as it is read is made again', async () => {
+        const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect width="2" height="2"/></svg>');
+        const { mount, path } = await previewMount('svg-pruned-at-read', 'drawing.svg', 'image/svg+xml', svg);
+        expect((await getScreenPreview(mount, path, ''))?.type).toBe('image');
+        const cached = readdirSync(mount.previewsDir).find((name) => name.endsWith('.svg'));
+        if (!cached) throw new Error('no cached svg');
+        const reads = spyOn(mount, 'readBytes');
+        const open = pruneAtOpen(join(mount.previewsDir, cached));
+        try {
+            const served = await getScreenPreview(mount, path, '');
+            if (served?.type !== 'image') throw new Error('no svg screen preview');
+            expect(served.data.toString()).toBe(svg.toString());
+            expect(reads).toHaveBeenCalledTimes(1);
+        } finally {
+            open.mockRestore();
+            reads.mockRestore();
+        }
+    });
 });
+
+// The cache file is removed just before it is opened, as a prune running beside the request would.
+function pruneAtOpen(cacheFile: string) {
+    const createReadStream = nodeFs.createReadStream;
+    return spyOn(nodeFs, 'createReadStream').mockImplementation((file, options) => {
+        if (file === cacheFile) rmSync(cacheFile, { force: true });
+        return createReadStream(file, options);
+    });
+}
 
 function createGetLocalDatabase(baseDir: string) {
     return async <S extends SchemaType>(
@@ -458,7 +772,7 @@ async function previewMount(name: string, fileName: string, mimeType: string, by
 // A background regeneration lands a moment after the stale answer, so the current version is polled for.
 function regeneratedTextPreview(mount: Mount, drivePath: DrivePath) {
     return eventually(async () => {
-        const served = await getTextPreview(mount, drivePath);
+        const served = await getTextPreview(mount, drivePath, foreground);
         return served?.stale === false ? served : undefined;
     }, 'the regenerated text preview');
 }
@@ -479,7 +793,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const path = await mount.getActivePath(fileId);
 
         // Nothing cached yet — the first request generates the current version synchronously.
-        const first = await getTextPreview(mount, { ...path, updatedAt: new Date(1000) });
+        const first = await getTextPreview(mount, { ...path, updatedAt: new Date(1000) }, foreground);
         expect(first?.stale).toBe(false);
         expect(first?.value.body).toContain('version one');
 
@@ -490,7 +804,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         // The request serves the prior version immediately (the route marks it no-store) and kicks
         // off a single background regeneration of the current one.
-        const stale = await getTextPreview(mount, edited);
+        const stale = await getTextPreview(mount, edited, foreground);
         expect(stale?.stale).toBe(true);
         expect(stale?.value.body).toContain('version one');
 
@@ -521,7 +835,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
             JSON.stringify({ mode: 'text', body: 'a body of the previous shape' }),
         );
 
-        const served = await getTextPreview(mount, { ...path, updatedAt: new Date(2000) });
+        const served = await getTextPreview(mount, { ...path, updatedAt: new Date(2000) }, foreground);
         expect(served?.stale).toBe(false);
         expect(served?.value.body).toContain('current content');
     });
@@ -542,7 +856,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 
         // The row's size decides, so the decode and the highlighter are spared the read as well.
         const readFile = spyOn(mount, 'readFile');
-        expect(await getTextPreview(mount, path)).toBeNull();
+        expect(await getTextPreview(mount, path, foreground)).toBeNull();
         expect(readFile).not.toHaveBeenCalled();
         readFile.mockRestore();
     });
@@ -564,7 +878,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const fileId = await seedFile(mount, rootId, 'deck.txt', 'text/plain', bytes.length, bytes);
         const path = await mount.getActivePath(fileId);
 
-        const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES });
+        const served = await getTextPreview(mount, { ...path, mimeType: DRIVE_MIME_SLIDES }, foreground);
         expect(served?.value.body).toContain('plain text pretending to be a deck');
         // And it is labelled as what it is: the deck mode would draw this body inside a slide frame.
         expect(served?.value.mode).toBe('plaintext');
@@ -594,12 +908,15 @@ describe('one generation per preview', () => {
         const { mount, path } = await previewMount('one-text-generation', 'notes.txt', 'text/plain', bytes);
         const readBytes = spyOn(mount, 'readBytes');
         try {
-            const [a, b] = await Promise.all([getTextPreview(mount, path), getTextPreview(mount, path)]);
+            const [a, b] = await Promise.all([
+                getTextPreview(mount, path, foreground),
+                getTextPreview(mount, path, foreground),
+            ]);
             expect(a?.value.body).toContain('shared body');
             expect(b?.value.body).toContain('shared body');
             expect(readBytes).toHaveBeenCalledTimes(1);
 
-            const cached = await getTextPreview(mount, path);
+            const cached = await getTextPreview(mount, path, foreground);
             expect(cached?.stale).toBe(false);
             expect(readBytes).toHaveBeenCalledTimes(1);
         } finally {
@@ -621,8 +938,8 @@ describe('one generation per preview', () => {
             return realReaddir(dir);
         }) as typeof fsPromises.readdir);
         try {
-            const first = getTextPreview(mount, path);
-            const second = getTextPreview(mount, path);
+            const first = getTextPreview(mount, path, foreground);
+            const second = getTextPreview(mount, path, foreground);
             expect((await first)?.value.body).toContain('late body');
             releaseSecond();
             expect((await second)?.value.body).toContain('late body');
@@ -636,7 +953,7 @@ describe('one generation per preview', () => {
     test('a stale body is served at once while it regenerates', async () => {
         const bytes = Buffer.from('version one');
         const { mount, path } = await previewMount('one-stale-regeneration', 'notes.txt', 'text/plain', bytes);
-        await getTextPreview(mount, { ...path, updatedAt: new Date(1000) });
+        await getTextPreview(mount, { ...path, updatedAt: new Date(1000) }, foreground);
         await overwriteFile(mount, path.id, Buffer.from('version two'));
         const edited = { ...path, updatedAt: new Date(2000) };
 
@@ -649,7 +966,10 @@ describe('one generation per preview', () => {
             return realReadBytes(pathId, limit);
         });
         try {
-            const served = await Promise.all([getTextPreview(mount, edited), getTextPreview(mount, edited)]);
+            const served = await Promise.all([
+                getTextPreview(mount, edited, foreground),
+                getTextPreview(mount, edited, foreground),
+            ]);
             for (const stale of served) {
                 expect(stale?.stale).toBe(true);
                 expect(stale?.value.body).toContain('version one');
@@ -701,11 +1021,11 @@ describe('a failed preview', () => {
             const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
             try {
                 const v1 = { ...path, updatedAt: new Date(1000) };
-                expect(await getVCardPreview(mount, v1)).toBeNull();
-                expect(await getVCardPreview(mount, v1)).toBeNull();
+                expect(await getVCardPreview(mount, v1, foreground)).toBeNull();
+                expect(await getVCardPreview(mount, v1, foreground)).toBeNull();
                 expect(run).toHaveBeenCalledTimes(1);
 
-                expect(await getVCardPreview(mount, { ...path, updatedAt: new Date(2000) })).toBeNull();
+                expect(await getVCardPreview(mount, { ...path, updatedAt: new Date(2000) }, foreground)).toBeNull();
                 expect(run).toHaveBeenCalledTimes(2);
             } finally {
                 errorSpy.mockRestore();
@@ -720,12 +1040,12 @@ describe('a failed preview', () => {
         const run = failRuns('timeout');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(await getVCardPreview(mount, path, foreground)).toBeNull();
             const marker = readdirSync(mount.previewsDir).find((name) => name.endsWith('.failed'));
             if (!marker) throw new Error('no marker');
             const hourAgo = new Date(Date.now() - 61 * 60 * 1000);
             utimesSync(join(mount.previewsDir, marker), hourAgo, hourAgo);
-            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(await getVCardPreview(mount, path, foreground)).toBeNull();
             expect(run).toHaveBeenCalledTimes(2);
         } finally {
             errorSpy.mockRestore();
@@ -739,8 +1059,8 @@ describe('a failed preview', () => {
         const run = failRuns('crashed');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            expect(await getVCardPreview(mount, path)).toBeNull();
-            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(await getVCardPreview(mount, path, foreground)).toBeNull();
+            expect(await getVCardPreview(mount, path, foreground)).toBeNull();
             expect(run).toHaveBeenCalledTimes(2);
         } finally {
             errorSpy.mockRestore();
@@ -750,19 +1070,19 @@ describe('a failed preview', () => {
 
     test('a regeneration that timed out keeps serving the older body without running again', async () => {
         const { mount, path } = await vcardMount('failed-preview-stale');
-        const v1 = await getVCardPreview(mount, { ...path, updatedAt: new Date(1000) });
+        const v1 = await getVCardPreview(mount, { ...path, updatedAt: new Date(1000) }, foreground);
         expect(v1?.value.cards[0].contact.firstName).toBe('Jane');
 
         const run = failRuns('timeout');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
             const v2 = { ...path, updatedAt: new Date(2000) };
-            expect((await getVCardPreview(mount, v2))?.stale).toBe(true);
+            expect((await getVCardPreview(mount, v2, foreground))?.stale).toBe(true);
             await eventually(
                 async () => readdirSync(mount.previewsDir).find((name) => name.endsWith('.failed')),
                 'the failure marker',
             );
-            const again = await getVCardPreview(mount, v2);
+            const again = await getVCardPreview(mount, v2, foreground);
             expect(again?.stale).toBe(true);
             expect(again?.value.cards[0].contact.firstName).toBe('Jane');
             // A regeneration that request started would have reached the runner by now.

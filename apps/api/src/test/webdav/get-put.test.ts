@@ -530,6 +530,26 @@ describe('WebDAV GET security headers', () => {
         expect(res.headers.get('Content-Security-Policy')).toBeNull();
     });
 
+    test('a PUT stores the type its name gives, without parameters', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-typed.txt`;
+        const put = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'typed' });
+        expect(put.status).toBe(201);
+        const res = await webdavRequest(ctx.alice.user.email, 'GET', url);
+        expect(res.headers.get('Content-Type')).toBe('text/plain');
+        expect(res.headers.get('Content-Security-Policy')).toBeNull();
+    });
+
+    test('GET of an upload typed text/xsl carries the sandbox CSP', async () => {
+        const file = new File(['<x/>'], 'style.xsl', { type: 'text/xsl' });
+        await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        const res = await webdavRequest(
+            ctx.alice.user.email,
+            'GET',
+            `/webdav/${ctx.alice.user.id}/${mountId}/style.xsl`,
+        );
+        expect(res.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'");
+    });
+
     test('malformed percent-encoding in the URL → 400', async () => {
         const res = await webdavRequest(
             ctx.alice.user.email,

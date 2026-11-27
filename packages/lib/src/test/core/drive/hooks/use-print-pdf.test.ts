@@ -1,6 +1,7 @@
 // File → Print in Docs prints the server's PDF from a tab of its own. A popup blocker allows that tab only inside the
 // click or key press, so it must open before the first await; every way the PDF can't be had falls back to browser
-// print, says what is left out, and leaves no empty tab behind.
+// print, says what is left out, and leaves no empty tab behind. A visitor without a login may not export, so they print
+// in the browser at once.
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { EXPORT_SUMMARY_HEADER } from '../../../../types/drive-convert';
 import { installHappyDom } from '../../../happy-dom';
@@ -9,6 +10,10 @@ installHappyDom();
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
+
+const session: { user: { id: string } | null } = { user: { id: 'owner' } };
+const realAuthContextModule = { ...(await import('../../../../core/auth/auth-context')) };
+mock.module('../../../../core/auth/auth-context', () => ({ ...realAuthContextModule, useAuth: () => session }));
 
 const toasts: string[] = [];
 const realSonnerModule = await import('sonner');
@@ -28,6 +33,7 @@ URL.revokeObjectURL = (url: string) => {
 };
 
 afterAll(() => {
+    mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
     mock.module('sonner', () => realSonnerModule);
     URL.createObjectURL = realCreateObjectURL;
     URL.revokeObjectURL = realRevokeObjectURL;
@@ -74,6 +80,20 @@ async function renderPrint() {
 }
 
 describe('usePrintPdf', () => {
+    test('a visitor prints in the browser, with no tab, no request and no toast', async () => {
+        session.user = null;
+        try {
+            const { latest, unmount } = await renderPrint();
+            await latest.printPdf('owner', 'mount', 'path', true);
+            await unmount();
+            expect(calls).toEqual([]);
+            expect(fallbacks).toBe(1);
+            expect(toasts).toEqual([]);
+        } finally {
+            session.user = { id: 'owner' };
+        }
+    });
+
     test('opens the tab before the request, then shows the PDF in it', async () => {
         let resolve: (response: Response) => void = () => {};
         answer = () =>

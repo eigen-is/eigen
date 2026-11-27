@@ -1,6 +1,7 @@
 // Guest access keeps the page contract, saves only the guest settings it changed, and shows no Save for a switch
 // turned back to what was saved. The days field takes what is typed, an emptied field included, and a number of days
-// outside what the server takes says so under the field and saves nothing.
+// outside what the server takes says so under the field and saves nothing. Allow public links drafts and saves with
+// the rest of the page.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
@@ -12,6 +13,7 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 installHappyDom();
 
 const GUESTS: ServerSettings['guests'] = { openSignup: false, inactivityDays: 7 };
+const SHARING: ServerSettings['sharing'] = { publicLinks: true };
 const saveSettings = mock(async (_patch: DeepPartial<ServerSettings>) => ({}));
 afterEach(() => saveSettings.mockClear());
 
@@ -19,7 +21,7 @@ afterEach(() => saveSettings.mockClear());
 const realSettings = { ...(await import('@workspace/lib/settings')) };
 mock.module('@workspace/lib/settings', () => ({
     ...realSettings,
-    useServerSettings: () => ({ data: { guests: GUESTS }, isLoading: false }),
+    useServerSettings: () => ({ data: { guests: GUESTS, sharing: SHARING }, isLoading: false }),
     useUpdateServerSettings: () => ({ mutateAsync: saveSettings, isPending: false }),
 }));
 afterAll(() => {
@@ -42,7 +44,9 @@ async function openPage() {
 }
 
 const DAYS = 'Days of inactivity before deletion';
-const saveButton = () => [...document.querySelectorAll('button')].find((b) => b.textContent === 'Save');
+const PUBLIC_LINKS = 'Allow public links';
+const footerButton = (label: string) => [...document.querySelectorAll('button')].find((b) => b.textContent === label);
+const saveButton = () => footerButton('Save');
 
 test('Guest access keeps the page contract', async () => {
     await expectFormContract({
@@ -91,4 +95,24 @@ test('the days field can be emptied and retyped, and days outside 1 to 365 are r
     await type(DAYS, '365');
     await act(async () => pressEnter(days));
     expect(saveSettings.mock.calls).toEqual([[{ guests: { inactivityDays: 365 } }]]);
+});
+
+test('Allow public links shows the saved value, saves what changed with the guest settings, and Reset puts it back', async () => {
+    await openPage();
+    const toggle = field(PUBLIC_LINKS);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    expect(document.body.textContent).toContain(
+        'Members can share a file, folder or document with anyone who has its link. No account needed.',
+    );
+
+    await act(async () => toggle.click());
+    expect(field(PUBLIC_LINKS).getAttribute('aria-checked')).toBe('false');
+    await act(async () => footerButton('Reset')?.click());
+    expect(field(PUBLIC_LINKS).getAttribute('aria-checked')).toBe('true');
+    expect(saveButton()).toBeUndefined();
+
+    await act(async () => field(PUBLIC_LINKS).click());
+    await type(DAYS, '30');
+    await act(async () => saveButton()?.click());
+    expect(saveSettings.mock.calls).toEqual([[{ guests: { inactivityDays: 30 }, sharing: { publicLinks: false } }]]);
 });

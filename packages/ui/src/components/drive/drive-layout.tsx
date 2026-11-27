@@ -29,7 +29,8 @@ export type DriveLayoutProps = {
     onRowSelect: (path: DrivePath) => void;
     onRowActivate: (path: DrivePath) => void;
     onOpenSharedWithMe?: () => void;
-    onClose: () => void;
+    // Left out where there is no list to go back to, such as a visitor's lone file: no close button is drawn.
+    onClose?: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
     capabilities: DriveCapabilities;
     // The toolbar's title where there is no breadcrumb, such as in a filter by type or the watched feed.

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import {
     COLLAB_ACCESS_LOST_CLOSE,
     COLLAB_EPOCH_MESSAGE,
@@ -9,6 +9,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
+import { collabStateVersion } from '../../../../core/collab/collab-state';
 import type { CollabDoc, useCollabDoc as UseCollabDoc } from '../../../../core/collab/hooks/use-collab-doc';
 import { DATA_EPOCHS_KEY } from '../../../../core/home/reload-replaced-home';
 import { installHappyDom } from '../../../happy-dom';
@@ -29,6 +30,14 @@ class FakeProvider {
     public bcChannel: string;
     public disableBc = true;
     public bcConnects = 0;
+    // y-websocket sends the local state on open, and y-protocols' setLocalStateField writes only while it is set.
+    private localState: Record<string, unknown> | null = {};
+    public awareness = {
+        getLocalState: () => this.localState,
+        setLocalState: (state: Record<string, unknown> | null) => {
+            this.localState = state;
+        },
+    };
     public connectBc() {
         this.bcConnects++;
     }
@@ -108,6 +117,8 @@ afterAll(() => {
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { collabKeys } = await import('../../../../core/collab/hooks/keys');
 const { useCollabDoc } = await import('../../../../core/collab/hooks/use-collab-doc');
 type UseCollabDocOptions = Parameters<typeof UseCollabDoc>[0];
 
@@ -116,13 +127,31 @@ function Harness({ options, onRender }: { options: UseCollabDocOptions; onRender
     return null;
 }
 
-function mount(options: UseCollabDocOptions) {
+// The document's info as the editor route has loaded it before the editor mounts. `live` says whether the reader syncs
+// over the socket.
+function mount(options: UseCollabDocOptions, live: boolean | 'unloaded' = true) {
     let latest: CollabDoc | null = null;
     const container = document.createElement('div');
     const root = createRoot(container);
+    const client = new QueryClient();
+    const setLive = (pathId: string, next: boolean) =>
+        client.setQueryData(collabKeys.document(options.ownerId, options.mountId, pathId), {
+            canRead: true,
+            canWrite: next,
+            live: next,
+            path: null,
+            folderContents: null,
+        });
+    if (live !== 'unloaded') for (const pathId of ['doc-1', 'doc-2']) setLive(pathId, live);
     const render = (next: UseCollabDocOptions) =>
         act(() => {
-            root.render(createElement(Harness, { options: next, onRender: (c) => (latest = c) }));
+            root.render(
+                createElement(
+                    QueryClientProvider,
+                    { client },
+                    createElement(Harness, { options: next, onRender: (c) => (latest = c) }),
+                ),
+            );
         });
     render(options);
     return {
@@ -141,6 +170,13 @@ function mount(options: UseCollabDocOptions) {
             return provider;
         },
         rerender: render,
+        client,
+        // TanStack Query tells its observers on a timer.
+        setLive: (next: boolean) =>
+            act(async () => {
+                setLive(options.pathId, next);
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }),
         unmount: () => act(() => root.unmount()),
     };
 }
@@ -495,5 +531,354 @@ describe('useCollabDoc connection state', () => {
         h.unmount();
         active = null;
         expect(h.provider.destroyed).toBe(true);
+    });
+
+    test('a signed-in tab keeps its awareness state, so y-websocket sends its presence', () => {
+        active = mount(OPTIONS);
+        expect(active.provider.awareness.getLocalState()).toEqual({});
+    });
+});
+
+// The state route as the hook's fetch sees it: the stored document as one update under an ETag that moves with every
+// edit and names the home's epoch, a 304 for the ETag a request names, or a refusal.
+function stateServer() {
+    const stored = new Y.Doc();
+    const asked: { url: string; ifNoneMatch: string | null }[] = [];
+    const server = {
+        stored,
+        asked,
+        refuse: 0,
+        refusal: 'No read permission',
+        epoch: 'epoch-1',
+        write: (text: string) => stored.getText('probe').insert(stored.getText('probe').length, text),
+    };
+    const realFetch = globalThis.fetch;
+    const answer = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        const ifNoneMatch = new Headers(init?.headers).get('if-none-match');
+        asked.push({ url: String(input), ifNoneMatch });
+        // Only the state route answers: an info the test did not load stays loading.
+        if (!String(input).endsWith('/state')) return new Promise(() => {});
+        if (server.refuse) return new Response(server.refusal, { status: server.refuse });
+        const etag = `"${collabStateVersion(server.epoch, 0, stored.getText('probe').length, 'state-f1')}"`;
+        if (ifNoneMatch === etag) return new Response(null, { status: 304, headers: { ETag: etag } });
+        return new Response(new Uint8Array(Y.encodeStateAsUpdate(stored)), { headers: { ETag: etag } });
+    };
+    globalThis.fetch = Object.assign(answer, { preconnect: realFetch.preconnect });
+    return Object.assign(server, { restore: () => void (globalThis.fetch = realFetch) });
+}
+
+// TanStack Query refetches a stale query when the tab shows again.
+const focusWindow = () =>
+    act(async () => {
+        window.dispatchEvent(new window.Event('visibilitychange'));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+describe('useCollabDoc for a reader who gets no socket', () => {
+    let server: ReturnType<typeof stateServer>;
+    let active: ReturnType<typeof mount> | null = null;
+
+    beforeEach(() => {
+        FakeProvider.instances = [];
+        server = stateServer();
+    });
+    afterEach(() => {
+        active?.unmount();
+        active = null;
+        server.restore();
+    });
+
+    test('it opens no socket, loads the stored state over HTTP and runs onSync once', async () => {
+        server.write('stored');
+        const syncs: boolean[] = [];
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
+        const h = active;
+        expect(h.state.loaded).toBe(false);
+        await settle();
+
+        expect(FakeProvider.instances).toEqual([]);
+        expect(h.state.provider).toBeNull();
+        expect(server.asked).toEqual([
+            { url: expect.stringMatching(/\/collab\/owner\/mount\/doc-1\/state$/), ifNoneMatch: null },
+        ]);
+        expect(h.doc.getText('probe').toString()).toBe('stored');
+        expect(h.state.loaded).toBe(true);
+        expect(h.state.synced).toBe(true);
+        expect(h.state.offline).toBe(false);
+        expect(syncs).toEqual([true]);
+    });
+
+    test('a focus asks again with the ETag: a newer state updates the held document, an unchanged one does nothing', async () => {
+        server.write('one');
+        const syncs: boolean[] = [];
+        active = mount({ ...OPTIONS, onSync: (_ctx, synced) => syncs.push(synced) }, false);
+        const h = active;
+        await settle();
+        const doc = h.doc;
+
+        server.write(' two');
+        await focusWindow();
+        expect(server.asked.at(-1)?.ifNoneMatch).toBe('"epoch-1.0.3.state-f1"');
+        expect(h.doc).toBe(doc);
+        expect(doc.getText('probe').toString()).toBe('one two');
+
+        let updates = 0;
+        doc.on('update', () => updates++);
+        await focusWindow();
+        expect(server.asked.map((ask) => ask.ifNoneMatch)).toEqual([
+            null,
+            '"epoch-1.0.3.state-f1"',
+            '"epoch-1.0.7.state-f1"',
+        ]);
+        expect(updates).toBe(0);
+        expect(h.state.loaded).toBe(true);
+        expect(syncs).toEqual([true]);
+    });
+
+    test('a 304 keeps the document, and the query holds only the version, never a copy of the body', async () => {
+        server.write('kept');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        await focusWindow();
+        expect(server.asked.at(-1)?.ifNoneMatch).not.toBeNull();
+        expect(h.doc.getText('probe').toString()).toBe('kept');
+        const held = h.client
+            .getQueryCache()
+            .getAll()
+            .map((query) => query.state.data)
+            .filter((data) => data !== undefined);
+        expect(held.some((data) => Object.values(Object(data)).some((value) => value instanceof Uint8Array))).toBe(
+            false,
+        );
+    });
+
+    test("a new epoch reloads the page instead of merging the replaced home's state into the held document", async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        server.write('before the restore');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+
+        server.epoch = 'epoch-2';
+        server.stored.getText('probe').delete(0, server.stored.getText('probe').length);
+        server.write('restored');
+        await focusWindow();
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(h.doc.getText('probe').toString()).toBe('before the restore');
+    });
+
+    test("the reader's own change to the document arms no unsynced-edits guard", async () => {
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        act(() => h.doc.getMap('items').set('local', 1));
+        expect(h.state.unsyncedEdits).toBe(false);
+    });
+
+    test('a 403 on the first fetch reloads the page into the guard', async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        server.refuse = 403;
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(reload).toHaveBeenCalledTimes(1);
+        expect(active.state.loaded).toBe(false);
+    });
+
+    // The 413 of a state the server could not build in its time or memory, which it would not build on a retry either.
+    test("a state too large to build is asked for once and ends in the server's message, with no outage", async () => {
+        server.refuse = 413;
+        server.refusal = 'Document too large to show';
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        expect(active.state.loaded).toBe(false);
+        expect(active.state.storageUnavailable).toBe(false);
+        expect(active.state.loadError).toBe('Document too large to show');
+    });
+
+    test('a 404 with no message of its own ends in the status, asked for once', async () => {
+        server.refuse = 404;
+        server.refusal = '';
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state')).length).toBe(1);
+        expect(active.state.loadError).toBe('Not found (404)');
+    });
+
+    test('a 503 keeps retrying under the outage badge and ends in nothing', async () => {
+        server.refuse = 503;
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(active.state.storageUnavailable).toBe(true);
+        expect(active.state.loadError).toBeNull();
+    });
+
+    test('a link closed while the document is open reloads at the next focus', async () => {
+        const reload = jest.fn();
+        Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+        active = mount(OPTIONS, false);
+        await settle();
+        expect(reload).not.toHaveBeenCalled();
+
+        server.refuse = 403;
+        await focusWindow();
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    test('until the info says who the reader is, there is no doc, no socket and no fetch', async () => {
+        active = mount(OPTIONS, 'unloaded');
+        const h = active;
+        await settle();
+        expect(h.state.doc).toBeNull();
+        expect(FakeProvider.instances).toEqual([]);
+        expect(server.asked.filter((ask) => ask.url.endsWith('/state'))).toEqual([]);
+    });
+
+    test('a reader who becomes live gets a new doc on a socket, and one who stops being live loads over HTTP', async () => {
+        server.write('stored');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        const overHttp = h.doc;
+
+        await h.setLive(true);
+        expect(h.doc).not.toBe(overHttp);
+        expect(h.state.loaded).toBe(false);
+        expect(h.provider.doc).toBe(h.doc);
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+        expect(h.state.loaded).toBe(true);
+
+        const socket = h.provider;
+        await h.setLive(false);
+        await settle();
+        expect(socket.destroyed).toBe(true);
+        expect(h.state.provider).toBeNull();
+        expect(h.doc.getText('probe').toString()).toBe('stored');
+        expect(h.state.loaded).toBe(true);
+    });
+
+    describe('while the tab stays open', () => {
+        const REFRESH_MS = 30_000;
+        const stateAsks = () => server.asked.filter((ask) => ask.url.endsWith('/state')).length;
+        const setVisibility = (state: 'visible' | 'hidden') =>
+            act(async () => {
+                Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+                window.dispatchEvent(new window.Event('visibilitychange'));
+                await flushFakeTime();
+            });
+        // Moves the fake clock, then lets the fetch it started and TanStack Query's batched notify run.
+        const advance = (ms: number) =>
+            act(async () => {
+                jest.advanceTimersByTime(ms);
+                await flushFakeTime();
+            });
+        async function flushFakeTime() {
+            for (let i = 0; i < 10; i++) {
+                await new Promise<void>((resolve) => queueMicrotask(resolve));
+                jest.advanceTimersByTime(0);
+            }
+        }
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+        afterEach(() => {
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+            jest.useRealTimers();
+        });
+
+        test('a visible tab asks again every 30 s with the ETag, a hidden one asks nothing, and showing asks at once without a duplicate', async () => {
+            server.write('one');
+            active = mount(OPTIONS, false);
+            const h = active;
+            await advance(0);
+            expect(stateAsks()).toBe(1);
+
+            server.write(' two');
+            await advance(REFRESH_MS);
+            expect(stateAsks()).toBe(2);
+            expect(server.asked.at(-1)?.ifNoneMatch).toBe('"epoch-1.0.3.state-f1"');
+            expect(h.doc.getText('probe').toString()).toBe('one two');
+
+            await setVisibility('hidden');
+            await advance(REFRESH_MS * 2 + 20_000);
+            expect(stateAsks()).toBe(2);
+
+            await setVisibility('visible');
+            expect(stateAsks()).toBe(3);
+            await advance(REFRESH_MS - 1_000);
+            expect(stateAsks()).toBe(3);
+            await advance(1_000);
+            expect(stateAsks()).toBe(4);
+        });
+
+        test('a link closed while the tab stays visible reloads at the next ask', async () => {
+            const reload = jest.fn();
+            Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+            active = mount(OPTIONS, false);
+            await advance(0);
+
+            server.refuse = 403;
+            await advance(REFRESH_MS);
+            expect(reload).toHaveBeenCalledTimes(1);
+        });
+
+        test('a state too large to build is not asked for again while the tab stays visible', async () => {
+            server.refuse = 413;
+            server.refusal = 'Document too large to show';
+            active = mount(OPTIONS, false);
+            await advance(0);
+            expect(stateAsks()).toBe(1);
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+            expect(active.state.loadError).toBe('Document too large to show');
+        });
+
+        test('a reader who becomes live, or whose editor goes, asks no more', async () => {
+            active = mount(OPTIONS, false);
+            const h = active;
+            await advance(0);
+
+            await act(async () => {
+                h.client.setQueryData(collabKeys.document(OPTIONS.ownerId, OPTIONS.mountId, OPTIONS.pathId), {
+                    canRead: true,
+                    canWrite: true,
+                    live: true,
+                    path: null,
+                    folderContents: null,
+                });
+                await flushFakeTime();
+            });
+            expect(h.state.provider).not.toBeNull();
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+
+            h.unmount();
+            active = null;
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+        });
+    });
+
+    test('a document switch loads the other document into a new doc', async () => {
+        server.write('first');
+        active = mount(OPTIONS, false);
+        const h = active;
+        await settle();
+        const first = h.doc;
+
+        h.rerender({ ...OPTIONS, pathId: 'doc-2' });
+        expect(h.state.loaded).toBe(false);
+        await settle();
+        expect(h.doc).not.toBe(first);
+        expect(h.state.loaded).toBe(true);
+        expect(server.asked.at(-1)?.url).toMatch(/doc-2\/state$/);
     });
 });

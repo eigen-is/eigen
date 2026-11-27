@@ -423,7 +423,7 @@ describe('document transform (eigensheets preview)', () => {
         }
     }, 60_000);
 
-    test('a request that finds no previous version joins the in-flight regeneration instead of starting a second job', async () => {
+    test("an owner's request that finds no previous version builds in the foreground beside the background regeneration", async () => {
         const sheetsPath = await seedDoc('cache-regen-landed');
         const first = await previewRequest(sheetsPath.id);
         expect(first.status).toBe(200);
@@ -434,12 +434,9 @@ describe('document transform (eigensheets preview)', () => {
         // Hold the background regeneration open so the second request arrives while it is
         // in flight — the moment a landing regeneration's prune can take the previous version.
         const real = documentTransformRunner.run.bind(documentTransformRunner);
-        let release: (() => void) | undefined;
-        const held = new Promise<void>((resolve) => {
-            release = resolve;
-        });
+        const held = Promise.withResolvers<void>();
         const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
-            if (request.kind === 'preview') await held;
+            if (request.kind === 'preview' && opts.priority === 'background') await held.promise;
             return real(request, opts);
         });
         try {
@@ -451,15 +448,15 @@ describe('document transform (eigensheets preview)', () => {
             for (const name of await fs.promises.readdir(mount.previewsDir)) {
                 if (name.startsWith(`${sheetsPath.id}-`)) await fs.promises.unlink(path.join(mount.previewsDir, name));
             }
-            const pending = previewRequest(sheetsPath.id);
-            await Bun.sleep(50);
-            release?.();
-            const fresh = await pending;
+            const fresh = await previewRequest(sheetsPath.id);
             expect(fresh.status).toBe(200);
             expect(fresh.headers.get('cache-control')).not.toBe('no-store');
-            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
+            expect(callsOfKind(runSpy, 'preview').map(([, opts]) => opts.priority)).toEqual([
+                'background',
+                'foreground',
+            ]);
         } finally {
-            release?.();
+            held.resolve();
             runSpy.mockRestore();
         }
     }, 60_000);
@@ -528,7 +525,7 @@ describe('document transform (eigensheets export)', () => {
     });
 
     test('html export through the Worker matches the pinned golden bytes', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -546,7 +543,7 @@ describe('document transform (eigensheets export)', () => {
     }, 120_000);
 
     test('xlsx export through the Worker returns a parseable workbook', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'xlsx');
+        const result = await exportDocument(golden.mount, golden.path, 'xlsx', 'foreground');
         const sheets = xlsxToSheets(result.data);
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
         const cell = (r: number, c: number) => sheets[0].celldata?.find((d) => d.r === r && d.c === c)?.v;
@@ -980,7 +977,7 @@ describe('document transform (eigendoc)', () => {
     }, 120_000);
 
     test('html export is byte-identical to the pre-move pipeline', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -990,6 +987,7 @@ describe('document transform (eigendoc)', () => {
             { documentType: 'eigendoc', format: 'pdf-html' },
             golden.mount,
             golden.path,
+            'foreground',
         );
         expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
@@ -1118,6 +1116,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'docx' },
                 golden.mount,
                 golden.path,
+                'foreground',
                 controller.signal,
             ).catch(() => {});
             calls = spy.mock.calls.length;
@@ -1162,6 +1161,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'html' },
                 doc.mount,
                 doc.path,
+                'foreground',
             );
             names = read.mock.calls.map(([, file]) => file.name);
             expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
@@ -1208,6 +1208,7 @@ describe('document transform (eigendoc)', () => {
                 { documentType: 'eigendoc', format: 'html' },
                 doc.mount,
                 doc.path,
+                'foreground',
             );
             expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
         });
@@ -1223,7 +1224,9 @@ describe('document transform (eigendoc)', () => {
         await withDeclaredMedia('heavy-svgs', svgs, async (doc) => {
             const read = spyOn(previewCache, 'getScreenPreview');
             try {
-                const failure = await exportDocument(doc.mount, doc.path, 'pdf').catch((err: unknown) => err);
+                const failure = await exportDocument(doc.mount, doc.path, 'pdf', 'foreground').catch(
+                    (err: unknown) => err,
+                );
                 expect(read).not.toHaveBeenCalled();
                 expect(failure).toMatchObject({ status: 413 });
             } finally {
@@ -1246,6 +1249,7 @@ describe('document transform (eigendoc)', () => {
                     { documentType: 'eigendoc', format: 'docx' },
                     doc.mount,
                     doc.path,
+                    'foreground',
                 );
                 expect(encode.mock.calls.map(([, , fileName]) => fileName)).toEqual(['light.png']);
                 expect(warnings).toContainEqual({ code: 'images-dropped', count: 1 });
@@ -1272,6 +1276,7 @@ describe('document transform (eigendoc)', () => {
                     { documentType: 'eigendoc', format },
                     doc.mount,
                     doc.path,
+                    'foreground',
                     controller.signal,
                 ).catch(() => {});
                 calls = encode.mock.calls.length;
@@ -1299,9 +1304,12 @@ describe('document transform (eigendoc)', () => {
         let failure: unknown;
         let calls = -1;
         try {
-            failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
-                (err: unknown) => err,
-            );
+            failure = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'docx' },
+                doc.mount,
+                doc.path,
+                'foreground',
+            ).catch((err: unknown) => err);
             timedOut.resolve();
             await Bun.sleep(600);
             calls = encode.mock.calls.length;
@@ -1373,7 +1381,12 @@ describe('document transform (docx round trip)', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
         await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
-        const { data: docx } = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
+        const { data: docx } = await runDocumentExport(
+            { documentType: 'eigendoc', format: 'docx' },
+            mount,
+            path,
+            'foreground',
+        );
         return docxToPmJson(docx, { publicOrigin: getPublicOrigin() });
     }
 
@@ -1549,7 +1562,7 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 
     test('html export matches the pinned golden bytes', async () => {
-        const result = await exportDocument(golden.mount, golden.path, 'html');
+        const result = await exportDocument(golden.mount, golden.path, 'html', 'foreground');
         expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -1560,6 +1573,7 @@ describe('document transform (eigenslides)', () => {
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
             golden.path,
+            'foreground',
         );
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
@@ -1802,7 +1816,10 @@ describe('document transform (docx import)', () => {
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
 // A convert checks write on the destination folder before anything else it pays for.
-const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+const WRITABLE_DRIVE = {
+    canWrite: async () => true,
+    readerAccess: async () => ({ canRead: true, canWrite: true, live: true, priority: 'foreground' }),
+} as unknown as Drive;
 // An insert into a deck opens it for its frame, which a refused import must not pay for either.
 const UNOPENED_DRIVE = {
     getCollabDocument: () => {
@@ -1826,6 +1843,7 @@ describe('document transform (input bound)', () => {
                 upload,
                 { mode: 'replace' },
                 {} as unknown as User,
+                'foreground',
             ).catch((reason: unknown) => reason);
             expect(error).toMatchObject({ status: 413, message });
             expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
@@ -1919,7 +1937,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, mount, path);
+            await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, mount, path, 'foreground');
         } catch (err) {
             error = err;
         } finally {
@@ -1952,6 +1970,7 @@ describe('document transform (admission)', () => {
                     upload,
                     { mode: 'replace' },
                     user,
+                    'foreground',
                 );
             } catch (err) {
                 error = err;

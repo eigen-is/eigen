@@ -39,6 +39,9 @@ const MAX_AWARENESS_CLIENT_IDS = 8;
 // A real awareness state is a name, a color, a user id and a cursor. That is a few hundred bytes, or a
 // few KiB for a large canvas selection. The cap bounds what one state costs every peer.
 const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
+// A step 1 is a state vector, a few bytes per client id that ever edited, so 1 MiB is over a hundred thousand
+// editors. Decoding and answering a larger, forged one would hold the event loop.
+export const MAX_SYNC_STEP_1_BYTES = 1024 * 1024;
 
 // Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
@@ -210,10 +213,11 @@ export class CollabDocument {
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            // A type has more than one varuint spelling, so it is read once, and that read decides both what a reader may
-            // send and how the frame is applied. A reader still gets the handshake; a step 2 is applied like an update.
+            // A type has more than one varuint spelling, so it is read once, and that read decides what a reader may
+            // send and how the frame is applied. A reader still gets the handshake; a step 2 counts as an update.
             const syncType = decoding.readVarUint(decoder);
             if (syncType === syncProtocol.messageYjsSyncStep1) {
+                if (message.byteLength > MAX_SYNC_STEP_1_BYTES) return;
                 sendFrame(
                     conn,
                     encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.readSyncStep1(decoder, encoder, this.doc)),
@@ -227,6 +231,9 @@ export class CollabDocument {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             const user = this.connections.get(conn);
             if (!user) return;
+            // The largest honest frame holds every state a connection may own, so a larger one is dropped before the
+            // loop below reads its entries one by one.
+            if (awarenessUpdate.byteLength > MAX_AWARENESS_CLIENT_IDS * MAX_AWARENESS_STATE_BYTES) return;
 
             // A reader may send awareness too, so the update is checked before it is applied. Any entry
             // that breaks a rule drops the whole frame.
@@ -321,8 +328,8 @@ export class CollabDocument {
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const compacted = await compactSheets(this.path, this.doc, this.compaction.signal);
-            // The swap deletes the folded batches, so a version keeps them first. It waits for the container lock while
-            // this holds data.db, which is safe: the hold is outside the slot chain, and every closer destructs it first.
+            // The swap deletes the folded batches, so a version keeps them first. Its wait for the container lock while
+            // this holds data.db is safe: the hold is outside the slot chain and every closer destructs it first.
             let saved = false;
             if (
                 compacted !== null &&

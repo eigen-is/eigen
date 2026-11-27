@@ -392,7 +392,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             ];
 
             for (const [where, target] of targets) {
-                test(`${where} has the source's history, thumbnail and search text, and shows once`, async () => {
+                test(`${where} has a copied history, the source's thumbnail and search text, and shows once`, async () => {
                     const to = target();
                     const drive = (await getHome(to.ownerId)).drive;
                     const root = await driveGet(token(), to.ownerId, to.mountId, 'root');
@@ -413,25 +413,11 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                     const copiedImage = findOrFail(inside, (child) => child.name === image.name);
                     const copiedDoc = findOrFail(inside, (child) => child.name === doc.name);
 
-                    const pairs = [
-                        [copied, folder],
-                        [copiedImage, image],
-                        [copiedDoc, doc],
-                    ];
-                    for (const [copy, source] of pairs) {
+                    for (const copy of [copied, copiedImage, copiedDoc]) {
                         const events = (await drive.getFileHistory(to.mountId, copy.id))
                             .filter((event) => event.pathId === copy.id)
                             .map((event) => ({ eventType: event.eventType, details: event.details }));
-                        expect(events).toEqual([
-                            {
-                                eventType: 'copied',
-                                details: {
-                                    sourceOwnerId: teamOwner,
-                                    sourceMountId: teamMounts[0],
-                                    sourcePathId: source.id,
-                                },
-                            },
-                        ]);
+                        expect(events).toEqual([{ eventType: 'copied', details: null }]);
                     }
 
                     const { mount } = await drive.resolveFile(to.mountId, copied.id);

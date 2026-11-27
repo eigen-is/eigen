@@ -2,42 +2,44 @@
 
 > **TLDR:** Sharing in Drive works with access lists (ACLs). Any file or folder can carry a list of who may read it and who may write it, and a folder's list also counts for everything inside it. An entry names a user by email or a team by its `team_` id. Every access check runs on the owner's side, against the owner's data. A recipient only gets a pointer in their own database, so the item shows under **Shared with me**. The check is `apps/api/src/lib/drive/acl.ts`, and the push to recipients is `apps/api/src/lib/drive/acl-propagation.ts`.
 
-Everything a user stores lives in their Home, the data folder of one user or one team ([STORAGE.md](STORAGE.md)). Drive keeps files in mounts, and each file or folder is a path: a row in the mount's database. A path's owner always has full access. Everyone else gets in through one of three things: an entry in the path's own ACL, an entry on any folder above it, or the visibility of the path or any folder above it, which can open it to every signed-in user for reading or for writing. A team drive adds one rule: every member of the team counts as an owner.
+Everything a user stores lives in their Home, the data folder of one user or one team ([STORAGE.md](STORAGE.md)). Drive keeps files in mounts, and each file or folder is a path: a row in the mount's database. A path's owner always has full access. Everyone else gets in through one of three things: an entry in the path's own ACL, an entry on any folder above it, or the visibility of the path or any folder above it, which can open it to every signed-in user for reading or for writing, or to anyone with its link for reading, with no login at all. A team drive adds one rule: every member of the team counts as an owner.
 
 Access only adds up. A child can grant more than its parent and can never take away what the parent gave. There is no deny entry, and no entry for the whole organization: a team covers that. This keeps the check to one walk over the path's breadcrumb, the chain of folders from the mount's root down to the path itself, stopping at the first one that lets the user in. A user's memberships, the list of teams they are in, decide whether a team entry matches.
 
-When a user opens someone else's file, the route hands them the owner's drive wrapped in `SharedDrive`, which asks "may this user read or write this path" before every operation. The owner gets their own drive with no wrapper.
+When a user opens someone else's file, the route hands them the owner's drive wrapped in `SharedDrive`, which asks "may this user read or write this path" before every operation. The owner gets their own drive with no wrapper. A visitor, someone with no login who opens a public link, is no user at all and gets `LinkDrive`, which serves only the reads a link opens ([§ A public link opens a path to anyone without a login](#a-public-link-opens-a-path-to-anyone-without-a-login)).
 
 The recipient still needs to find what was shared. So when an ACL changes, the owner's side pushes a small record into each recipient's own `shared.db`. This push is called propagation, and it is asynchronous: the save answers before every record has landed. The record never grants anything. A recipient who has no account yet, or a team whose members change, is covered by the share registry: a server-wide list of "this owner shared something with this address". It is read when the account or the membership appears, which is called reconciliation.
 
-Three rules sit on top. A client never sends a whole ACL: the route takes a delta, the entries to add and the ids to remove, and the server merges it, so two people sharing at once can't undo each other ([ACL Route](#acl-route)). An editor can share onward, unless the path has `sharingRestricted` set, which keeps sharing to the owner ([Re-Share Prevention](#re-share-prevention)). And a chat inside a document has no list of its own, so inviting someone to it shares the document ([Chat Invite Bubbling](#chat-invite-bubbling)).
+Three rules sit on top. A client never sends a whole ACL: the route takes a delta, the entries to add and the ids to remove, and the server merges it, so two people sharing at once can't undo each other ([ACL Route](#acl-route)). An editor by name, someone whose write comes from ownership, a team or an ACL entry, can share onward and move the item, unless the path has `sharingRestricted` set, which keeps both to the owner. Write that comes only from `public-write` edits the content: it never changes who has access, moves the item to another folder or mails the people who have it ([Re-Share Prevention](#re-share-prevention)). And a chat inside a document has no list of its own, so inviting someone to it shares the document ([Chat Invite Bubbling](#chat-invite-bubbling)).
 
-The sections run in this order: the types and the check, the rules, visibility, who has access in effect, propagation and the registry, chat invites, and restricted sharing with the ACL route.
+The sections run in this order: the types and the check, the rules, visibility and public links, who has access in effect, propagation and the registry, chat invites, and restricted sharing with the ACL route.
 
 ## Types
 
 ```typescript
 type DriveACL = { id: string; read: boolean; write: boolean }  // id = email or team_{id}
-type DriveVisibility = 'private' | 'public-read' | 'public-write'
+type DriveVisibility = 'private' | 'public-read' | 'public-write' | 'link'
 ```
 
 Defined in `packages/lib/src/types/drive-access.ts`.
 
 ## Core Logic
 
-**File**: `apps/api/src/lib/drive/acl.ts`
+**Files**: `packages/lib/src/types/drive-access.ts` and `apps/api/src/lib/drive/acl.ts`
 
-### canReadFromAncestors(ancestors, user, memberships)
+Access held by name, from ownership, a team or an ACL entry, is one pure rule in lib, `holdsByName(chain, person, teamIds, permission)` with `aclGrants` beside it, so the API's checks and the browser's Move and Share answer it alike. `acl.ts` builds the rest on it and reads no settings: its caller says whether public links are on.
+
+### canReadFromAncestors(ancestors, user, memberships, publicLinks)
 
 Walks a pre-fetched breadcrumb (root-first, ending at the path itself) and returns `true` on the first ancestor that grants access:
 
 1. Owner → true
 2. Team member (path owned by user's team) → true
-3. Visibility `public-read` or `public-write` → true
-4. User in local `acl` with `read: true` (by email or team membership) → true
+3. User in a path's `acl` with `read: true` (by email or team membership) → true
+4. Visibility `public-read` or `public-write`, or `link` while `publicLinks` is true (`grantsPublicRead`) → true
 5. Default → false
 
-When the path or any folder above it is in the trash, only steps 1 and 2 count, for read and write alike, since the rule sits in the walk both share (`canFromAncestors`). So a trashed item is its owner's alone until it is restored ([SOFT-DELETE.md](SOFT-DELETE.md#trash-revokes-every-share-and-restore-re-shares-without-an-email)).
+Steps 1 to 3 are `holdsByName`. When the path or any folder above it is in the trash, only steps 1 and 2 count, for read and write alike: `holdsByName` skips the ACL of a trashed chain and the visibility check refuses it. So a trashed item is its owner's alone until it is restored ([SOFT-DELETE.md](SOFT-DELETE.md#trash-revokes-every-share-and-restore-re-shares-without-an-email)).
 
 The `Drive.canRead(mountId, pathId, user, memberships?)` method fetches the breadcrumb and delegates to this function.
 
@@ -45,9 +47,13 @@ The `Drive.canRead(mountId, pathId, user, memberships?)` method fetches the brea
 
 The same walk, checking `write` and `public-write`.
 
-### matchesACL(acl, user, memberships, permission)
+### aclGrants(acl, person, teamIds, permission)
 
-Iterates ACL entries for the given permission. Uses `parseOwnerId(entry.id)`: user type matches email (case-insensitive), team type checks `memberships.teamIds`. No other entry type ever matches.
+Iterates ACL entries for the given permission. Uses `parseOwnerId(entry.id)`: user type matches email (case-insensitive), team type checks `teamIds`. No other entry type ever matches.
+
+### readerAccess(chain, user, memberships, publicLinks)
+
+What a signed-in reader may do with a path is one answer: `canRead`, `canWrite`, `live` (who gets the collab socket) and `priority` (the transform queue they wait in). `Drive.readerAccess` and the `SharedDrive` pass-through call it, and `getReaderAccess` (`lib/drive/get-drive.ts`) gives the visitor's answer when there is no user. The permissions route, the collab info route and the transform priority all read this one answer, so they can't disagree.
 
 ### normalizeACL(acl)
 
@@ -63,9 +69,9 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 - **No deny**: No `{read: false}` mechanism
 - **External emails**: Any valid email can be in ACLs
 - **Team ACL**: Additive with user ACL
-- **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `matchesACL` only checks `user` and `team` entries. Org-wide sharing is not implemented; use teams instead
+- **No org-level ACL**: `parseOwnerId` recognizes the `org_` prefix but `aclGrants` only checks `user` and `team` entries. Org-wide sharing is not implemented; use teams instead
 - **The root folder has no ACL**: `Drive.updateACLDelta` refuses a mount's root with 403
-- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it
+- **A move needs write on the item, on the folder it leaves and on the folder it lands in** (`SharedDrive.movePath`), as a rename needs write on the folder. Otherwise an editor of one file could pull it out of a folder they can't change, into one where more people see it. The write on the item must be held by name (`requireMove`), because in a folder the mover holds by name the item would be theirs to share, and on an item with `sharingRestricted` only an owner may move it, as only an owner may share it ([Re-Share Prevention](#re-share-prevention)). A WebDAV MOVE that keeps the item's folder is a rename and asks only write on that folder ([WEBDAV.md](WEBDAV.md#move-and-copy-stay-inside-one-mount))
 
 ## Visibility
 
@@ -74,8 +80,29 @@ Strips entries an ancestor's ACL already grants to the same id, and a team entry
 | `private`      | Only named users + owner  |
 | `public-read`  | Every signed-in user can read |
 | `public-write` | Every signed-in user can read and write |
+| `link`         | Anyone with the URL can read, signed in or not, while public links are on |
 
-Every drive route needs a session, so "public" never reaches a visitor who is not signed in.
+`public-read` and `public-write` need a session: every route that serves them asks for one, so they never reach a visitor.
+
+## A public link opens a path to anyone without a login
+
+The link is the item's ordinary URL: the path id is a random UUID, so the URL is the secret, and choosing another General access closes it. The design and its accepted risks are in [PROPOSAL_PUBLIC_LINKS.md](proposals/PROPOSAL_PUBLIC_LINKS.md).
+
+**Signed in, `link` reads as `public-read`.** `grantsPublicRead` answers true for it, so `canReadFromAncestors` and `checkAccessForEmails` (`lib/drive/sharing.ts`) need no case of their own, and no write follows from it.
+
+**A raw database is a live reader's alone.** `isRawDatabase(chain)` in `lib/drive/acl.ts` names a container's own database, such as a document's `data.db` and `comments.db` or a comment thread's `data.db` (`isContainerDatabase`), and a document's saved version in its `versions/` folder. Each keeps what the merged state leaves out: the stored update rows hold text an author deleted, a version holds the text as it was, and a thread's rows hold deleted messages. So `canReadFromAncestors` refuses one to a reader who reads it only through its visibility and may not write it, the reader whose `readerAccess` is not `live`. Every check that asks it follows, such as path info, a download, a preview, a breadcrumb and WebDAV. `SharedDrive.getFolderContents` leaves them out of a listing for such a reader, and decides `live` once for the folder. Everything else inside a document stays readable: its `media/`, its `chat/` folder, each thread with its `media/`, and the `versions/` folder itself, so the comments, the threads and their attachments keep working. The server still reads the databases for them, such as the merged state, an export, a preview and the comment index, whose `SharedDrive.withDatabase` asks for read on the document. A reader by name, anyone who may write, the owner and the team are unchanged.
+
+**A reader who is not live copies nothing that holds a raw database.** A copy writes the raw databases under its source, so `SharedDrive.copyPath` and `copyPathOver` walk the source with `isRawDatabase` and answer 403 "Only people with access can copy this document" for such a reader when it finds one: an Eigen document, a comment thread or a standalone chat included, a document's `versions/` folder, or a folder holding any of them. A plain file still copies, and so does a document's `media/`. Accepted: the client still offers Copy to… for a document to them, and the server's 403 is the answer. Drive's menus don't know whether a reader is live, and the refusal says why. Reopen if link readers keep meeting it.
+
+Accepted: someone who reads a plain file through a link can copy it into their own drive and give the copy a link of its own. Whoever reads a file can download it and upload it again, so refusing the copy would protect nothing. Reopen if a link ever means view without download.
+
+**A visitor is checked by `canReadByLink(chain)`**, a pure function beside `canReadFromAncestors`. It answers the index of the highest path in the breadcrumb with `link`, or null. It refuses a chain in the trash, and it holds an allow-list rather than a deny-list: from the public path down every step is a folder, and the last may be a file or a collab document; past a collab document only its `media/` folder and a file in it. So a folder's link covers everything below it, a private subfolder included, and a chat, a document's databases and any path type added later stay closed. The shape is the visitor's own and narrower than `isRawDatabase`, the rule a signed-in reader who is not live meets: it also keeps a document's `chat/` and `versions/` closed, as a visitor gets no comments. There is no write variant, because no route a visitor reaches writes.
+
+**`LinkDrive` (`apps/api/src/lib/drive/link-drive.ts`) is the third drive a route can hold, beside the owner's `Drive` and `SharedDrive`.** It runs the rule before each read and refuses every path alike, with a 403 or `canRead`'s false, so a visitor can't tell a private path from a missing one. It hands out every path with `acl: null`, starts a breadcrumb at the public path and filters a listing by the rule. So Drive's list draws a visitor no Shared with column, while Owner stays, as the public `/p/users` route names the owner to anyone. A route opts in with the `linkAuth` macro (`routes/auth.ts`) and gets its drive from `getReadDrive`; [ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture) has all three. Accepted: while public links are on, an unknown owner or mount answers 404 before the rule runs, so a visitor can tell an owner id that exists from one that doesn't. Owner ids are random better-auth ids and a personal mount is always `default`, so the answer says nothing about any path. Reopen if owner ids become guessable.
+
+**The server switch closes every link for everyone.** `sharing.publicLinks` is on by default and never on a demo server: `arePublicLinksEnabled()` in `lib/config/server-settings.ts` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)). `LinkDrive` refuses every path while it is off, before it opens the owner's Home, so with links off a request with no login opens no Home and an unknown owner answers 403, and `grantsPublicRead` counts `link` only while it is on, so a signed-in non-member or a guest loses the read too. People with an ACL entry, the owner and the team keep theirs. The stored value stays, so turning the switch on opens the same URLs again.
+
+**`Drive.updateACLDelta` is the one place that refuses a new link**: 403 while public links are off, and 400 on anything but a file, a folder or a collab document (`canHaveLink`) or on a path inside a document. A path that already has `link` saves as before, so its people can still be changed, or the link closed, while the switch is off. Who may turn a link on is who may make any sharing change: write by name, and the owner when sharing is restricted ([Re-Share Prevention](#re-share-prevention)).
 
 ## Effective Members
 
@@ -96,9 +123,9 @@ Push-based sharing for Drive and Calendar. On share: resolve targets, write to r
 
 `Drive.updateACLDelta` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes run after the request (`pushToHomes` in `home-relay.ts`). `propagateSharedPathChange` keeps them in order per path, since an out-of-order add and revoke would bring a removed share back. Only a change to the ACL pushes: a rename, a move, a content write, a trash and a restore send nothing, because the recipient's row only names the path ([§ Shared with me reads each path from its owner](#shared-with-me-reads-each-path-from-its-owner)). Two changes to one path's ACL run in turn in a per-path chain, which comes before every mount lock ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). A trash runs in its item's chain too. A fan-out delivers to one home at a time, and no fan-out waits for another except the one before it on the same path. An open is synchronous, so opening many together costs the same CPU and ends in the same file descriptors, but it stops the event loop for the whole fan-out: in the API image, 500 closed user Homes took about 1.5 s and 9,000 fds either way, with a longest gap of about 1.2 s opened together and about 15 ms one at a time. A delivery that hangs holds only the rest of its own fan-out, and the later changes to its path. Nothing retries a delivery, so a crash loses those still in flight ([SCALABILITY.md](SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash)).
 
-A collab socket re-checks read every 15 s and closes when it is gone, so a revoke reaches an open document within 15 s, not at the next reconnect, and write goes with the next frame: [COLLAB.md](COLLAB.md#read-and-the-session-are-checked-at-open-and-every-15-s-write-on-every-message).
+Only a live reader holds a collab socket: someone signed in who reads the document by name or may write it (`readerAccess`'s `live`). The socket re-checks that every 15 s and closes when it is gone, so a revoke reaches an open document within 15 s, not at the next reconnect, and write goes with the next frame: [COLLAB.md](COLLAB.md#live-reading-and-the-session-are-checked-at-open-and-every-15-s-write-on-every-message). Anyone else who reads a document loads its stored state over HTTP and meets a revoke at their next fetch ([COLLAB.md § A reader who is not live](COLLAB.md#a-reader-who-is-not-live-loads-the-stored-state-over-http)).
 
-A change that keeps read but moves write, a writer made a viewer or the reverse, reaches an open document through its info query: every ACL event, `DRIVE_ACL_UPDATED` included, refreshes the `collabKeys` info of every open document in the path's mount (`invalidateAclUpdated`), as a folder's change reaches the documents below it. The editor then follows its new `canWrite` without a reload; Docs' editors in [DOCS.md](DOCS.md#one-factory-builds-the-bodys-editor-every-bands-and-each-storys). A tab that got in through the path's visibility is not an ACL recipient and hears no event, so it learns at its next refetch ([ROADMAP.md](ROADMAP.md)).
+A change that keeps read but moves write, a writer made a viewer or the reverse, reaches an open document through its info query: every ACL event, `DRIVE_ACL_UPDATED` included, refreshes the `collabKeys` info of every open document in the path's mount (`invalidateAclUpdated`), as a folder's change reaches the documents below it. The editor then follows its new `canWrite` without a reload; Docs' editors in [DOCS.md](DOCS.md#one-factory-builds-the-bodys-editor-every-bands-and-each-storys). A tab that got in through the path's visibility is not an ACL recipient and hears no event. Through "Anyone signed in with the link, can edit" it is live, so a narrowed visibility closes its socket at the next 15 s tick and the tab reloads. Any other such tab has no socket and can't write.
 
 ### Model
 
@@ -203,15 +230,14 @@ An embedded chat usually has no ACL of its own; it inherits from the container. 
 
 ### findContainerFromAncestors()
 
-In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) and returns the **outermost** `DrivePath` whose type passes `isCollabType()` (doc, stickies, slides, sheets, vector), or `null` for a standalone chat. `Drive.findContainerPath()` fetches the breadcrumb and delegates. Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
+In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) and returns the **nearest** `DrivePath` above or at the path whose type passes `isCollabType()` (doc, stickies, slides, sheets, vector), the last such path in the chain (`findLast`), or `null` for a standalone chat. `Drive.findContainerPath()` fetches the breadcrumb and delegates. Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
 
 ### Rules
 
-- Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
+- Standalone chat → ACL lands on the chat itself; embedded or nested → on the nearest container above it
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
-- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
-- `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
+- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** the right to share the container, or the chat itself when it stands alone (`requireShare`, [Re-Share Prevention](#re-share-prevention)), otherwise 403. So someone who edits the document only through `public-write` can't invite. It hands the container it checked to `Drive.inviteToChat()`, so a move that lands in between can't make the invite share a document nobody checked
 - Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 
 ### Frontend
@@ -220,13 +246,15 @@ The `/invite` slash command calls `useInviteToChat()` (`packages/lib/src/core/ch
 
 ## Re-Share Prevention
 
-Per-path `sharingRestricted` flag: only the owner, or a team member on a team-owned path, may change ACL or visibility. Editors keep full read/write on content. Default `false`.
+Changing who has access, the ACL or the visibility, needs write held by name: ownership, membership of the owning team, or an ACL entry with write on the path or a folder above it (`holdsByName` with `'write'`). Write that comes only from `public-write` lets everyone signed in change the content, and never lets them hand it on: otherwise anyone could add themselves, remove the owner's people or open the item to the internet. Two more actions need the same write by name. A move, since in a folder the mover holds by name the item would be theirs to share. And Email collaborators, since the mail goes to the people who have access, so it is for those who may manage that access. A link-only editor still edits, renames, uploads, copies and trashes.
 
-The ACL model treats "can edit content" and "can manage access" as one permission. Without the flag, sharing a document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove people. The flag separates the two without adding a third permission level.
+On top sits the per-path `sharingRestricted` flag: only the owner, or a team member on a team-owned path, may change ACL or visibility, or move the item, since the folder it lands in can open it to more people. Editors keep full read/write on content and may still rename it. Default `false`.
+
+For an editor by name, "can edit content" and "can manage access" are one permission. Without the flag, sharing a document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove people. The flag separates the two without adding a third permission level.
 
 **Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so a viewer gets the generic "no write permission" 403, the same as on any path they can't change. Then `isEffectiveOwner()` (a team member on a team path) decides: a restricted non-owner gets 403, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` and the drive `access-check` (`canShare`) run the same check. The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. A recipient's **Shared with me** reads the flag from the owner's row, so it shows the current state.
+**Enforcement**: `SharedDrive.requireWriteByName` is the one check of write by name, over the path's breadcrumb. `requireShare` runs it, so a viewer and a link-only editor get the same 403, "No permission to change sharing". `requireMove` runs it on the item and `emailCollaborators` on the path, with their own 403 messages. The owner's restriction applies to sharing and moving, so a restricted editor by name may still mail its people. In `requireShare` and `requireMove`, `sharingRestrictedFor()` decides with `isEffectiveOwner()` (a team member on a team path): a restricted non-owner gets 403. A WebDAV MOVE that keeps the folder is a rename and passes. `updateACLDelta()` runs it before every ACL change, and a non-owner's `sharingRestricted` value is silently dropped rather than applied. Chat `/invite` runs it on the container, and the drive `access-check` answers `canShare` by the same rule, which a mail send's grants read ([MAIL.md](MAIL.md#a-send-grants-access-only-when-the-sender-says-so)). The owner is unaffected: `getSharedDrive` hands the owner their own `Drive`, with no wrapper and no restriction check. A recipient's **Shared with me** reads the flag from the owner's row, so it shows the current state.
 
 ### ACL Route
 
@@ -236,26 +264,32 @@ The ACL model treats "can edit content" and "can manage access" as one permissio
 { add?: DriveACL[]; remove?: string[]; visibility?: DriveVisibility; sharingRestricted?: boolean }
 ```
 
-The server merges onto the path's current ACL (`mergeACLDelta` in `acl.ts`): removals first (matched on `canonicalACLId`, so emails match case-insensitively), then upserts. Re-adding an existing id replaces its entry, which is how permission changes travel. `Drive.updateACLDelta` serializes the read-merge-write per path, then validates, saves and propagates the merged ACL. Full-array replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert entries a concurrent sharer just added. The FE share dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta. Defined in `apps/api/src/routes/drive-sharing.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is an email or a `team_` id, the same bound the chat invite route uses); `add` holds at most `MAX_SEND_RECIPIENTS` (100) entries, the cap the access-check route puts on its email list.
+The server merges onto the path's current ACL (`mergeACLDelta` in `acl.ts`): removals first (matched on `canonicalACLId`, so emails match case-insensitively), then upserts. Re-adding an existing id replaces its entry, which is how permission changes travel. `Drive.updateACLDelta` serializes the read-merge-write per path, then validates, saves and propagates the merged ACL. Full-array replace is deliberately not accepted from clients: a dialog built from a stale cache would silently revert entries a concurrent sharer just added. The FE share dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta, and sends `visibility` only when the person picked a general access in that dialog and `sharingRestricted` only when the owner changed **Editors can share** there, so a Save that only adds someone cannot undo a change someone else made to it meanwhile. Defined in `apps/api/src/routes/drive-sharing.ts`. Each `add[].id` is bounded by `MAX_EMAIL_LENGTH` at the schema (an id is an email or a `team_` id, the same bound the chat invite route uses); `add` holds at most `MAX_SEND_RECIPIENTS` (100) entries, the cap the access-check route puts on its email list.
 
-`GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403. A stranger gets `{ false, false }`, which is what the request-access view keys off.
+`GET /drive/:ownerId/:mountId/path/:pathId/permissions` answers `{ canRead, canWrite }` for any caller, never 403, a visitor without a login included, from `getReaderAccess` (`lib/drive/get-drive.ts`). A stranger gets `{ false, false }`, which is what the request-access view keys off, and a visitor gets `canWrite: false` with the link rule's read.
 
 Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's own ACL names the caller by email (and the caller isn't an effective owner) and, if so, removes only that entry through `Drive.updateACLDelta`. There is no write check: a read-only recipient can always leave, restricted or not. The owner's file and every other recipient are untouched, and the recipient's own home skips the "removed your access" notification for it. Access through a shared folder, a team drive or a team ACL entry is not a direct share: a delete there trashes the owner's copy like any delete, write-gated. The FE mirrors the same test with `useIsSharedWithMe()` so `DriveDeleteItem` can say **Remove shared item** instead of **Move to trash**, and the Drive action runner (`useDriveActionRunner`) confirms every delete in a drive the caller doesn't own (`useIsEffectiveOwnerOf()`).
 
 ### Frontend
 
-`useIsEffectiveOwner()` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog renders: a guest, or a restricted non-owner, gets the read-only `DriveAccessList`, everyone else `DriveAccessListEdit`. Only effective owners see its **Editors can share** checkbox (checked = not restricted), and the flag is only included in the save payload for them. Both components sit in `packages/ui/src/components/drive/`.
+`useWritesByName(ownerId, mountId, folderId)` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) is the server's write by name on the client. It answers a check for each item in or at that folder: an effective owner, or someone a write entry on the item or a folder above it names by email or team, and in the trash only an effective owner. It reads the folders above from the folder's breadcrumb, and until those load only the item's own entries count. `useCanShare(path)` builds on it and decides what the share dialog renders: write by name, unless sharing is restricted for a non-owner, gets `DriveAccessListEdit`. Everyone else gets the read-only `DriveAccessList`: a guest, a viewer, a link-only editor, a restricted non-owner, and anyone, the owner included, on an item in the trash, whose access stays as it is until the restore. Only effective owners see the dialog's **Editors can share** checkbox (checked = not restricted), and a save sends the flag only when they changed it. Both components sit in `packages/ui/src/components/drive/`.
+
+Drive's folder browser and a document's File menu pass that check to `browseCapabilities(canWrite, writesByName)` ([LAYOUT.md](LAYOUT.md#one-drivecapabilities-value-gates-every-drive-action)), and **Move to…**, **Share** and **Email collaborators** ask it of each item. So a link-only editor is offered none of the three, while an item whose own ACL names them, inside a folder they edit only through the link, is offered all three, as the server allows. **Move to…** also asks the item's own `sharingRestricted` against `useIsEffectiveOwnerOf`, which needs no chain, so every view that offers it, a flat one included, hides it from a restricted non-owner. A selection offers **Move to…** only when every item passes, and a drag onto a folder goes only where **Move to…** would. A flat view, such as a filter or an app's document list, has no folder chain and attaches no by-name check, so the server decides that there.
+
+Accepted: the browser works out write by name itself, with the server's `holdsByName`, rather than reading a flag the API serves. It already holds the access lists, a served flag would be a second copy that can go stale, and the server still checks every share, move and mail. Reopen if the rule ever needs data the browser does not hold.
+
+Accepted: the browser is stricter than the server for an entry that grants write without read on a folder above one the person can't read. Their breadcrumb stops below that folder, so **Move to…** and **Share** are hidden though the server would allow them. Handing the browser that folder would show it a folder the person may not read. Reopen if write-only entries become something people make.
 
 ### Design Decisions
 
-**No inheritance.** Per-path, not inherited from parent folders. A subfolder inside a restricted folder is not restricted. Matches Google Drive.
+Accepted: **Editors can share** is per item, not inherited, for sharing and moving alike. So an item inside a restricted folder, without the flag of its own, can still be shared or moved by an editor by name. It matches Google Drive and keeps the check on the item alone. Reopen if owners expect a folder's flag to cover what is in it.
 
 **Self-removal is a delete, not an ACL edit.** A restricted editor cannot touch the ACL at all; the only thing they can do is leave, and that rides on `deletePath` so the ACL route keeps one rule.
 
-**Visibility blocked too.** An editor cannot flip a restricted file to `public-read`: same route, same check.
+**Visibility blocked too.** An editor cannot flip a restricted file to `public-read` or `link`, and a link-only editor can't flip any: same route, same check.
 
 **Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`. `isEffectiveOwner()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control on team paths, including toggling the flag itself.
 
-Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
+Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`, `apps/api/src/test/acl/share-by-name.test.ts`.
 
 See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings, [SCALABILITY.md](SCALABILITY.md) for the home relay, [GUEST-ACCESS.md](GUEST-ACCESS.md) for guests and the share registry, [COLLAB.md](COLLAB.md) for live collab sockets

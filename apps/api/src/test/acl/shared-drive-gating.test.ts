@@ -71,9 +71,16 @@ describe('SharedDrive gating enumeration', () => {
         requireRead: { gate: 'private-helper', reason: 'the read gate itself' },
         requireWrite: { gate: 'private-helper', reason: 'the write gate itself' },
         requireDriveOwner: { gate: 'private-helper', reason: 'the drive-wide listing and trash gate' },
-        requireMove: { gate: 'private-helper', reason: 'the write gates of a move, on source and target' },
+        requireMove: { gate: 'private-helper', reason: 'the write gates of a move, on the item, source and target' },
         isEffectiveOwner: { gate: 'private-helper', reason: 'team co-owner check feeding the gates' },
         sharingRestrictedFor: { gate: 'private-helper', reason: 'the sharingRestricted gate for ACL changes' },
+        requireWriteByName: { gate: 'private-helper', reason: 'write held by name, for sharing and moving' },
+        requireShare: { gate: 'private-helper', reason: 'the gate for ACL changes: write held by name' },
+        requireCopy: {
+            gate: 'private-helper',
+            reason: 'the read gate of a copy, and no document for a reader not live',
+        },
+        holdsRawDatabase: { gate: 'private-helper', reason: 'whether a copy source is or holds a raw database' },
 
         // Drive-wide listings — gated on team membership of the owner; alice is a user, so 403.
         listMounts: { gate: 'denies', reason: 'team-membership gated', call: (sd) => sd.listMounts() },
@@ -98,6 +105,14 @@ describe('SharedDrive gating enumeration', () => {
             gate: 'returns-false',
             reason: 'permission predicate',
             call: (sd) => sd.canWrite(mountId, fileId, charlie),
+        },
+        readerAccess: {
+            gate: 'returns-false',
+            reason: 'permission predicate',
+            call: async (sd) => {
+                const { canRead, canWrite, live } = await sd.readerAccess(mountId, fileId, charlie);
+                return canRead || canWrite || live;
+            },
         },
 
         // Deny-by-shape rather than throw — routes treat the result as absent/filtered.
@@ -184,7 +199,7 @@ describe('SharedDrive gating enumeration', () => {
         },
         withDatabase: {
             gate: 'denies',
-            reason: 'read-gated (opening a container db reads it)',
+            reason: 'read-gated on the container whose db it opens',
             call: (sd) => sd.withDatabase(mountId, probeDbConfig, docId, async () => {}),
         },
         listVersions: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.listVersions(mountId, docId) },
@@ -254,12 +269,12 @@ describe('SharedDrive gating enumeration', () => {
         },
         inviteToChat: {
             gate: 'denies',
-            reason: 'write-gated',
+            reason: 'gated on write held by name, as it shares the document',
             call: (sd) => sd.inviteToChat(mountId, docId, charlie.email),
         },
         updateACLDelta: {
             gate: 'denies',
-            reason: 'write-gated (blocks self-escalation)',
+            reason: 'gated on write held by name (blocks self-escalation)',
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },

@@ -4,7 +4,7 @@
 
 import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import type { DrivePath } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import type { useLongPress } from '../../hooks/use-long-press';
 import { ContextMenuButton } from '../context-menu';
@@ -34,10 +34,9 @@ type DriveRowProps = {
     hideOwner?: boolean;
     hideShared?: boolean;
     hideModified?: boolean;
-    hideShareClick?: boolean;
     hideActions?: boolean;
     getItemDate?: (item: DrivePath) => Date | null;
-    ancestorBreadcrumb?: DrivePath[];
+    ancestorBreadcrumb?: readonly DrivePath[];
     unreadPathIds?: ReadonlySet<string>;
 };
 
@@ -58,7 +57,6 @@ export function DriveRow({
     hideOwner = false,
     hideShared = false,
     hideModified = false,
-    hideShareClick = false,
     hideActions = false,
     getItemDate = (path) => path.updatedAt,
     ancestorBreadcrumb,
@@ -134,8 +132,8 @@ export function DriveRow({
                 <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5 group">
                     <DriveShareSummary
                         path={item}
-                        onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
-                        showIconOnHover={!hideShareClick}
+                        onClick={onShareClick && (() => onShareClick(item))}
+                        showIconOnHover={!!onShareClick}
                         ancestorBreadcrumb={ancestorBreadcrumb}
                         // The row's menu key reaches Share, so Tab doesn't stop on every row.
                         tabIndex={-1}

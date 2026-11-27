@@ -25,6 +25,14 @@ async function putACL(token: string, ownerId: string, mountId: string, pathId: s
     });
 }
 
+async function movePath(token: string, ownerId: string, mountId: string, pathId: string, targetParentId: string) {
+    return authedRequest(token, `/drive/${ownerId}/${mountId}/path/${pathId}/move`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetParentId }),
+    });
+}
+
 describe('Sharing Restricted', () => {
     let ctx: TestCtx;
     let aliceMountId: string;
@@ -313,6 +321,105 @@ describe('Sharing Restricted', () => {
         });
     });
 
+    // A move can land the item in a folder open to more people, so it is a change of access like sharing.
+    describe('only the owner moves a restricted item', () => {
+        let parentId: string;
+        let targetId: string;
+
+        beforeAll(async () => {
+            const parent = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Restricted Move Parent' },
+            );
+            parentId = parent.id;
+            const target = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Restricted Move Target' },
+            );
+            targetId = target.id;
+            for (const id of [parentId, targetId]) {
+                await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${id}/acl`, {
+                    add: [{ id: BOB_EMAIL, read: true, write: true }],
+                });
+            }
+        });
+
+        async function restrictedDoc(name: string): Promise<DrivePath> {
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${parentId}/create/doc`,
+                { fileName: name },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
+                sharingRestricted: true,
+            });
+            return doc;
+        }
+
+        async function parentOf(pathId: string): Promise<string | null> {
+            const path = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${pathId}`);
+            return path.parentId;
+        }
+
+        test('an editor by name cannot move it, and can still rename it', async () => {
+            const doc = await restrictedDoc('Stays Put');
+            const res = await movePath(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, doc.id, targetId);
+            expect(res.status).toBe(403);
+            expect(await res.text()).toBe('Moving is restricted by the owner');
+            expect(await parentOf(doc.id)).toBe(parentId);
+
+            const renamed = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/rename`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newName: 'Renamed By Bob' }),
+                },
+            );
+            expect(renamed.status).toBe(200);
+        });
+
+        test('the owner can move it', async () => {
+            const doc = await restrictedDoc('Owner Moves');
+            const res = await movePath(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, doc.id, targetId);
+            expect(res.status).toBe(200);
+            expect(await parentOf(doc.id)).toBe(targetId);
+        });
+
+        // The flag is the item's own, so an item inside a restricted folder moves as freely as it shares.
+        test('an editor by name can move an unrestricted item out of a restricted folder', async () => {
+            const inner = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${parentId}`,
+                { folderName: 'Restricted Outer' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${inner.id}/acl`, {
+                sharingRestricted: true,
+            });
+            const item = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${inner.id}/create/doc`,
+                { fileName: 'Free Inside' },
+            );
+            const res = await movePath(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, item.id, targetId);
+            expect(res.status).toBe(200);
+            expect(await parentOf(item.id)).toBe(targetId);
+        });
+    });
+
     describe('sharingRestricted shows in Shared with me', () => {
         let folderId: string;
 
@@ -460,6 +567,34 @@ describe('Sharing Restricted', () => {
 
             const path = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, `path/${folderId}`);
             expect(path.sharingRestricted).toBe(true);
+        });
+
+        test('a team member moves a restricted team path, a non-member editor cannot', async () => {
+            const target = await drivePost(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                `folder/${teamRootId}`,
+                { folderName: 'Team Move Target' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, teamOwner, teamMountId, `path/${target.id}/acl`, {
+                add: [{ id: CHARLIE_EMAIL, read: true, write: true }],
+            });
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                teamOwner,
+                teamMountId,
+                `folder/${folderId}/create/doc`,
+                { fileName: 'Team Restricted Doc' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, teamOwner, teamMountId, `path/${doc.id}/acl`, {
+                sharingRestricted: true,
+            });
+
+            const refused = await movePath(ctx.charlie.user.sessionToken, teamOwner, teamMountId, doc.id, target.id);
+            expect(refused.status).toBe(403);
+            const moved = await movePath(ctx.bob.user.sessionToken, teamOwner, teamMountId, doc.id, target.id);
+            expect(moved.status).toBe(200);
         });
     });
 });

@@ -93,6 +93,10 @@ export type ExtractTextJob = {
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
+// The stored document as one garbage-collected update, what a live reader's first sync carries, for a reader who is not
+// live: the rows still hold what an author deleted.
+export type CollabStateJob = { kind: 'collab-state'; documentType: DriveCollabType };
+
 // A conversion of uploaded bytes, which learns of its destination only what an insert fits into. There is one arm per
 // source format, so an impossible pairing, such as xlsx into an eigendoc, does not compile.
 export type SheetsImportJob = {
@@ -125,9 +129,9 @@ export type SlidesImportJob = {
 };
 export type ImportTransformJob = SheetsImportJob | SheetsInsertJob | DocImportJob | SlidesImportJob;
 
-// Preview, export and search extraction read the persisted collaborative document; the
+// Preview, export, search extraction and a reader's state read the persisted collaborative document; the
 // bytes-sourced jobs (the vCard, message and calendar previews, both imports) carry their own input instead.
-export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
+export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob | CollabStateJob;
 export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
 // A workbook read from the live doc: its snapshot and op batches as JSON text, which crosses to the child much faster
@@ -244,6 +248,7 @@ export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
 export type ExportTransformResult = { data: ArrayBuffer; zoom?: number };
+export type CollabStateResult = { data: ArrayBuffer };
 // The lean Sheet[] JSON as UTF-8 bytes, which the main thread commits without parsing it, and the pictures it names.
 export type SheetsImportTransformResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
 // An insert's one batch of addSheet ops as JSON in UTF-8 bytes, which the main thread pushes onto the log, and the
@@ -271,6 +276,7 @@ export type TransformResult =
     | PreviewResult
     | ExtractTextResult
     | ExportTransformResult
+    | CollabStateResult
     | SheetsImportTransformResult
     | SheetsInsertTransformResult
     | DocImportTransformResult
@@ -287,19 +293,21 @@ export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob 
           ? ExtractTextResult
           : R extends { kind: 'export' }
             ? ExportTransformResult
-            : R extends { kind: 'compact' }
-              ? SheetsCompactionResult
-              : R extends { kind: 'references' }
-                ? ReferencesResult
-                : R extends SheetsInsertJob
-                  ? SheetsInsertTransformResult
-                  : R extends { targetType: 'eigensheets' }
-                    ? SheetsImportTransformResult
-                    : R extends { targetType: 'eigendoc' }
-                      ? DocImportTransformResult
-                      : R extends { targetType: 'eigenslides' }
-                        ? SlidesImportTransformResult
-                        : never;
+            : R extends { kind: 'collab-state' }
+              ? CollabStateResult
+              : R extends { kind: 'compact' }
+                ? SheetsCompactionResult
+                : R extends { kind: 'references' }
+                  ? ReferencesResult
+                  : R extends SheetsInsertJob
+                    ? SheetsInsertTransformResult
+                    : R extends { targetType: 'eigensheets' }
+                      ? SheetsImportTransformResult
+                      : R extends { targetType: 'eigendoc' }
+                        ? DocImportTransformResult
+                        : R extends { targetType: 'eigenslides' }
+                          ? SlidesImportTransformResult
+                          : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }

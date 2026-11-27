@@ -13,6 +13,7 @@ import type {
     EigenDocType,
 } from '@workspace/lib/types/drive';
 import {
+    canHaveLink,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
@@ -28,6 +29,7 @@ import type {
     EffectiveMember,
     InviteResult,
 } from '@workspace/lib/types/drive-access';
+import { aclGrants } from '@workspace/lib/types/drive-access';
 import type {
     ClientFileEventRecord,
     FileEvent,
@@ -43,6 +45,7 @@ import { validateACLEntries } from '@workspace/lib/validation';
 import { ChatRoom } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
+import { arePublicLinksEnabled } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag, storageGone } from '../core';
 import type { Home } from '../home';
@@ -61,6 +64,7 @@ import { deleteVersions } from '../versioning/delete';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
+import type { ReaderAccess } from './acl';
 import {
     canReadFromAncestors,
     canWriteFromAncestors,
@@ -68,9 +72,9 @@ import {
     findContainerFromAncestors,
     isInsideDocument,
     isTrashedChain,
-    matchesACL,
     mergeACLDelta,
     normalizeACL,
+    readerAccess,
     refuseDocumentWrite,
 } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
@@ -124,6 +128,12 @@ export class Drive {
         this.home = home;
         this.owner = home.user;
         this.documents = new CollabRegistry(this.owner.id);
+    }
+
+    // Whether the server's public links are on, which every signed-in read counts. It is asked anew each time, as the
+    // owner can switch it while the server runs.
+    public get publicLinks(): boolean {
+        return arePublicLinksEnabled();
     }
 
     public async init(): Promise<void> {
@@ -302,7 +312,7 @@ export class Drive {
         return this.getMount(mountId).getPathsByMimeType(mimeTypePrefix);
     }
 
-    // The search route lets an owner search only their own drive, so SharedDrive has no wrapper for it.
+    // Owner-only, so SharedDrive has no wrapper.
     public search(opts: { q: string; limit: number }): DrivePath[] {
         const merged: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
@@ -839,13 +849,22 @@ export class Drive {
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
-        return canReadFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
+        return canReadFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)), this.publicLinks);
     }
 
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
         return canWriteFromAncestors(ancestors, user, memberships ?? (await getMemberships(user.id)));
+    }
+
+    // One read of the chain and the memberships answers everything a route asks about one reader of a path.
+    public async readerAccess(mountId: string, pathId: string, user: User): Promise<ReaderAccess> {
+        const [chain, memberships] = await Promise.all([
+            this.getMount(mountId).getBreadcrumb(pathId),
+            getMemberships(user.id),
+        ]);
+        return readerAccess(chain, user, memberships, this.publicLinks);
     }
 
     // Merged onto the ACL as it is now, one change per path at a time, or the later write would drop the other's
@@ -866,6 +885,15 @@ export class Drive {
                 throw new ApiError(403, 'Cannot update ACL for root folder');
             }
             const ancestors = await mount.getBreadcrumb(pathId);
+            // The share dialog sends the visibility on every Save, so a link saved while the switch was on still saves.
+            if (visibility === 'link' && item.visibility !== 'link') {
+                if (!this.publicLinks) {
+                    throw new ApiError(403, 'Public links are turned off on this server');
+                }
+                if (!canHaveLink(item.type) || isInsideDocument(ancestors)) {
+                    throw new ApiError(400, 'This item cannot have a public link');
+                }
+            }
 
             const acl = mergeACLDelta(item.acl, delta);
             const aclError = validateACLEntries(acl);
@@ -930,7 +958,7 @@ export class Drive {
         pathId: string,
         emails: readonly string[],
     ): Promise<DriveAccessCheckResult> {
-        return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails);
+        return checkAccessForEmails(this.owner, this.getMount(mountId), pathId, emails, this.publicLinks);
     }
 
     public async emailCollaborators(
@@ -944,7 +972,7 @@ export class Drive {
         return emailCollaborators(this, mountId, pathId, subject, message, sendCopyToSelf, sender);
     }
 
-    // The outermost document at or above the path, or null when there is none, such as for a chat on its own.
+    // The document at or above the path, or null when there is none, such as for a chat on its own.
     public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         return findContainerFromAncestors(await this.getMount(mountId).getBreadcrumb(pathId));
     }
@@ -963,9 +991,7 @@ export class Drive {
     // included, because a restore pushes nothing: a pointer to one stays out of Shared with me until then.
     public async getAllSharedWith(user: User): Promise<DrivePath[]> {
         const memberships = await getMemberships(user.id);
-        return (await this.pathsWithACL()).filter(
-            (path) => path.acl && matchesACL(path.acl, user, memberships, 'read'),
-        );
+        return (await this.pathsWithACL()).filter((path) => aclGrants(path.acl, user, memberships.teamIds, 'read'));
     }
 
     // Every live path of this owner that has an ACL. Only the owner may see this list, so SharedDrive has
@@ -1030,7 +1056,7 @@ export class Drive {
                 const path = chain.at(-1);
                 if (!path || path.parentId === null || !path.mimeType.startsWith(mimeTypePrefix)) continue;
                 if (isTrashedChain(chain) || isInsideDocument(chain)) continue;
-                if (!canReadFromAncestors(chain, user, memberships)) continue;
+                if (!canReadFromAncestors(chain, user, memberships, this.publicLinks)) continue;
                 found.push(path);
             }
         }
@@ -1047,7 +1073,7 @@ export class Drive {
         return ChatRoom.open(this, this.home, path);
     }
 
-    // The route checks ownership, so SharedDrive has no wrapper.
+    // Owner-only, so SharedDrive has no wrapper.
     public async ensureChatsFolder(mountId: string, user: User): Promise<string> {
         return ensureChatsFolder(this, mountId, user);
     }
@@ -1205,7 +1231,9 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             // Each breadcrumb ends in the watched path. A path that no longer exists has an empty one.
             for (const ancestors of await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))) {
-                if (canReadFromAncestors(ancestors, user, memberships)) watched.push(...ancestors.slice(-1));
+                if (canReadFromAncestors(ancestors, user, memberships, this.publicLinks)) {
+                    watched.push(...ancestors.slice(-1));
+                }
             }
         }
         return watched;

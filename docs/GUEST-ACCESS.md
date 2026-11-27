@@ -6,6 +6,8 @@ Guests are how a user shares with someone who has no account on the server. The 
 
 Underneath, a guest is an ordinary account with `role: 'guest'`, so the rest of Eigen needs almost no guest case. What a guest may open is decided by the ACL, through the same `SharedDrive` check every user goes through. The guest's Home, the data folder every account has ([STORAGE.md § A Home is loaded on demand](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), keeps `shared.db`, the list of paths others shared with the guest. A share made before the guest exists waits in the share registry, a server-wide list of "this owner shared something with this address", and each sign-in reads it into `shared.db` ([ACL.md § Reconciliation](ACL.md#reconciliation)).
 
+A guest is not a visitor. A visitor opens an item through its public link, the "Anyone with the link" General access, and has no account, no session and no Home: their requests carry no login and reach only the read routes that opt in through `linkAuth`, read-only and only for what the link opens ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)). A guest who opens the same link is signed in, so they read it as any signed-in non-member does, the access list and the comment threads included, while public links are on. In a collab document a guest named on its ACL, as a viewer too, is a live reader with the socket and presence; one who gets in only through a link loads the stored state and sees no live edits ([COLLAB.md § Only a live reader gets the socket](COLLAB.md#only-a-live-reader-gets-the-socket)).
+
 The sections cover the guest's Home and limits, the sign-in and its rate limits, the registry, access requests, the narrower frontend and the daily cleanup.
 
 ## A guest has a disk-based home with only drive and notifications
@@ -82,11 +84,12 @@ On a closed-signup server, the drive `access-check` (`checkAccessForEmails`, use
 |----------------------------|------------------------------------------|
 | Authenticated + has access | The resource                             |
 | Authenticated + no access  | "Request access" screen with owner info  |
+| Not authenticated, public link | The item, view-only, as a visitor    |
 | Not authenticated          | Login page with guest OTP option         |
 
 Every document app (docs, stickies, slides, sheets, vector) renders `<RequestAccessView>` from `EigenDocEditorRoute` when `useCollabDocumentInfo()` says `!canRead`. Drive shows it when the folder listing fails with a 403 `AppError`, chat when `useCheckPermissions()` says `!canRead`.
 
-A guest sees the same screen without the request form, told to ask the owner to share: `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
+A guest sees the same screen without the request form, told to ask the owner to share: `POST .../request-access` rejects guests with 403 (`requireNonGuest`). A person with no login never sees it: `RequestAccessView` sends them to the login page with the page as the way back, as the route guard `guardLinkRoute` does for an item no link opens, since a request needs an account.
 
 ## An access request notifies the owner and never reveals the path
 
@@ -120,7 +123,7 @@ The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes 
 
 ## Guests have two Admin pages, and one is the org owner's
 
-The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, drawn by the Users page's own table and detail (`AdminUsersTable`, `UserDetail` with `guest`). The route returns the Users row shape, so a guest comes back with no role and no teams. The table keeps name, email and last active, and the detail drops role, teams, storage, backup and the password reset: a guest has none of them, and `GuestHome.size()` is zero. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
+The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, drawn by the Users page's own table and detail (`AdminUsersTable`, `UserDetail` with `guest`). The route returns the Users row shape, so a guest comes back with no role and no teams. The table keeps name, email and last active, and the detail drops role, teams, storage, backup and the password reset: a guest has none of them, and `GuestHome.size()` is zero. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle, the **Public links** section's **Allow public links** switch (`sharing.publicLinks`, [SERVER-SETTINGS.md](SERVER-SETTINGS.md)) and the `guests.inactivityDays` threshold, since all three decide who from outside gets in, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## See also
 

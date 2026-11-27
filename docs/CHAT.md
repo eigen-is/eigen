@@ -26,7 +26,7 @@ A user who can read the room is in it: `read` shows the messages and `write` pos
 
 The access dialog opens from the toolbar's Share button, which only a writer sees. A personal chat also opens it from the share summary on the left of the toolbar (`DriveShareSummary`). A team chat shows the team's avatar there instead, so a read-only member of a team chat has no way into the dialog, on any viewport.
 
-`/invite` and `POST .../invite` put the new entry on the outermost container document for an embedded chat, because that is where inheritance reads it ([ACL.md § Chat Invite Bubbling](ACL.md#chat-invite-bubbling)).
+`/invite` and `POST .../invite` put the new entry on the nearest container document above an embedded chat, because that is where inheritance reads it ([ACL.md § Chat Invite Bubbling](ACL.md#chat-invite-bubbling)). An invite shares that document, so it needs the right to share it: write held by name, never write that comes only from "Anyone signed in with the link". In the room's Share dialog, someone who writes only through the link sees the read-only list.
 
 ## A chat inside a document is a comment thread
 

@@ -6,6 +6,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
 import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
@@ -38,6 +39,7 @@ export function useRecordHistory(ownerId: string, mountId: string, pathId: strin
 
 // limit is part of the key, so Drive's details (5) and the Activity panel (50) cache apart.
 export function useFileHistory(ownerId: string, mountId: string, pathId: string, limit = 5) {
+    const { user } = useAuth();
     return useQuery({
         queryKey: driveKeys.fileHistory(ownerId, mountId, pathId, limit),
         queryFn: async () => {
@@ -47,7 +49,7 @@ export function useFileHistory(ownerId: string, mountId: string, pathId: string,
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId && !!mountId && !!pathId,
+        enabled: !!user && !!ownerId && !!mountId && !!pathId,
         staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }

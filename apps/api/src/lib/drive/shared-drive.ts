@@ -4,6 +4,7 @@
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
 import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
@@ -11,6 +12,7 @@ import type {
     EffectiveMember,
     InviteResult,
 } from '@workspace/lib/types/drive-access';
+import { holdsByName } from '@workspace/lib/types/drive-access';
 import type { ClientFileEventRecord, FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -24,7 +26,8 @@ import type { Mount } from '../mount';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
-import { canonicalACLId, canReadFromAncestors } from './acl';
+import type { ReaderAccess } from './acl';
+import { canonicalACLId, canReadFromAncestors, isRawDatabase, readerAccess } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type { ContentWriteOptions, ContentWriteResult, CopyTarget, Drive } from './drive';
 import type { LockManager } from './lock-manager';
@@ -78,6 +81,10 @@ export class SharedDrive {
         return this.drive.canWrite(mountId, pathId, user, memberships);
     }
 
+    public async readerAccess(mountId: string, pathId: string, user: User): Promise<ReaderAccess> {
+        return this.drive.readerAccess(mountId, pathId, user);
+    }
+
     // A method that makes more than one check looks up the memberships once and passes them to each.
     private async requireRead(
         mountId: string,
@@ -117,6 +124,27 @@ export class SharedDrive {
         return path.sharingRestricted && !this.isEffectiveOwner(path.ownerId, memberships);
     }
 
+    // "Anyone signed in can edit" lets everyone change the content, never hand it on, take it somewhere else or mail
+    // the people who have it. Those need write held by name, as an owner or through an ACL entry on the path or above.
+    private async requireWriteByName(
+        mountId: string,
+        pathId: string,
+        memberships: Memberships,
+        message: string,
+    ): Promise<DrivePath> {
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const path = chain.at(-1);
+        if (!path || !holdsByName(chain, this.user, memberships.teamIds, 'write')) throw new ApiError(403, message);
+        return path;
+    }
+
+    // The owner's restriction comes on top of write held by name.
+    private async requireShare(mountId: string, pathId: string, memberships: Memberships): Promise<DrivePath> {
+        const path = await this.requireWriteByName(mountId, pathId, memberships, 'No permission to change sharing');
+        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
+        return path;
+    }
+
     // ---- Mounts ----
 
     public async listMounts(): Promise<MountInfo[]> {
@@ -150,9 +178,13 @@ export class SharedDrive {
         return this.drive.resolveFile(mountId, pathId);
     }
 
+    // A reader who is not live can't read a container's raw databases, so its listing leaves them out.
     public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
-        await this.requireRead(mountId, pathId);
-        return this.drive.getFolderContents(mountId, pathId);
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const access = readerAccess(chain, this.user, await getMemberships(this.user.id), this.drive.publicLinks);
+        if (!access.canRead) throw new ApiError(403, 'No read permission');
+        const children = await this.drive.getFolderContents(mountId, pathId);
+        return access.live ? children : children.filter((child) => !isRawDatabase([...chain, child]));
     }
 
     public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
@@ -165,7 +197,8 @@ export class SharedDrive {
         const crumbs = await this.drive.breadCrumb(mountId, pathId);
         const memberships = await getMemberships(this.user.id);
         let start = crumbs.length;
-        while (start > 0 && canReadFromAncestors(crumbs.slice(0, start), this.user, memberships)) start--;
+        const publicLinks = this.drive.publicLinks;
+        while (start > 0 && canReadFromAncestors(crumbs.slice(0, start), this.user, memberships, publicLinks)) start--;
         return crumbs.slice(start);
     }
 
@@ -254,7 +287,8 @@ export class SharedDrive {
     }
 
     // The move trashes or writes over what holds the name. Write on the folder covers that path too, as access only
-    // widens down a chain of folders.
+    // widens down a chain of folders. A MOVE that keeps its folder is a rename, as Finder sends one, so it asks what
+    // renamePath asks.
     public async movePathOver(
         mountId: string,
         pathId: string,
@@ -262,16 +296,19 @@ export class SharedDrive {
         name: string,
         checkedId: string | null,
     ): Promise<DrivePath> {
-        await this.requireMove(mountId, pathId, destParentId);
+        const path = await this.drive.getPath(mountId, pathId);
+        if (path?.parentId === destParentId) await this.requireWrite(mountId, destParentId);
+        else await this.requireMove(mountId, pathId, destParentId);
         return this.drive.movePathOver(mountId, pathId, destParentId, name, checkedId, this.user);
     }
 
-    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does.
+    // A move takes the item out of its folder, so it needs write on that folder too, as a rename does. The folder it
+    // lands in can open it to more people, so the move asks what sharing asks.
     private async requireMove(mountId: string, pathId: string, targetParentId: string): Promise<void> {
         const memberships = await getMemberships(this.user.id);
-        await this.requireWrite(mountId, pathId, memberships, 'No write permission on source');
-        const path = await this.drive.getPath(mountId, pathId);
-        if (!path?.parentId) throw new ApiError(403, 'No write permission on source folder');
+        const path = await this.requireWriteByName(mountId, pathId, memberships, 'No permission to move this item');
+        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Moving is restricted by the owner');
+        if (!path.parentId) throw new ApiError(403, 'No write permission on source folder');
         await this.requireWrite(mountId, path.parentId, memberships, 'No write permission on source folder');
         await this.requireWrite(mountId, targetParentId, memberships, 'No write permission on target folder');
     }
@@ -290,7 +327,7 @@ export class SharedDrive {
         to: CopyTarget,
         desiredName: string | undefined,
     ): Promise<DrivePath> {
-        await this.requireRead(mountId, srcPathId, undefined, 'No read permission on source');
+        await this.requireCopy(mountId, srcPathId);
         return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
     }
 
@@ -302,10 +339,29 @@ export class SharedDrive {
         name: string,
         checkedId: string | null,
     ): Promise<DrivePath> {
-        const memberships = await getMemberships(this.user.id);
-        await this.requireRead(mountId, srcPathId, memberships, 'No read permission on source');
-        await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
+        await this.requireCopy(mountId, srcPathId);
+        await this.requireWrite(mountId, destParentId, undefined, 'No write permission on target folder');
         return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
+    }
+
+    // A copy writes the raw databases under its source, so only a live reader copies a source that holds one: a
+    // document, a folder with one in it or a document's saved versions.
+    private async requireCopy(mountId: string, srcPathId: string): Promise<void> {
+        const access = await this.readerAccess(mountId, srcPathId, this.user);
+        if (!access.canRead) throw new ApiError(403, 'No read permission on source');
+        if (access.live) return;
+        if (await this.holdsRawDatabase(mountId, await this.drive.breadCrumb(mountId, srcPathId))) {
+            throw new ApiError(403, 'Only people with access can copy this document');
+        }
+    }
+
+    private async holdsRawDatabase(mountId: string, chain: DrivePath[]): Promise<boolean> {
+        if (isRawDatabase(chain)) return true;
+        const path = chain.at(-1);
+        if (!path || path.type === DRIVE_TYPE_FILE) return false;
+        const children = await this.drive.getFolderContents(mountId, path.id);
+        const held = await Promise.all(children.map((child) => this.holdsRawDatabase(mountId, [...chain, child])));
+        return held.includes(true);
     }
 
     // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its
@@ -369,8 +425,7 @@ export class SharedDrive {
 
     // ---- Access and sharing ----
 
-    // Write access comes first, so a reader gets the same 403 as on any path they can't change. A value
-    // for the restriction from anyone but an owner is dropped.
+    // A value for the restriction from anyone but an owner is dropped.
     public async updateACLDelta(
         mountId: string,
         pathId: string,
@@ -381,12 +436,7 @@ export class SharedDrive {
         options?: ACLPropagationOptions,
     ): Promise<void> {
         const memberships = await getMemberships(this.user.id);
-        await this.requireWrite(mountId, pathId, memberships);
-
-        const path = await this.drive.getPath(mountId, pathId);
-        if (!path) throw new ApiError(404, 'Path not found');
-        if (this.sharingRestrictedFor(path, memberships)) throw new ApiError(403, 'Sharing is restricted by the owner');
-
+        const path = await this.requireShare(mountId, pathId, memberships);
         const effectiveOwner = this.isEffectiveOwner(path.ownerId, memberships);
         return this.drive.updateACLDelta(
             mountId,
@@ -413,15 +463,19 @@ export class SharedDrive {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, pathId, memberships);
 
-        const path = await this.drive.getPath(mountId, pathId);
+        const chain = await this.drive.breadCrumb(mountId, pathId);
+        const path = chain.at(-1);
         if (!path) throw new ApiError(404, 'Path not found');
 
-        const canWrite = await this.canWrite(mountId, pathId, this.user, memberships);
-        const canShare = canWrite && !this.sharingRestrictedFor(path, memberships);
+        const canShare =
+            holdsByName(chain, this.user, memberships.teamIds, 'write') &&
+            !this.sharingRestrictedFor(path, memberships);
         const { recipients } = await this.drive.checkAccessForEmails(mountId, pathId, emails);
         return { canShare, recipients };
     }
 
+    // A mail to everyone the path is shared with is for those who may manage its sharing. The owner's restriction
+    // limits who changes access, not who writes to the people who have it.
     public async emailCollaborators(
         mountId: string,
         pathId: string,
@@ -429,12 +483,13 @@ export class SharedDrive {
         message: string,
         sendCopyToSelf: boolean,
     ): Promise<{ sent: number }> {
-        await this.requireWrite(mountId, pathId);
+        const memberships = await getMemberships(this.user.id);
+        await this.requireWriteByName(mountId, pathId, memberships, 'No permission to email collaborators');
         return this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, this.user);
     }
 
-    // An invite to a chat inside a document shares the document. So it needs write access to both, and
-    // the document's sharing restriction counts.
+    // An invite to a chat inside a document shares the document. So it needs write on the chat, and the right to
+    // share the document.
     public async inviteToChat(mountId: string, chatId: string, email: string): Promise<InviteResult> {
         const memberships = await getMemberships(this.user.id);
         await this.requireWrite(mountId, chatId, memberships);
@@ -443,14 +498,7 @@ export class SharedDrive {
         if (!chatPath) throw new ApiError(404, 'Chat not found');
 
         const container = await this.drive.findContainerPath(mountId, chatPath.parentId ?? '');
-        if (container) {
-            await this.requireWrite(mountId, container.id, memberships, 'No write permission on container document');
-        }
-        const target = container ?? chatPath;
-        if (this.sharingRestrictedFor(target, memberships)) {
-            throw new ApiError(403, 'Sharing is restricted by the owner');
-        }
-
+        const target = await this.requireShare(mountId, (container ?? chatPath).id, memberships);
         return this.drive.inviteToChat(mountId, chatId, email, this.user, target);
     }
 
@@ -552,15 +600,17 @@ export class SharedDrive {
 
     // ---- Document databases ----
 
-    // A document's databases, such as its comments.db, hold what the document holds. So opening one
-    // needs read access.
+    // A document's databases, such as its comments.db, hold what the document holds, and the server answers from them
+    // without handing them over. So opening one needs read access to its document, which a reader who is not live has.
     public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
         fn: (db: ManagedDatabase<S>) => Promise<T>,
     ): Promise<T> {
-        await this.requireRead(mountId, pathId);
+        const database = await this.drive.getPath(mountId, pathId);
+        if (!database?.parentId) throw new ApiError(403, 'No read permission');
+        await this.requireRead(mountId, database.parentId);
         return this.drive.withDatabase(mountId, config, pathId, fn);
     }
 }

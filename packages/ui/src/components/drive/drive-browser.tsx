@@ -133,7 +133,6 @@ export function DriveBrowser({
                     isItemDisabled={isItemDisabled}
                     hideModified
                     hideOwner
-                    hideShareClick
                     hideActions
                     hideHeader={hideHeader}
                     onSelectionChange={onSelectionChange}

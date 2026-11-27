@@ -35,6 +35,8 @@ export const TRANSFORM_LIMITS: Record<
     // Search reindexing: nobody waits on it, but a stuck job must not hold the single active child away from
     // user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
+    // A reader's whole document as one update: a materialize and an encode, so a preview's limits.
+    'collab-state': { deadlineMs: 30_000, admissionCostMs: 15_000 },
     // A workbook's log folded at its close, in the background. A long log folds until just before the deadline, so
     // the one child it holds is priced at all of it.
     compact: { deadlineMs: 60_000, admissionCostMs: 60_000 },

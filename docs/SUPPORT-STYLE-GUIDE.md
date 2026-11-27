@@ -95,7 +95,7 @@ Every article is exactly **one** [Diátaxis](https://diataxis.fr) type, matching
   ```html
   <div class="eigen-callout">
 
-  An **Unrestricted** link still requires the other person to sign in to Eigen. It isn't open to the public web.
+  With **Anyone signed in with the link**, the other person still signs in to Eigen. It isn't open to the public web.
 
   </div>
   ```

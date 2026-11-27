@@ -2,8 +2,9 @@
 // list level as ?panel=comments or ?panel=activity and the thread it drilled into as ?chat=. Opening from closed
 // pushes, a move between the list and a thread replaces, and close goes back over that push or replaces on a link. A
 // thread that closes or goes lands on the list. The host draws the toolbar's toggles from it and the shell renders
-// CommentsColumn while it is open.
+// CommentsColumn while it is open. A visitor without a login gets no activity, since it lists the history.
 
+import { useAuth } from '@workspace/lib/auth';
 import type { DocumentPanel } from '@workspace/lib/types/comments';
 import { useEffect, useEffectEvent } from 'react';
 import { useEigenDocEditorSearch } from '../drive/eigendoc-config';
@@ -27,7 +28,7 @@ export type CommentsColumnState = {
     commentsOpen: boolean;
     activityOpen: boolean;
     toggleComments: () => void;
-    toggleActivity: () => void;
+    toggleActivity?: () => void;
     // A list row's and an activity row's open, which reveal the anchor first.
     openThread: (cardId: string) => void;
     openChat: (chatName: string) => void;
@@ -44,6 +45,7 @@ export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): 
     lifecycle: CommentLifecycleBundle;
     column: CommentsColumnState;
 } {
+    const { user } = useAuth();
     const { panel, chat } = useEigenDocEditorSearch();
     const { isMobile, isTablet } = useLayout();
     const listPanel = panel ?? 'comments';
@@ -78,7 +80,7 @@ export function useCommentsColumn({ reveal, ...hostArgs }: CommentsColumnArgs): 
             commentsOpen: open && listPanel === 'comments',
             activityOpen: open && listPanel === 'activity',
             toggleComments: () => toggle('comments'),
-            toggleActivity: () => toggle('activity'),
+            toggleActivity: user ? () => toggle('activity') : undefined,
             openThread,
             // A comment whose card is gone opens as deleted, still named by its chat.
             openChat: (chatName) => lifecycle.openChat(chatName, openThread),

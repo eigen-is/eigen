@@ -140,7 +140,7 @@ suite('canvas PDF — text, opaque and translucent elements print wherever they 
         const collab = await home.drive.getCollabDocument('default', created.id);
         seedVectorDoc(collab.doc, scene);
         const { mount, path } = await home.drive.resolveFile('default', created.id);
-        return rasterize((await exportDocument(mount, path, 'pdf')).data);
+        return rasterize((await exportDocument(mount, path, 'pdf', 'foreground')).data);
     }
 
     // Every element of `placed` printed, its area `margin` scene pixels from the page's top-left on a

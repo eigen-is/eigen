@@ -1,11 +1,10 @@
 // The Share dialog for one Drive item: who has access, the link's general access, and whether editors may share. An
-// owner or editor edits the list and saves it. A viewer, a guest and an editor whose owner restricted sharing only
-// see it. Drive's item menu and an editor's Share button open it, for example. Its envelope button closes Share and
-// opens Email collaborators for the same item, which stays open even when the host drops the path as Share closes. A
-// host that moves to another item, as Back does in an editor, gets a fresh dialog for that item.
+// owner or an editor by name edits the list and saves it. Everyone else only sees it, such as a guest, someone who
+// edits only through the signed-in link, or anyone while the item is in the trash. Drive's item menu and an editor's
+// Share button open it. Its envelope opens Email collaborators for the same item, which outlives the closed Share, and
+// a host that moves to another item, as Back does in an editor, gets a fresh dialog for that item.
 
-import { useIsGuest } from '@workspace/lib/auth';
-import { useCheckPermissions, useIsEffectiveOwner } from '@workspace/lib/drive';
+import { useCanShare } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DialogFooter } from '@workspace/ui/components/dialog';
@@ -71,30 +70,22 @@ function ShareDialog({
     prefillEmail?: string;
     onEmailClick: () => void;
 }) {
-    const isGuest = useIsGuest();
-    const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
-    const { data: permissions } = useCheckPermissions(path.ownerId, path.mountId, path.id);
-    // The server refuses a save from someone who may not write, such as a viewer who opened Share from Chat's share
-    // summary. Until the permissions load, the list stays editable, so an owner never waits for them.
-    const mayNotWrite = permissions?.canWrite === false;
-    const readOnly = isGuest || mayNotWrite || (path.sharingRestricted && !isEffectiveOwner);
+    const canShare = useCanShare(path);
 
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title={`Share '${stripEigenExtension(path.name)}'`}>
-            {readOnly ? (
+            {canShare ? (
+                <DriveAccessListEdit path={path} prefillEmail={prefillEmail} onEmailClick={onEmailClick} />
+            ) : (
                 <>
                     <p className="text-sm text-muted-foreground">
-                        {mayNotWrite ? 'You can view who has access.' : 'Sharing is restricted by the owner.'}
+                        {path.sharingRestricted
+                            ? 'Sharing is restricted by the owner.'
+                            : 'You can view who has access.'}
                     </p>
                     <DriveAccessList path={path} scrollable className="max-h-[60vh]" />
                     <DialogFooter showCloseButton />
                 </>
-            ) : (
-                <DriveAccessListEdit
-                    path={path}
-                    prefillEmail={prefillEmail}
-                    onEmailClick={permissions?.canWrite ? onEmailClick : undefined}
-                />
             )}
         </FormDialog>
     );

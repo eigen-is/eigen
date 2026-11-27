@@ -1,6 +1,7 @@
 // A board whose doc syncs empty gets the default columns and a welcome card with its own thread, and a card stored
 // without a thread gets one, but only for someone who may write it. A reader of a shared board would try to create the
-// thread in the sharer's drive and write a board only their own screen shows.
+// thread in the sharer's drive and write a board only their own screen shows. The same holds for the repair of a card
+// no column lists.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -58,6 +59,17 @@ async function openBoard(canWrite: boolean) {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
+// One column, and a card no column lists, which the repair puts in the first column.
+function boardWithStrayCard() {
+    doc = new Y.Doc();
+    const column = new Y.Map<unknown>();
+    column.set('title', 'To Do');
+    column.set('taskIds', new Y.Array<string>());
+    doc.getMap('columns').set('c1', column);
+    doc.getArray<string>('columnOrder').push(['c1']);
+    doc.getMap('tasks').set('t1', new Y.Map());
+}
+
 async function openEmptyBoard(canWrite: boolean) {
     doc = new Y.Doc();
     await openBoard(canWrite);
@@ -93,6 +105,21 @@ test('a reader opening an empty board creates no thread and seeds nothing', asyn
     expect(createChat).not.toHaveBeenCalled();
     expect(doc.getMap('columns').size).toBe(0);
     expect(doc.getMap('tasks').size).toBe(0);
+});
+
+test('a writer opening a board with a stray card files it in the first column', async () => {
+    boardWithStrayCard();
+    await openBoard(true);
+    expect(readBoard(doc).columns.c1.taskIds).toEqual(['t1']);
+});
+
+test("a reader's board with a stray card stays as stored, since the server drops a reader's repair", async () => {
+    boardWithStrayCard();
+    let updates = 0;
+    doc.on('update', () => updates++);
+    await openBoard(false);
+    expect(updates).toBe(0);
+    expect(readBoard(doc).columns.c1.taskIds).toEqual([]);
 });
 
 test('a writer opening a board gives a card stored without a thread its own, which undo keeps', async () => {

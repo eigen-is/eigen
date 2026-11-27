@@ -242,6 +242,8 @@ export const getDriveItemThumbnail = (path: DrivePath): { showThumbnail: boolean
 };
 export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
+export const getCollabStateUrl = (ownerId: string, mountId: string, pathId: string) =>
+    `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/state`;
 const getInlineEditUrl = (ownerId: string, mountId: string, pathId: string) =>
     getDriveAppUrl(`edit/${ownerId}/${mountId}/${pathId}`);
 export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) =>

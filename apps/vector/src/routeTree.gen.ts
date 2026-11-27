@@ -14,8 +14,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthSidebarRouteImport } from './routes/_auth._sidebar'
 import { Route as AuthSidebarIndexRouteImport } from './routes/_auth._sidebar.index'
 import { Route as AuthSidebarSharedToRouteImport } from './routes/_auth._sidebar.shared.$to'
+import { Route as VectorOwnerIdMountIdPathIdRouteImport } from './routes/vector.$ownerId.$mountId.$pathId'
 import { Route as AuthSidebarDriveOwnerIdMountIdRouteImport } from './routes/_auth._sidebar.drive.$ownerId.$mountId'
-import { Route as AuthVectorOwnerIdMountIdPathIdRouteImport } from './routes/_auth.vector.$ownerId.$mountId.$pathId'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
@@ -40,32 +40,32 @@ const AuthSidebarSharedToRoute = AuthSidebarSharedToRouteImport.update({
   path: '/shared/$to',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
+const VectorOwnerIdMountIdPathIdRoute =
+  VectorOwnerIdMountIdPathIdRouteImport.update({
+    id: '/vector/$ownerId/$mountId/$pathId',
+    path: '/vector/$ownerId/$mountId/$pathId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthSidebarDriveOwnerIdMountIdRoute =
   AuthSidebarDriveOwnerIdMountIdRouteImport.update({
     id: '/drive/$ownerId/$mountId',
     path: '/drive/$ownerId/$mountId',
     getParentRoute: () => AuthSidebarRoute,
   } as any)
-const AuthVectorOwnerIdMountIdPathIdRoute =
-  AuthVectorOwnerIdMountIdPathIdRouteImport.update({
-    id: '/vector/$ownerId/$mountId/$pathId',
-    path: '/vector/$ownerId/$mountId/$pathId',
-    getParentRoute: () => AuthRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthSidebarIndexRoute
   '/login': typeof LoginRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/vector/$ownerId/$mountId/$pathId': typeof VectorOwnerIdMountIdPathIdRoute
   '/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/vector/$ownerId/$mountId/$pathId': typeof AuthVectorOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AuthSidebarIndexRoute
   '/login': typeof LoginRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/vector/$ownerId/$mountId/$pathId': typeof VectorOwnerIdMountIdPathIdRoute
   '/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/vector/$ownerId/$mountId/$pathId': typeof AuthVectorOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -74,8 +74,8 @@ export interface FileRoutesById {
   '/_auth/_sidebar': typeof AuthSidebarRouteWithChildren
   '/_auth/_sidebar/': typeof AuthSidebarIndexRoute
   '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
+  '/vector/$ownerId/$mountId/$pathId': typeof VectorOwnerIdMountIdPathIdRoute
   '/_auth/_sidebar/drive/$ownerId/$mountId': typeof AuthSidebarDriveOwnerIdMountIdRoute
-  '/_auth/vector/$ownerId/$mountId/$pathId': typeof AuthVectorOwnerIdMountIdPathIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -83,15 +83,15 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/shared/$to'
-    | '/drive/$ownerId/$mountId'
     | '/vector/$ownerId/$mountId/$pathId'
+    | '/drive/$ownerId/$mountId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/shared/$to'
-    | '/drive/$ownerId/$mountId'
     | '/vector/$ownerId/$mountId/$pathId'
+    | '/drive/$ownerId/$mountId'
   id:
     | '__root__'
     | '/_auth'
@@ -99,13 +99,14 @@ export interface FileRouteTypes {
     | '/_auth/_sidebar'
     | '/_auth/_sidebar/'
     | '/_auth/_sidebar/shared/$to'
+    | '/vector/$ownerId/$mountId/$pathId'
     | '/_auth/_sidebar/drive/$ownerId/$mountId'
-    | '/_auth/vector/$ownerId/$mountId/$pathId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
+  VectorOwnerIdMountIdPathIdRoute: typeof VectorOwnerIdMountIdPathIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -145,19 +146,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSidebarSharedToRouteImport
       parentRoute: typeof AuthSidebarRoute
     }
+    '/vector/$ownerId/$mountId/$pathId': {
+      id: '/vector/$ownerId/$mountId/$pathId'
+      path: '/vector/$ownerId/$mountId/$pathId'
+      fullPath: '/vector/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof VectorOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/_sidebar/drive/$ownerId/$mountId': {
       id: '/_auth/_sidebar/drive/$ownerId/$mountId'
       path: '/drive/$ownerId/$mountId'
       fullPath: '/drive/$ownerId/$mountId'
       preLoaderRoute: typeof AuthSidebarDriveOwnerIdMountIdRouteImport
       parentRoute: typeof AuthSidebarRoute
-    }
-    '/_auth/vector/$ownerId/$mountId/$pathId': {
-      id: '/_auth/vector/$ownerId/$mountId/$pathId'
-      path: '/vector/$ownerId/$mountId/$pathId'
-      fullPath: '/vector/$ownerId/$mountId/$pathId'
-      preLoaderRoute: typeof AuthVectorOwnerIdMountIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
     }
   }
 }
@@ -180,12 +181,10 @@ const AuthSidebarRouteWithChildren = AuthSidebarRoute._addFileChildren(
 
 interface AuthRouteChildren {
   AuthSidebarRoute: typeof AuthSidebarRouteWithChildren
-  AuthVectorOwnerIdMountIdPathIdRoute: typeof AuthVectorOwnerIdMountIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthSidebarRoute: AuthSidebarRouteWithChildren,
-  AuthVectorOwnerIdMountIdPathIdRoute: AuthVectorOwnerIdMountIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -193,6 +192,7 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
+  VectorOwnerIdMountIdPathIdRoute: VectorOwnerIdMountIdPathIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

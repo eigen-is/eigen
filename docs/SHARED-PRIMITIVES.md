@@ -5,7 +5,7 @@
 > `packages/ui`, `packages/math` and `packages/formula`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2470 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2495 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -391,7 +391,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (326)
+## Hooks (330)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -497,6 +497,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUnreadCommentChatNames` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
+| `useCollabStoredState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
 | `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
 | `useYjsUndoState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-state.ts |
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
@@ -533,6 +534,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useAttachmentSubjects` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-attachment-subjects.ts |
 | `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useCanShare` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useCanWriteFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
@@ -582,7 +584,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useUploadFiles` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useVCardPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useViewerMayUse` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-actions.ts |
 | `useWatchToggle` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useWritesByName` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useZombieMediaSweep` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
@@ -722,7 +726,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (483)
+## Types (484)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -939,6 +943,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ParsedMail` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ParsedOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `PublicConfig` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecentPath` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1210,7 +1215,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FormContract` | `@workspace/ui/test/form-contract` | packages/ui/src/test/form-contract.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1296)
+## Utilities & constants (1316)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1291,6 +1296,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getCalendarImportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChangelogUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getChatAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getCollabStateUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getCollabWebSocketUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getContactsAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getContactsAvatarUploadUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1510,6 +1516,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `boardCardIds` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
+| `collabStateEpoch` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
+| `collabStateVersion` | `@workspace/lib/collab` | packages/lib/src/core/collab/collab-state.ts |
 | `getIdArray` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getIdArrayRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `getItemMapRoot` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
@@ -1811,6 +1819,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
+| `fetchPathPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `forgetPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/keys.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
@@ -1970,9 +1979,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `previewCountLines` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `remainingLine` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
+| `aclGrants` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CALENDAR_SHARE_PERMISSIONS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CALENDAR_VIEW_MODES` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `canHaveLink` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `CARD_TITLE_MAX_LENGTH` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `celebrationsOn` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -2010,6 +2021,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `findContactByEmail` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `holdsByName` | `@workspace/lib/types` | packages/lib/src/types/drive-access.ts |
 | `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `ICS_CONTENT_TYPE` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
 | `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
@@ -2021,6 +2033,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isConvertSource` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
 | `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive-convert.ts |
+| `isDocumentMediaFolder` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `isEmlFile` | `@workspace/lib/types` | packages/lib/src/types/file-kinds.ts |
@@ -2433,6 +2446,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_DOC_APP_CONFIGS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocSharedTitle` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `GENERAL_ACCESS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `getFileIcon` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
@@ -2447,6 +2461,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `columnWidthPx` | `@workspace/ui/components/layout/app` | packages/ui/src/components/layout/app/column-widths.ts |
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
+| `guardLinkRoute` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
+| `loginLocation` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `FILTER_LABELS` | `@workspace/ui/components/layout/sidebar` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `readImageSize` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
@@ -2510,3 +2526,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `loadReact` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `unmountAllRoots` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
+| `editorVisitorTests` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `isVisitorRoute` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `labelled` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `OWNER` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `session` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `sessionAuth` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `visitorServer` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `withProviders` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |
+| `withSession` | `@workspace/ui/test/visitor-server` | packages/ui/src/test/visitor-server.ts |

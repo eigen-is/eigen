@@ -515,7 +515,14 @@ describe('Sheets xlsx import/convert', () => {
             return realGet(id, pathId);
         });
         try {
-            await importIntoDocument(home.drive, path, Buffer.from(await labelled()), { mode: 'insert' }, user);
+            await importIntoDocument(
+                home.drive,
+                path,
+                Buffer.from(await labelled()),
+                { mode: 'insert' },
+                user,
+                'foreground',
+            );
         } finally {
             getSpy.mockRestore();
         }
@@ -785,7 +792,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!);
+            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!, 'foreground');
         } catch (e) {
             error = e;
         }
@@ -822,7 +829,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!);
+            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!, 'foreground');
         } catch (e) {
             error = e;
         } finally {
@@ -852,7 +859,7 @@ describe('Sheets xlsx import/convert', () => {
         });
         try {
             const replacement = Buffer.from(buildXlsxBuffer([{ a1: 'A1', value: 'New' }], 'Replaced'));
-            await importIntoDocument(home.drive, path, replacement, { mode: 'replace' }, user);
+            await importIntoDocument(home.drive, path, replacement, { mode: 'replace' }, user, 'foreground');
         } finally {
             canWriteSpy.mockRestore();
         }

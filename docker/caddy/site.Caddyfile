@@ -4,6 +4,8 @@
 (app) {
     redir /{args[0]} /{args[0]}/ 308
     handle_path /{args[0]}/* {
+        # An app page is never for a search engine, a public link's page included.
+        header X-Robots-Tag noindex
         root * /www/{args[0]}
         try_files {path} /index.html
         file_server
@@ -35,6 +37,11 @@
 
     # API + WebSocket — strip /eigen/ prefix before proxying (Caddy forwards upgrade requests transparently)
     handle_path /eigen/* {
+        # A collab state is a binary Yjs update, which the encode above leaves out, and it compresses well.
+        @collab path /collab/*
+        encode @collab zstd gzip {
+            match header Content-Type application/octet-stream
+        }
         reverse_proxy eigen-api:8000 {
             flush_interval -1
             header_up X-Real-IP {client_ip}

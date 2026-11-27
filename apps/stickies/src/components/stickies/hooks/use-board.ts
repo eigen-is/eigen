@@ -1,7 +1,7 @@
 // A Stickies board's Yjs doc as the state its components read: readBoard lists the columns and their card ids, and
-// the hook opens the doc, runs the shared ref repair on sync, and adds a column. For someone who may write the board it
-// also seeds a new board and gives each card stored without a thread its own. The board component calls it; the cards
-// themselves go through the shared comment-card code.
+// the hook opens the doc and adds a column. For someone who may write the board it also runs the shared ref repair on
+// sync, seeds a new board and gives each card stored without a thread its own. The board component calls it; the
+// cards themselves go through the shared comment-card code.
 
 import { useAuth } from '@workspace/lib/auth';
 import type { CollabDoc } from '@workspace/lib/collab';
@@ -57,7 +57,14 @@ export function readBoard(doc: Y.Doc): BoardData {
 
 type UseBoardResult = Pick<
     CollabDoc,
-    'provider' | 'undoManager' | 'offline' | 'loaded' | 'storageUnavailable' | 'storageGone' | 'unsyncedEdits'
+    | 'provider'
+    | 'undoManager'
+    | 'offline'
+    | 'loaded'
+    | 'storageUnavailable'
+    | 'storageGone'
+    | 'loadError'
+    | 'unsyncedEdits'
 > & {
     board: BoardData;
     yjsDoc: Y.Doc | null;
@@ -176,6 +183,7 @@ export const useBoard = (
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId,
@@ -214,9 +222,10 @@ export const useBoard = (
         onSync: ({ doc }, synced) => {
             if (!synced || initializedRef.current) return;
             initializedRef.current = true;
-            normalizeBoard(doc);
-            // A reader can't write the board or create a thread in the sharer's drive.
+            // The server drops a reader's writes, so a reader repairs nothing, seeds nothing and creates no thread in
+            // the sharer's drive.
             if (!canWriteRef.current) return;
+            normalizeBoard(doc);
             repairCardThreads(doc).catch(console.error);
             if (doc.getMap('columns').size === 0) {
                 initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
@@ -276,6 +285,7 @@ export const useBoard = (
         loaded,
         storageUnavailable,
         storageGone,
+        loadError,
         unsyncedEdits,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,

@@ -2,7 +2,8 @@
 // gated as Drive gates them, and hands the command palette the same rows. A guest may not mail people
 // through the server, a reader may not share, and an item shared with the viewer is removed, not trashed.
 // Make a copy lands beside the file as Drive's Duplicate does, and greys out where Duplicate would not apply.
-// Open recent lists the viewer's recent files of the app's own kind, without the open one.
+// Open recent lists the viewer's recent files of the app's own kind, without the open one. A visitor without a login
+// keeps only the editor's own rows, such as Print, and no File menu when the editor has none.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -29,12 +30,14 @@ g.fetch = async (input: string | URL | Request, init?: RequestInit) => {
 };
 
 let isGuest = false;
-const session = { user: { id: 'user-1', email: 'editor@example.com' } };
+const EDITOR = { id: 'user-1', email: 'editor@example.com' };
+const session: { user: typeof EDITOR | null } = { user: EDITOR };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => isGuest }));
 
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { DropdownMenuItem } = await import('../../../../components/dropdown-menu');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('../../../drive-path');
@@ -50,7 +53,10 @@ const unmountLast = async () => {
     await unmount();
     unmount = async () => {};
 };
-afterEach(unmountLast);
+afterEach(async () => {
+    await unmountLast();
+    session.user = EDITOR;
+});
 
 const plan = drivePath({ name: 'Plan', mimeType: DRIVE_MIME_DOC, ownerId: 'user-1', parentId: 'root' });
 const sharedWithMe = drivePath({
@@ -62,7 +68,7 @@ const sharedWithMe = drivePath({
 });
 
 // Opens the File menu on the item and returns its rows, and the ids of the rows it handed the palette.
-async function openFileMenu(path: DrivePath = plan, canWrite = true) {
+async function openFileMenu(path: DrivePath = plan, canWrite = true, editorRows?: string[]) {
     await unmountLast();
     const published: { actions: PaletteSelectionActions } = { actions: null };
     function Reader() {
@@ -74,8 +80,10 @@ async function openFileMenu(path: DrivePath = plan, canWrite = true) {
         canWrite,
         onAccessDialogOpen: () => {},
         onImport: () => {},
+        onExport: () => {},
         createLabel: 'New doc',
         createType: 'doc',
+        children: editorRows?.map((row) => createElement(DropdownMenuItem, { key: row }, row)),
     });
     const router = createRouter({
         routeTree: createRootRoute({
@@ -193,4 +201,27 @@ test('Make a copy copies the file beside itself as "Copy of" its name', async ()
             body: { targetOwnerId: 'user-1', targetMountId: 'default', targetParentId: 'root', name: 'Copy of Plan' },
         },
     ]);
+});
+
+test('a visitor keeps only the editor rows, such as Print, and no Download, copy or version history', async () => {
+    session.user = null;
+    const { rows, palette } = await openFileMenu(plan, false, ['Page setup…', 'Print']);
+    expect(rows).toEqual(['Page setup…', 'Print']);
+    expect(palette).toEqual([]);
+});
+
+test('a visitor gets no File menu where the editor has no rows of its own', async () => {
+    session.user = null;
+    await openFileMenu(plan, false);
+    const trigger = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent === 'File',
+    );
+    expect(trigger).toBeUndefined();
+});
+
+test('a reader keeps Download and the rows around the editor rows', async () => {
+    const { rows } = await openFileMenu(plan, false, ['Print']);
+    expect(rows).toContain('Download');
+    expect(rows).toContain('New doc');
+    expect(rows).toContain('Print');
 });

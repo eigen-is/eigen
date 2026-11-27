@@ -32,10 +32,12 @@ type LayoutProps = {
 let layout: LayoutProps | undefined;
 
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realLayout = { ...(await import('../../../components/drive/drive-layout')) };
 const realQuickLook = { ...(await import('../../../components/drive/use-drive-quick-look')) };
 const listing = { data: [row, otherRow], isLoading: false, error: null };
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: { id: 'owner-1' } }) }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     usePathInfo: () => ({ data: null }),
@@ -60,6 +62,7 @@ mock.module('../../../components/drive/drive-layout', () => ({
 }));
 mock.module('../../../components/drive/use-drive-quick-look', () => ({ useDriveQuickLook: () => () => {} }));
 afterAll(() => {
+    mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('../../../components/drive/drive-layout', () => realLayout);
     mock.module('../../../components/drive/use-drive-quick-look', () => realQuickLook);

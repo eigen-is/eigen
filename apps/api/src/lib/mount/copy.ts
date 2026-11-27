@@ -96,12 +96,7 @@ async function copyTree(
         : await copyFile(mount, source, listed, parentId, name);
     createdIds.add(copyId);
     if (isEigenDoc) documentIds?.push(copyId);
-    const details = {
-        sourceOwnerId: source.history.ownerId,
-        sourceMountId: source.history.mountId,
-        sourcePathId: listed.id,
-    };
-    mount.history.record({ pathId: copyId, eventType: 'copied', actor, details });
+    mount.history.record({ pathId: copyId, eventType: 'copied', actor });
     const below = isEigenDoc ? null : documentIds;
     for (const child of tree.children) {
         await copyTree(mount, source, child, copyId, child.path.name, actor, createdIds, below);

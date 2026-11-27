@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-11-11
+updated: 2026-11-26
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in with a one-time code sent to their email address, not a password, so they do not need a full account on your server.
@@ -32,6 +32,12 @@ The guest access settings are only visible to the server **Owner**. Admins canno
 When **Allow open guest signup** is on (the default), anyone can enter their email address and request a sign-in code, even before anything has been shared with them. They will be able to sign in, though they will see an empty workspace until you share something.
 
 Turn this off if you want to restrict sign-in codes to email addresses that already have a pending share. With open signup off, someone whose email is not in any share gets an error when they request a code.
+
+### Allow public links
+
+When **Allow public links** is on (the default), people on your server can choose **Anyone with the link** in a **Share** dialog. Anyone who has such a link can then view the file, folder or document without an account and without signing in ([Share with a public link](/support/drive/share-with-a-public-link)).
+
+Turn it off and nobody can make a new public link. Every link already made stops working too, for people who aren't signed in and for signed-in people who weren't added to the item. Turn it on again and those links open the same items once more. A demo server never allows public links.
 
 ### Days of inactivity before deletion
 

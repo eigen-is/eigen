@@ -5,6 +5,7 @@
 
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
@@ -18,7 +19,7 @@ import { useDriveQuickLook } from './use-drive-quick-look';
 
 type UseDriveListRouteOptions = {
     // The unsorted items backing the list: the fallback preview passes this whole set as siblings.
-    items: DrivePath[];
+    items: readonly DrivePath[];
     // The view's own capabilities: the preview's convert rows need somewhere to write.
     capabilities: DriveCapabilities;
     // Where a folder opens: the folder view, for example, stays in its own route.
@@ -48,8 +49,9 @@ type DriveListRouteHandlers = {
 };
 
 // A row activates by its kind: a folder opens in the route, a document in its app, an editable text file
-// in the editor, anything else in the preview. Selecting a row updates an open preview, and on mobile a
-// folder or a document opens straight away.
+// in the editor, anything else in the preview. A visitor without a login has no editor, so a text file
+// previews for them. Selecting a row updates an open preview, and on mobile a folder or a document opens
+// straight away.
 export function useDriveListRoute({
     items,
     capabilities,
@@ -58,6 +60,7 @@ export function useDriveListRoute({
     setSelectedItem,
 }: UseDriveListRouteOptions): DriveListRouteHandlers {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
     const onQuickLook = useDriveQuickLook(capabilities.canWrite);
@@ -70,7 +73,7 @@ export function useDriveListRoute({
             onOpenFolder(path);
         } else if (isDocumentType(path.type)) {
             openDocument(path);
-        } else if (isInlineEditable(path.mimeType, path.name)) {
+        } else if (user && isInlineEditable(path.mimeType, path.name)) {
             // Widened like auth-route's `to`: this file compiles in every app's router, and only Drive has the editor.
             const editorPath: string = `/edit/${path.ownerId}/${path.mountId}/${path.id}`;
             navigate({ to: editorPath });

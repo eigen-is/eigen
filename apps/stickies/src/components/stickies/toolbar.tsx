@@ -35,7 +35,7 @@ type ToolbarProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
-    onToggleActivity: () => void;
+    onToggleActivity?: () => void;
     activityOpen: boolean;
 };
 

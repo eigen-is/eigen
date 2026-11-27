@@ -3,6 +3,7 @@
 // row or title above it with the view controls. A layout such as DriveLayout mounts both, in Drive's
 // folder view and in the document apps' lists for example.
 
+import { useAuth } from '@workspace/lib/auth';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
@@ -273,6 +274,7 @@ export function DriveList({
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const { mode } = useDriveViewPreferences();
+    const { user } = useAuth();
 
     // The selection lives here rather than in each view, so it survives a switch between list and grid.
     const selection = useListSelection({ items, getId: (item: DrivePath) => item.id });
@@ -337,7 +339,8 @@ export function DriveList({
             ) : (
                 <DriveTable
                     {...sharedProps}
-                    hideShared={hideShared}
+                    // A visitor is never told who else has an item, so the column would stay empty.
+                    hideShared={hideShared || !user}
                     date={date}
                     ancestorBreadcrumb={breadcrumbPaths ?? []}
                     sort={sort}

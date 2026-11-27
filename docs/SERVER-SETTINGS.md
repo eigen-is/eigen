@@ -50,6 +50,7 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | `defaults.mount` | The storage backend of a new drive, and the S3 config it uses | [S3 becomes the default only while it connects](#s3-becomes-the-default-only-while-it-connects) |
 | `onboarding` | The waitlist, seeding the owner as a contact, the welcome mail, the waitlist invite mail | `requireWaitlistEnabled` gates every waitlist route; `welcome.ts` skips the welcome mail without hosted mail |
 | `guests` | Whether any address may ask for a sign-in code, and how long an idle guest lives | [GUEST-ACCESS.md](GUEST-ACCESS.md) |
+| `sharing.publicLinks` | Whether an item may be opened by anyone with its link. On by default | [Public links are never on a demo server](#public-links-are-never-on-a-demo-server) |
 | `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
 | `landing.showInstall` | Whether the landing page shows the one-line install command. Off by default | `GET /p/config` as `showInstall`, read by `HomeComponent` in `apps/index`, which passes it to `LandingBlocks` |
 | `notifications.email` | Which events also send an email | [The notification flags gate the email only](#the-notification-flags-gate-the-email-only) |
@@ -57,6 +58,10 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | `backups` | The nightly whole-server backup (on, hour in UTC, Full + S3, how many to keep) and the bucket archives go to, with its own count. Its secret reaches no browser | [BACKUP.md § The schedule makes one attempt per UTC day](BACKUP.md#the-schedule-makes-one-attempt-per-utc-day), [§ Upload goes to a bucket of its own](BACKUP.md#upload-goes-to-a-bucket-of-its-own) |
 
 The storage type is `local-id`, `local-fullnames` or `s3`. `mapStorageType()` translates it to the mount's own vocabulary (`local-key`, `local`, `s3`). It reaches only a drive made after the change: `UserHome` and `TeamHome` stamp it into a new mount, and an existing mount keeps its backend ([QUOTA.md](QUOTA.md#a-mount-keeps-what-it-was-stamped-with)).
+
+## Public links are never on a demo server
+
+`sharing.publicLinks` is the switch behind the "Anyone with the link" General access, **Allow public links** on Admin's Guest access page. The code never reads the setting alone: `arePublicLinksEnabled()` (`lib/config/server-settings.ts`) answers the setting and `!isDemo()`, because anyone can sign in to a demo server and upload, and a public link would publish what they upload. So on a demo server the setting may read on while public links stay off. `GET /p/config` carries the effective value as `publicLinks`, which the share dialog reads to offer the choice. Off closes every existing link, for visitors and signed-in non-members alike, and keeps the stored values ([ACL.md § A public link opens a path to anyone without a login](ACL.md#a-public-link-opens-a-path-to-anyone-without-a-login)).
 
 ## The notification flags gate the email only
 

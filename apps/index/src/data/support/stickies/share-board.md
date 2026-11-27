@@ -6,7 +6,7 @@ category: Sharing
 tags: [stickies, sharing, permissions, collaboration]
 related: [stickies/get-started, getting-started/how-sharing-works]
 order: 70
-updated: 2026-11-02
+updated: 2026-11-27
 ---
 
 A Stickies board is private to you until you share it. You can share with specific people, with a whole team, or with anyone who has the link, and choose whether they can view or also make changes.
@@ -35,11 +35,16 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a board starts as **Restricted**. Only the people you have added can open it.
 
-To share more widely, click the lock icon to switch it to **Unrestricted**, then choose **Can edit** or **Can view**. To copy the link, click the link icon next to **People with access**. Then click **Save**, which closes the dialog.
+To share more widely, pick another choice from the dropdown under **General access**:
+
+- **Anyone signed in with the link**: anyone who signs in to Eigen and has the link can open the board. Choose **Can view** or **Can edit** beside it. With **Can edit**, people who get in through the link can change the board, but not who has access. Only the owner and people added by name, or through a team, can do that. With **Can view**, changes from others show up within about 30 seconds, or as soon as they come back to the tab. With **Can edit**, and for people added by name, changes show up live.
+- **Anyone with the link**: anyone who has the link can view the board, with no account and no sign-in ([Share with a public link](/support/drive/share-with-a-public-link)).
+
+To copy the link, click the link icon next to **People with access**. Then click **Save**, which closes the dialog.
 
 <div class="eigen-callout">
 
-An **Unrestricted** link still requires the other person to sign in to Eigen. It is not open to the public web. There is no anonymous, sign-in-free sharing.
+With **Anyone signed in with the link**, the other person still signs in to Eigen. Only **Anyone with the link** opens the board to someone without an account, and only to view it.
 
 </div>
 

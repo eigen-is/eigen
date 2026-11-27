@@ -1,23 +1,32 @@
 // Drive's folder page: the folder the URL names, with the item ?pid= selects open beside the list. It
 // resolves the mount's "root" alias, sends a viewer who may open only the selected item to that item's
 // share link, offers a request for access when the folder is closed to the viewer, and opens the share
-// dialog that ?sharePathId= asks for.
+// dialog that ?sharePathId= asks for. A public link opens it without a login, read-only and with no share dialog.
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
+import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import { useCanWriteFolder, useFolderContent, usePathInfo, validateDriveSearch } from '@workspace/lib/drive';
+import {
+    useCanWriteFolder,
+    useFolderContent,
+    usePathInfo,
+    useWritesByName,
+    validateDriveSearch,
+} from '@workspace/lib/drive';
 import type { DriveSearchParams } from '@workspace/lib/types/drive-view';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { browseCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { LoadingState, RequestAccessView } from '@workspace/ui/components/layout/app';
+import { guardLinkRoute } from '@workspace/ui/components/layout/pages';
 import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
-export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
+export const Route = createFileRoute('/fs/$ownerId/$mountId/$pathId')({
+    beforeLoad: (match) => guardLinkRoute(match, match.params.pathId === 'root' ? null : match.params),
     component: FolderRoute,
     validateSearch: (search: Record<string, unknown>): DriveSearchParams => ({
         ...validateDriveSearch(search),
@@ -31,8 +40,8 @@ function FolderRoute() {
     const { pid, sharePathId, shareEmail } = Route.useSearch();
     const navigate = useNavigate();
     const { rootPath } = useContext(DriveContext);
-    const { user } = Route.useRouteContext();
-    const unreadChatIds = useUnreadChatIds(user.id);
+    const { user } = useAuth();
+    const unreadChatIds = useUnreadChatIds(user?.id ?? '');
 
     // "root" in the URL is an alias: once the root folder is known, the page moves to its real id.
     useEffect(() => {
@@ -63,7 +72,10 @@ function FolderRoute() {
     }, [selectedItemUrl]);
 
     // One capability set for menus, detail column and quick look.
-    const capabilities = browseCapabilities(useCanWriteFolder(ownerId, mountId, pathId));
+    const capabilities = browseCapabilities(
+        useCanWriteFolder(ownerId, mountId, pathId),
+        useWritesByName(ownerId, mountId, pathId),
+    );
 
     const { onRowSelect, onRowActivate, onQuickLook, onClose, onAfterAction } = useDriveListRoute({
         items: folderContents,
@@ -129,12 +141,14 @@ function FolderRoute() {
                 unreadPathIds={unreadChatIds}
             />
             {/* Mounted with no path too, so Email collaborators, opened from Share, outlives the closed Share. */}
-            <DriveAccessDialog
-                open={shareDialogOpen}
-                onOpenChange={handleShareDialogClose}
-                path={shareTargetPath}
-                prefillEmail={shareEmail}
-            />
+            {user && (
+                <DriveAccessDialog
+                    open={shareDialogOpen}
+                    onOpenChange={handleShareDialogClose}
+                    path={shareTargetPath}
+                    prefillEmail={shareEmail}
+                />
+            )}
         </>
     );
 }

@@ -2241,6 +2241,7 @@ describe('Drive', () => {
             expect(res!.status).toBe(200);
             expect(res!.headers.get('content-type')).toBe('image/webp');
             expect(res!.headers.get('cache-control')).toContain('private');
+            expect(res!.headers.get('x-content-type-options')).toBe('nosniff');
         });
 
         test('thumbnail returns 404 for non-existent file', async () => {

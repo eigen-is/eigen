@@ -1,6 +1,6 @@
-// The slide rail: one FrameThumbnail per frame, in stored order, reordered by a drag that rewrites a
-// single fractional index. A phone gets SlideStrip instead: the same thumbnails in one row under the
-// deck, which only jumps to a slide, since a phone never edits a deck.
+// The slide rail: one FrameThumbnail per frame, in stored order, which someone who may edit reorders by a drag that
+// rewrites a single fractional index. A phone gets SlideStrip instead: the same thumbnails in one row under the deck,
+// which only jumps to a slide, since a phone never edits a deck.
 
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { closestCenter, DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -35,7 +35,7 @@ type SlidePanelProps = {
     onDragStart: (event: DragStartEvent) => void;
     onDragEnd: (event: DragEndEvent) => void;
     dragActiveId: string | null;
-    // The editor's slide menu; absent for a read-only viewer, so no trigger arms.
+    // The editor's slide menu, absent for a reader, who neither opens it nor drags a slide.
     slideMenu?: ReturnType<typeof useContextMenu<string>>;
     matchedFrameIds?: ReadonlySet<string>;
 };
@@ -70,7 +70,11 @@ export function SlidePanel({
                     onDragStart={onDragStart}
                     onDragEnd={onDragEnd}
                 >
-                    <SortableContext items={frames.map((frame) => frame.id)} strategy={verticalListSortingStrategy}>
+                    <SortableContext
+                        items={frames.map((frame) => frame.id)}
+                        strategy={verticalListSortingStrategy}
+                        disabled={!slideMenu}
+                    >
                         {frames.map((frame, index) => (
                             <SortableSlide key={frame.id} frameId={frame.id} longPressBind={slideLongPress.bind}>
                                 <div
@@ -143,7 +147,7 @@ export function SlideStrip({ frames, elements, activeFrameId, onSelectFrame, mat
 }
 
 // One pass over the scene per render, not one per slide.
-function useElementsByFrame(frames: VectorFrame[], elements: VectorElement[]) {
+function useElementsByFrame(frames: readonly VectorFrame[], elements: readonly VectorElement[]) {
     return useMemo(() => {
         const byFrame = new Map<string, VectorElement[]>();
         for (const frame of frames) byFrame.set(frame.id, []);

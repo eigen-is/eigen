@@ -91,6 +91,7 @@
     "./test/hover-reveal": "./src/test/hover-reveal.ts",
     "./test/menu-rows": "./src/test/menu-rows.ts",
     "./test/press-enter": "./src/test/press-enter.ts",
-    "./test/render-in-document": "./src/test/render-in-document.ts"
+    "./test/render-in-document": "./src/test/render-in-document.ts",
+    "./test/visitor-server": "./src/test/visitor-server.ts"
   }
 }

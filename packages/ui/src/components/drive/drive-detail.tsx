@@ -1,8 +1,10 @@
 // The detail column of a Drive view, such as a folder or Recent: Share, Watch and a ⋮ with the item's whole menu in
 // its bar; the item's preview, name, Open and Download, its details, sharing and recent activity in its body. A
-// layout such as DriveLayout draws it beside the list and says how it closes.
+// layout such as DriveLayout draws it beside the list and says how it closes. A visitor without a login, who may
+// not read who has access, gets no sharing section.
 
 import { getDriveItemUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { formatDateTime } from '@workspace/lib/date';
 import { useBreadcrumb } from '@workspace/lib/drive';
 import { formatFileSize } from '@workspace/lib/format';
@@ -34,10 +36,12 @@ type DriveDetailProps = {
     // The listing this item sits in, in its display order: Quick preview pages through it.
     siblings: readonly DrivePath[];
     actions: DriveActionRunner;
-    onClose: () => void;
+    // Left out where there is no list to go back to, such as a visitor's lone file: no close is offered.
+    onClose?: () => void;
 };
 
 export function DriveDetail({ path, siblings, actions, onClose }: DriveDetailProps) {
+    const { user } = useAuth();
     const runner = useDriveFileActionRunner(path, siblings, actions.capabilities.canWrite);
 
     // The item is still loading, such as on an arrow key's next row.
@@ -101,8 +105,12 @@ export function DriveDetail({ path, siblings, actions, onClose }: DriveDetailPro
                 )}
             </div>
             <DetailsSection path={path} actions={actions} />
-            <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
-            <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
+            {user && (
+                <>
+                    <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
+                    <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
+                </>
+            )}
             <RecentActivity path={path} />
             {runner.dialogs}
         </DetailColumn>

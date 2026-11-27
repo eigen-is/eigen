@@ -452,7 +452,7 @@ describe('Import… into a deck', () => {
             return response;
         });
         try {
-            expect(await importIntoDocument(drive, path, Buffer.from(PPTX), INSERT, alice)).toBe(
+            expect(await importIntoDocument(drive, path, Buffer.from(PPTX), INSERT, alice, 'foreground')).toBe(
                 '1 table was not imported.',
             );
         } finally {
@@ -485,9 +485,9 @@ describe('Import… into a deck', () => {
 
         const before = await readDeck(deck.id);
         try {
-            await expect(importIntoDocument(bobDrive, path, Buffer.from(PPTX), INSERT, bob)).rejects.toEqual(
-                new ApiError(403, 'No write permission'),
-            );
+            await expect(
+                importIntoDocument(bobDrive, path, Buffer.from(PPTX), INSERT, bob, 'foreground'),
+            ).rejects.toEqual(new ApiError(403, 'No write permission'));
         } finally {
             createSpy.mockRestore();
         }
@@ -514,9 +514,9 @@ describe('Import… into a deck', () => {
 
         const before = await readDeck(deck.id);
         try {
-            await expect(importIntoDocument(bobDrive, path, Buffer.from(TEXT_PPTX), INSERT, bob)).rejects.toEqual(
-                new ApiError(403, 'No write permission'),
-            );
+            await expect(
+                importIntoDocument(bobDrive, path, Buffer.from(TEXT_PPTX), INSERT, bob, 'foreground'),
+            ).rejects.toEqual(new ApiError(403, 'No write permission'));
         } finally {
             getSpy.mockRestore();
         }

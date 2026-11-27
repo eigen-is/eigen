@@ -294,6 +294,31 @@ describe('owner-only settings', () => {
         expect(res.status).toBe(403);
     });
 
+    test('the owner turns public links off and on, and the answer says so', async () => {
+        const save = (publicLinks: boolean) =>
+            authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({ sharing: { publicLinks } }),
+            });
+        expect((await assertJson<ServerSettings>(await save(false))).sharing.publicLinks).toBe(false);
+        const settings = await assertJson<ServerSettings>(
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+        );
+        expect(settings.sharing.publicLinks).toBe(false);
+        expect((await assertJson<ServerSettings>(await save(true))).sharing.publicLinks).toBe(true);
+    });
+
+    test('an admin cannot turn public links off', async () => {
+        const res = await authedRequest(admin.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ sharing: { publicLinks: false } }),
+        });
+        expect(res.status).toBe(403);
+        expect(getServerSettings().sharing.publicLinks).toBe(true);
+    });
+
     test("an admin cannot read the server's saved S3 configuration", async () => {
         const res = await authedRequest(admin.sessionToken, '/settings/s3config');
         expect(res.status).toBe(403);

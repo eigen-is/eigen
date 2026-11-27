@@ -3,6 +3,7 @@
 // Docs' Word count. The kebab opens without blocking the page, as the bar's menus do, so one press moves on from it.
 
 import { useIsMobile } from '@workspace/lib/media';
+import type { DrivePathRef } from '@workspace/lib/types/drive';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Button } from '../../button';
@@ -23,7 +24,7 @@ type DocumentShareClusterProps = {
     onToggleComments?: () => void;
     commentsOpen?: boolean;
     assignedCommentCount?: number;
-    watchTarget?: { ownerId: string; mountId: string; pathId: string };
+    watchTarget?: DrivePathRef;
     onToggleActivity?: () => void;
     activityOpen?: boolean;
     // Collab socket down after first load: edits stay local until it reconnects.
@@ -53,8 +54,6 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         </Popover>
     );
 
-    // Mobile: collapse the icon row into a kebab. Its own useFindBarRefocus keeps the find-bar
-    // keystroke subscription off the desktop cluster (which would otherwise churn the Watch queries).
     if (isMobile) {
         return (
             <>
@@ -80,7 +79,6 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         <>
             {offlineBadge}
             {onRename && <TooltipButton icon={Pencil} tooltipText="Edit" onClick={onRename} />}
-            {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
             <FindInDocumentButton />
             {onToggleActivity && (
                 <TooltipButton
@@ -113,8 +111,8 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
     );
 }
 
-// Mobile kebab, split out so its DocSearchBar subscription (via useFindBarRefocus) stays off the
-// desktop cluster. No Eye marker and no open-state cue: an open panel takes the viewport (settled).
+// Mobile kebab, split out so its find-bar keystroke subscription (via useFindBarRefocus) stays off the desktop
+// cluster, where it would churn the Watch queries. No open-state cue: an open panel takes the viewport.
 function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,
@@ -141,7 +139,6 @@ function MobileClusterKebab({
                                         Edit
                                     </DropdownMenuItem>
                                 )}
-                                {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
                                 <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
                                 {mobileMenuItems}
                             </>

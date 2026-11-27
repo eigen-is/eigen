@@ -1,7 +1,7 @@
 // A writer always has the Insert and Format menus; the icon row beside them folds from its right end as the window narrows.
 // Tools reaches everyone, viewers included.
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { type } from '@workspace/ui/test/form-contract';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -10,6 +10,28 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
 
 const window = installHappyDom();
+
+// A writer signed in, without the session check: with no user, File would hold only the editor's rows.
+const realAuth = { ...(await import('@workspace/lib/auth')) };
+const writer = {
+    id: 'u1',
+    name: 'Ada',
+    email: 'ada@example.com',
+    emailVerified: true,
+    createdAt: new Date('2026-09-20T09:00:00Z'),
+    updatedAt: new Date('2026-09-20T09:00:00Z'),
+};
+mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
+    useAuth: () => ({
+        isAuthenticated: true,
+        isLoading: false,
+        user: writer,
+        login: async () => ({ success: true }),
+        logout: async () => {},
+    }),
+}));
+afterAll(() => mock.module('@workspace/lib/auth', () => realAuth));
 
 const { act, createElement } = await import('react');
 const { formatForDisplay, getHotkeyManager } = await import('@tanstack/react-hotkeys');

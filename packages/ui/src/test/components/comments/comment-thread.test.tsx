@@ -1,6 +1,7 @@
 // One comment thread stays mounted when its dialog moves to another card, and what waits to be sent belongs to the
 // thread it was typed in. Its messages sit under an Activity caption, a section of the card above them. Its reply box
-// takes the focus as it shows, unless its host says not to, as a column does for a thread a link opened.
+// takes the focus as it shows, unless its host says not to, as a column does for a thread a link opened. A visitor
+// without a login reads the card alone, with no loader and no reply box.
 import { afterAll, expect, mock, test } from 'bun:test';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { type } from '../../form-contract';
@@ -26,11 +27,16 @@ const room: { messages: ChatMessage[] } & Record<string, unknown> = {
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realChat = { ...(await import('@workspace/lib/chat')) };
 const realDrive = { ...(await import('@workspace/lib/drive')) };
+// A visitor's listing has no chat folder, so no thread resolves and every one is known missing.
+const listing = { hasChatFolder: true };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 mock.module('@workspace/lib/chat', () => ({ ...realChat, useChatRoom: () => room }));
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useMediaResolver: () => ({ resolveChatId: (chatName: string) => `id-of-${chatName}` }),
+    useMediaResolver: () => ({
+        resolveChatId: (chatName: string) => (listing.hasChatFolder ? `id-of-${chatName}` : null),
+        isChatMissing: () => !listing.hasChatFolder,
+    }),
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
@@ -245,4 +251,27 @@ test('a send keeps the focus in the reply box', async () => {
     expect(box.value).toBe('');
     expect(document.activeElement).toBe(box);
     await act(async () => root.unmount());
+});
+
+test('a visitor reads the card above the thread, with no loader and no reply box', async () => {
+    listing.hasChatFolder = false;
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () =>
+        root.render(
+            createElement(CommentThread, {
+                ownerId: 'u1',
+                mountId: 'm1',
+                pathId: 'doc',
+                chatName: 'first',
+                lead: createElement('p', null, 'The card'),
+            }),
+        ),
+    );
+    expect(container.textContent).toBe('The card');
+    expect(container.firstElementChild?.childElementCount).toBe(1);
+    expect(container.querySelector('textarea')).toBeNull();
+    await act(async () => root.unmount());
+    listing.hasChatFolder = true;
 });

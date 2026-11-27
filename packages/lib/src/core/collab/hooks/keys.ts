@@ -1,3 +1,6 @@
+// The query keys of a collab document: its access info and, for a reader who gets no socket, its stored state. The
+// invalidators refresh the info of one open document or of every one in a mount, such as after a share changes.
+
 import type { QueryClient } from '@tanstack/react-query';
 
 export const collabKeys = {
@@ -6,6 +9,9 @@ export const collabKeys = {
     mount: (ownerId: string, mountId: string) => [...collabKeys.info(), ownerId, mountId] as const,
     document: (ownerId: string, mountId: string, pathId: string) =>
         [...collabKeys.mount(ownerId, mountId), pathId] as const,
+    // Per Y.Doc, since the state is applied to the doc: a new doc for the same document starts from nothing.
+    storedState: (ownerId: string, mountId: string, pathId: string, docGuid: string) =>
+        [...collabKeys.all, 'stored-state', ownerId, mountId, pathId, docGuid] as const,
 };
 
 // Refreshes canRead/canWrite in the open document views.

@@ -71,6 +71,8 @@ export type FileAction = {
     guestDenied?: true;
     // The row reaches the hosted mailbox, so a server without hosted mail hides it; the route refuses too.
     mailOnly?: true;
+    // A visitor without a login may use the row; every other row needs one.
+    visitorAllowed?: true;
     // The hotkey a listing runs the row with, such as Space in Drive's. Only a menu whose host binds it names it.
     shortcut?: string;
 };

@@ -100,11 +100,18 @@ describe('Collab', () => {
             expect(Array.isArray(data.folderContents)).toBe(true);
         });
 
-        test('info endpoint denies access without authentication', async () => {
+        test('info endpoint answers no read without authentication, as to a signed-in non-reader', async () => {
             const res = await ctx.app.handle(
                 new Request(`http://localhost/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`),
             );
-            expect(res.status).not.toBe(200);
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual({
+                canRead: false,
+                canWrite: false,
+                live: false,
+                path: null,
+                folderContents: null,
+            });
         });
 
         test('info endpoint denies access without read permission', async () => {
