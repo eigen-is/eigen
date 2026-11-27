@@ -250,9 +250,8 @@ describe('many docx tables of contents', () => {
         expect(warnings).toEqual([{ code: 'blocks-flattened', count: 2 }]);
     });
 
-    // Each node lists the outline, so 8,000 of them would read 8,000 headings 8,000 times. The eight nodes show that
-    // the outline is listed eight times.
-    test('eight thousand fields beside eight thousand headings read in linear time', async () => {
+    // Each node lists the outline, so 8,000 of them would read 8,000 headings 8,000 times.
+    test('eight thousand fields beside eight thousand headings make eight tables of contents', async () => {
         const fields = paragraph(`${field('TOC')}${END}`).repeat(8000);
         const headings = Array.from({ length: 8000 }, (_, index) => heading(`Heading ${index}`)).join('');
         const { json, warnings } = await read(`${fields}${headings}`);
