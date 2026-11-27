@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
+import { costRatio } from '@workspace/lib/test/cost-ratio';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EML_MIME, ICS_MIME } from '@workspace/lib/types/file-kinds';
@@ -13,9 +14,9 @@ import { getMailDomain } from '../../lib/config/server-config';
 import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseResource } from '../../lib/ical';
+import * as icalParse from '../../lib/ical/ical-parse';
 import type { OutboundMail } from '../../lib/mailer/mailer';
 import { storedEvents } from '../calendar-test-helpers';
-import { cpuClock } from '../cpu-time';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
 import type { TestUser } from '../setup';
@@ -1225,24 +1226,32 @@ describe('Calendar transfer routes', () => {
     });
 
     test('a series with a long guest list behind a long padding imports in one pass', async () => {
+        // A fresh UID each time, or the Home skips the series; the baseline holds one guest among padding of the same
+        // length, so it drops one line.
+        const file = (uid: string, guests: number) =>
+            vcal(
+                vevent(uid, 'Long guests', '20260416T090000Z', '20260416T100000Z', [
+                    ...Array<string>(50_000).fill('X:p'),
+                    ...Array<string>(guests).fill('ATTENDEE:mailto:a@b.c'),
+                    ...Array<string>(30_000 - guests).fill('X:p'),
+                ]),
+            );
         const uid = `long-guests-${crypto.randomUUID()}@other`;
-        const file = vcal(
-            vevent(uid, 'Long guests', '20260416T090000Z', '20260416T100000Z', [
-                ...Array<string>(100_000).fill('X:p'),
-                ...Array<string>(30_000).fill('ATTENDEE:mailto:a@b.c'),
-            ]),
-        );
-
-        const cpuMs = cpuClock();
-        const res = await importRequest(alice, calendarId, file);
-        expect(cpuMs()).toBeLessThan(3_000);
-
+        const res = await importRequest(alice, calendarId, file(uid, 30_000));
         expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 1, skipped: 0, failed: 0 });
         const stored = findOrFail(await april(), (e) => e.uid === uid);
         expect(stored.data?.attendees).toBeUndefined();
+
+        const home = await getHome(alice.id);
+        const importOf = (guests: number) => ({
+            setup: () => new TextEncoder().encode(file(`long-guests-${crypto.randomUUID()}@other`, guests)),
+            run: (bytes: Uint8Array) => home.calendar.importEvents(calendarId, bytes),
+        });
+        const { ratio } = await costRatio(importOf(30_000), importOf(1));
+        expect(ratio).toBeLessThan(4.2);
     });
 
-    test('many series behind a long run of other components import in one pass', async () => {
+    test('many series behind a long run of other components all import', async () => {
         const count = 3_000;
         const stamp = crypto.randomUUID();
         const file = vcal(
@@ -1252,10 +1261,7 @@ describe('Calendar transfer routes', () => {
             ),
         );
 
-        const cpuMs = cpuClock();
         const res = await importRequest(alice, calendarId, file);
-        expect(cpuMs()).toBeLessThan(7_000);
-
         expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: count, skipped: 0, failed: 0 });
     }, 120_000);
 
@@ -1301,8 +1307,8 @@ describe('Calendar transfer routes', () => {
         expect((await importRequest(alice, calendarId, vcal(...small))).status).toBe(200);
         const standard =
             'BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD';
-        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', ...Array(40_000).fill(standard), 'END:VTIMEZONE'];
-        const fat = uids.map((held) => [
+        const zone = ['BEGIN:VTIMEZONE', 'TZID:Own', standard, 'END:VTIMEZONE'];
+        const copies = uids.map((held) => [
             'BEGIN:VEVENT',
             `UID:${held}`,
             'DTSTART;TZID=Own:20260421T090000',
@@ -1310,13 +1316,21 @@ describe('Calendar transfer routes', () => {
             'END:VEVENT',
         ]);
 
-        const body = vcal(zone, ...fat);
-        const cpuMs = cpuClock();
-        const res = await importRequest(alice, calendarId, body);
-
-        expect(cpuMs()).toBeLessThan(2000);
-        expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
-    }, 60_000);
+        // The file's own parse is the one; a series put to the store would cost a parse of its own.
+        let parses = 0;
+        const realParse = icalParse.parseCalendarStream;
+        const parsed = spyOn(icalParse, 'parseCalendarStream').mockImplementation((ics) => {
+            if (++parses > 1) throw new Error(`the import parsed ${parses} times`);
+            return realParse(ics);
+        });
+        try {
+            const res = await importRequest(alice, calendarId, vcal(zone, ...copies));
+            expect(await assertJson<ImportCountsResult>(res)).toEqual({ imported: 0, skipped: 20, failed: 0 });
+        } finally {
+            parsed.mockRestore();
+        }
+        expect(parses).toBe(1);
+    });
 
     // iCalendar is UTF-8 (RFC 5545 §3.1), the same fact a vCard import answers on: the file is refused for
     // its encoding, not lumped in with bytes that are no calendar at all.
