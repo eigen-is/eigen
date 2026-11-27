@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, public-link]
 related: [drive/share-a-file, getting-started/how-sharing-works, admin/guests]
 order: 25
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 A public link lets anyone who has it view a file, a folder or a document, without an account and without signing in. Use it for a link on a website, in a newsletter or in a group chat, where you can't name the readers.
@@ -38,7 +38,7 @@ Someone who opens the link without signing in can:
 
 - Look at a file in its preview and download it.
 - Browse a public folder and open what is in it.
-- Read a document as it was when they opened it. Edits from others show up when they come back to the tab or reload the page. In Docs they can also print it.
+- Read a document. Edits from others show up within about 30 seconds, or as soon as they come back to the tab. In Docs they can also print it.
 - See the comments on a document, with who wrote each one.
 
 They can't edit or comment, download a document in another format, or see the replies under a comment, the people with access, the version history or who else is viewing. The top bar has a **Log in** button that brings them back to the same item after they sign in.
@@ -47,7 +47,7 @@ Someone who is signed in to your Eigen server opens the link as a viewer, as wit
 
 ## Turn a public link off
 
-Open the **Share** dialog, choose **Restricted** or **Anyone signed in with the link** under **General access**, and click **Save**. From then on the link opens nothing for someone who isn't signed in, and a visitor who has the document open loses it when they come back to the tab or reload the page.
+Open the **Share** dialog, choose **Restricted** or **Anyone signed in with the link** under **General access**, and click **Save**. From then on the link opens nothing for someone who isn't signed in, and a visitor who has the document open loses it within about 30 seconds, or as soon as they come back to the tab.
 
 Moving the item to the trash also closes the link. Restoring it, or choosing **Anyone with the link** again later, opens the same address once more.
 

@@ -6,7 +6,7 @@ category: Sharing
 tags: [sharing, permissions, collaboration, getting-started, guests]
 related: [drive/share-a-file, drive/get-started, admin/guests]
 order: 4
-updated: 2026-11-26
+updated: 2026-11-27
 ---
 
 Sharing in Eigen works the same way wherever you are. The same controls cover your files in Drive and the documents, spreadsheets, presentations, boards, and chats you create. This page explains the ideas behind it, so you know what you're giving away before you share. For the click-by-click steps, see [Share a file or folder](/support/drive/share-a-file).
@@ -40,7 +40,7 @@ You can give access to specific people, to a whole team, or to anyone with the l
 
 A file's general access starts as **Restricted**, which means only the people you've added can open it. The dropdown under **General access** offers two wider choices:
 
-- **Anyone signed in with the link**: whoever has the link and signs in to Eigen gets in, as a viewer or an editor, whichever you pick. An editor who gets in through the link can change the file, but not who has access. Only the owner and people added by name, or through a team, can do that. In a document, a viewer who gets in through the link sees it as it was when they opened it, and gets changes when they come back to the tab or reload. Editors, and people added by name, see changes live.
+- **Anyone signed in with the link**: whoever has the link and signs in to Eigen gets in, as a viewer or an editor, whichever you pick. An editor who gets in through the link can change the file, but not who has access. Only the owner and people added by name, or through a team, can do that. In a document, a viewer who gets in through the link sees changes from others within about 30 seconds, or as soon as they come back to the tab. Editors, and people added by name, see changes live.
 - **Anyone with the link**: whoever has the link can view it without signing in, even with no account ([Share with a public link](/support/drive/share-with-a-public-link)).
 
 ## Signing in to open a share

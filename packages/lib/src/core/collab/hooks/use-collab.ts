@@ -14,6 +14,9 @@ import { collabKeys } from './keys';
 // How long a failed read of the stored state waits before the next try.
 const STORED_STATE_RETRY_MS = 5_000;
 
+// How often a visible tab asks for the stored state again.
+const STORED_STATE_REFRESH_MS = 30_000;
+
 // The origin of the stored state's updates. It is not null, so no UndoManager tracks them.
 const STORED_STATE_ORIGIN = 'stored-state';
 
@@ -49,10 +52,10 @@ export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: 
     });
 }
 
-// The document's stored Yjs state, applied to `doc` and asked again whenever the tab shows again. Each ask names the
-// ETag of the state the doc holds, so an unchanged document costs no body, and the query keeps only that ETag. A
-// newer state of another epoch is not applied: the home was replaced, and the tab reloads as it does on a socket. A
-// refusal is final; a failure is retried.
+// The document's stored Yjs state, applied to `doc` and asked again every 30 s while the tab is visible and whenever it
+// shows again. Each ask names the ETag of the state the doc holds, so an unchanged document costs no body, and the
+// query keeps only that ETag. A newer state of another epoch is not applied: the home was replaced, and the tab
+// reloads as it does on a socket. A refusal is final; a failure is retried.
 export function useCollabStoredState(ownerId: string, mountId: string, pathId: string, doc: Y.Doc | null) {
     return useQuery({
         queryKey: collabKeys.storedState(ownerId, mountId, pathId, doc?.guid ?? ''),
@@ -73,6 +76,7 @@ export function useCollabStoredState(ownerId: string, mountId: string, pathId: s
               }
             : skipToken,
         staleTime: 0,
+        refetchInterval: STORED_STATE_REFRESH_MS,
         // A doc's key is never asked for again once its editor goes.
         gcTime: 0,
         retry: (_failures, error) => !(error instanceof AppError) || error.status >= 500,

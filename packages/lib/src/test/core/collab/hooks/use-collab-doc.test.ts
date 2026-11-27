@@ -764,6 +764,98 @@ describe('useCollabDoc for a reader who gets no socket', () => {
         expect(h.state.loaded).toBe(true);
     });
 
+    describe('while the tab stays open', () => {
+        const REFRESH_MS = 30_000;
+        const stateAsks = () => server.asked.filter((ask) => ask.url.endsWith('/state')).length;
+        const setVisibility = (state: 'visible' | 'hidden') =>
+            act(async () => {
+                Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+                window.dispatchEvent(new window.Event('visibilitychange'));
+                await flushFakeTime();
+            });
+        // Moves the fake clock, then lets the fetch it started and TanStack Query's batched notify run.
+        const advance = (ms: number) =>
+            act(async () => {
+                jest.advanceTimersByTime(ms);
+                await flushFakeTime();
+            });
+        async function flushFakeTime() {
+            for (let i = 0; i < 10; i++) {
+                await new Promise<void>((resolve) => queueMicrotask(resolve));
+                jest.advanceTimersByTime(0);
+            }
+        }
+
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+        afterEach(() => {
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+            jest.useRealTimers();
+        });
+
+        test('a visible tab asks again every 30 s with the ETag, a hidden one asks nothing, and showing asks at once without a duplicate', async () => {
+            server.write('one');
+            active = mount(OPTIONS, false);
+            const h = active;
+            await advance(0);
+            expect(stateAsks()).toBe(1);
+
+            server.write(' two');
+            await advance(REFRESH_MS);
+            expect(stateAsks()).toBe(2);
+            expect(server.asked.at(-1)?.ifNoneMatch).toBe('"epoch-1.0.3.state-f1"');
+            expect(h.doc.getText('probe').toString()).toBe('one two');
+
+            await setVisibility('hidden');
+            await advance(REFRESH_MS * 2 + 20_000);
+            expect(stateAsks()).toBe(2);
+
+            await setVisibility('visible');
+            expect(stateAsks()).toBe(3);
+            await advance(REFRESH_MS - 1_000);
+            expect(stateAsks()).toBe(3);
+            await advance(1_000);
+            expect(stateAsks()).toBe(4);
+        });
+
+        test('a link closed while the tab stays visible reloads at the next ask', async () => {
+            const reload = jest.fn();
+            Object.defineProperty(window.location, 'reload', { value: reload, configurable: true });
+            active = mount(OPTIONS, false);
+            await advance(0);
+
+            server.refuse = 403;
+            await advance(REFRESH_MS);
+            expect(reload).toHaveBeenCalledTimes(1);
+        });
+
+        test('a reader who becomes live, or whose editor goes, asks no more', async () => {
+            active = mount(OPTIONS, false);
+            const h = active;
+            await advance(0);
+
+            await act(async () => {
+                h.client.setQueryData(collabKeys.document(OPTIONS.ownerId, OPTIONS.mountId, OPTIONS.pathId), {
+                    canRead: true,
+                    canWrite: true,
+                    live: true,
+                    path: null,
+                    folderContents: null,
+                });
+                await flushFakeTime();
+            });
+            expect(h.state.provider).not.toBeNull();
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+
+            h.unmount();
+            active = null;
+            await advance(REFRESH_MS * 3);
+            expect(stateAsks()).toBe(1);
+        });
+    });
+
     test('a document switch loads the other document into a new doc', async () => {
         server.write('first');
         active = mount(OPTIONS, false);
