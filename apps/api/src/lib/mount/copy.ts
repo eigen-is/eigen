@@ -1,8 +1,8 @@
 // The one walk behind every copy of a file or folder, into the same mount or into another mount or drive.
 // It lists the whole source tree first and writes only after that, so a copy never follows its own output,
 // even when its target moves into the source or an opposite copy writes into it meanwhile. Drive checks
-// that list against the target's limits, and then the target's mount writes it, reading each file through
-// the source's mount.
+// that list against what the reader may copy and the target's limits, and then the target's mount writes
+// it, reading each file through the source's mount.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
@@ -25,6 +25,10 @@ export type Copied = {
 
 // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
 export type DiscardCopy = (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
+
+// Refuses a listed tree before anything is written. The source's drive passes it, because what a reader may
+// take out of a drive is that drive's decision.
+export type CheckCopy = (tree: CopyTree) => Promise<void>;
 
 // A copied Eigen document keeps its type but leaves its version history behind, so its versions/ is
 // not listed, and the copy starts with a clean history.

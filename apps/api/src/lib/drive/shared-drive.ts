@@ -4,7 +4,6 @@
 // getSharedDrive returns Drive | SharedDrive, so a route can only call a method that has a wrapper here.
 
 import type { DrivePath, DrivePathDetails, EigenDocType } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
@@ -23,6 +22,7 @@ import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
+import type { CheckCopy, CopyTree } from '../mount/copy';
 import type { FileBytes, StorageFile } from '../storage';
 import type { Memberships, User } from '../user';
 import { getMemberships } from '../user';
@@ -327,8 +327,8 @@ export class SharedDrive {
         to: CopyTarget,
         desiredName: string | undefined,
     ): Promise<DrivePath> {
-        await this.requireCopy(mountId, srcPathId);
-        return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user);
+        const check = await this.requireCopy(mountId, srcPathId);
+        return this.drive.copyPath(mountId, srcPathId, to, desiredName, this.user, check);
     }
 
     // The copy trashes or writes over what holds the name, which write on the folder covers, as for movePathOver.
@@ -339,29 +339,22 @@ export class SharedDrive {
         name: string,
         checkedId: string | null,
     ): Promise<DrivePath> {
-        await this.requireCopy(mountId, srcPathId);
+        const check = await this.requireCopy(mountId, srcPathId);
         await this.requireWrite(mountId, destParentId, undefined, 'No write permission on target folder');
-        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user);
+        return this.drive.copyPathOver(mountId, srcPathId, destParentId, name, checkedId, this.user, check);
     }
 
     // A copy writes the raw databases under its source, so only a live reader copies a source that holds one: a
-    // document, a folder with one in it or a document's saved versions.
-    private async requireCopy(mountId: string, srcPathId: string): Promise<void> {
+    // document, a folder with one in it or a document's saved versions. The check runs on the tree the copy writes.
+    private async requireCopy(mountId: string, srcPathId: string): Promise<CheckCopy | undefined> {
         const access = await this.readerAccess(mountId, srcPathId, this.user);
         if (!access.canRead) throw new ApiError(403, 'No read permission on source');
-        if (access.live) return;
-        if (await this.holdsRawDatabase(mountId, await this.drive.breadCrumb(mountId, srcPathId))) {
-            throw new ApiError(403, 'Only people with access can copy this document');
-        }
-    }
-
-    private async holdsRawDatabase(mountId: string, chain: DrivePath[]): Promise<boolean> {
-        if (isRawDatabase(chain)) return true;
-        const path = chain.at(-1);
-        if (!path || path.type === DRIVE_TYPE_FILE) return false;
-        const children = await this.drive.getFolderContents(mountId, path.id);
-        const held = await Promise.all(children.map((child) => this.holdsRawDatabase(mountId, [...chain, child])));
-        return held.includes(true);
+        if (access.live) return undefined;
+        return async (tree) => {
+            if (holdsRawDatabase(tree, await this.drive.breadCrumb(mountId, tree.path.id))) {
+                throw new ApiError(403, 'Only people with access can copy this document');
+            }
+        };
     }
 
     // The source can be in another owner's drive, which checked the read access on it. A copy needs read on its
@@ -372,11 +365,13 @@ export class SharedDrive {
         source: Mount,
         src: DrivePath,
         desiredName: string | undefined,
+        _user: User,
+        check: CheckCopy | undefined,
     ): Promise<DrivePath> {
         const memberships = await getMemberships(this.user.id);
         await this.requireRead(mountId, destParentId, memberships);
         await this.requireWrite(mountId, destParentId, memberships, 'No write permission on target folder');
-        return this.drive.receiveCopy(mountId, destParentId, source, src, desiredName, this.user);
+        return this.drive.receiveCopy(mountId, destParentId, source, src, desiredName, this.user, check);
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
@@ -613,4 +608,9 @@ export class SharedDrive {
         await this.requireRead(mountId, database.parentId);
         return this.drive.withDatabase(mountId, config, pathId, fn);
     }
+}
+
+// `chain` is the breadcrumb of the tree's top, as isRawDatabase needs the folders above a path.
+function holdsRawDatabase(tree: CopyTree, chain: readonly DrivePath[]): boolean {
+    return isRawDatabase(chain) || tree.children.some((child) => holdsRawDatabase(child, [...chain, child.path]));
 }

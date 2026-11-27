@@ -25,12 +25,15 @@ export function seedMaildirFolder(userId: string, mailbox: string): void {
     writeFileSync(join(folder, 'maildirfolder'), '');
 }
 
-export function makeEml(subject: string, opts: { from?: string; to?: string; body?: string } = {}): string {
+export function makeEml(
+    subject: string,
+    opts: { from?: string; to?: string; body?: string; date?: Date } = {},
+): string {
     return [
         `From: ${opts.from ?? 'sender@example.com'}`,
         `To: ${opts.to ?? 'recipient@test.eigen.is'}`,
         `Subject: ${subject}`,
-        `Date: ${new Date().toUTCString()}`,
+        `Date: ${(opts.date ?? new Date()).toUTCString()}`,
         `Message-ID: <${Date.now()}.${Math.random()}@test>`,
         'MIME-Version: 1.0',
         'Content-Type: text/plain; charset=utf-8',

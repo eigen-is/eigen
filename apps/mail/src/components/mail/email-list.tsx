@@ -58,7 +58,7 @@ export function EmailListToolbar({ searchQuery, onSearchChange, inputRef, onShow
 }
 
 type EmailListProps = {
-    // The mail route holds these through useMailList, already filtered and sorted.
+    // The mail route holds these through useMailList, in the order they show.
     orderedEmails: EmailSummary[];
     selection: UseListSelectionReturn<EmailSummary>;
     cursorIndex: number;
@@ -220,7 +220,7 @@ export function EmailList({
                         {virtualItems.map((vi) => {
                             const email = orderedEmails[vi.index];
                             const index = vi.index;
-                            const formattedDate = email.date ? formatDateTime(email.date) : '';
+                            const formattedDate = formatDateTime(email.receivedAt);
                             const isOpen = activeRowId === email.id;
                             // In Sent the sender is always the user, so the row names who it went to.
                             const correspondent = email.mailbox === MAILBOX_SENT ? email.toShort : email.fromShort;

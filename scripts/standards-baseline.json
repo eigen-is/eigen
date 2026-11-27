@@ -11,7 +11,6 @@
     "apps/index/src/content/manifest.ts": 1,
     "packages/lib/src/core/chat/hooks/use-chat.ts": 1,
     "packages/lib/src/core/deep-merge.ts": 1,
-    "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
     "packages/lib/src/sheets/snapshot-codec.ts": 4,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,

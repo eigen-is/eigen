@@ -131,7 +131,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             auth: true,
             query: t.Object({
                 limit: t.Optional(t.Integer({ minimum: 1, maximum: 500 })),
-                beforeDate: t.Optional(t.Integer()),
+                beforeReceivedAt: t.Optional(t.Integer()),
                 beforeId: t.Optional(t.String()),
             }),
         },

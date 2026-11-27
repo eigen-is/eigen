@@ -53,10 +53,12 @@ export class LocalFilesystem {
         }
     }
 
-    // The bytes must be on the platter before any name points at them.
-    public async writeDurable(filePath: string, data: FileData): Promise<number> {
+    // The bytes must be on the platter before any name points at them. A backdated mtime is set before the fsync, so
+    // the fsync keeps it too.
+    public async writeDurable(filePath: string, data: FileData, modifiedAt?: Date): Promise<number> {
         try {
             const size = await this.write(filePath, data);
+            if (modifiedAt) await fsPromises.utimes(this.getFilePath(filePath), modifiedAt, modifiedAt);
             await this.sync(filePath, 'r+');
             return size;
         } catch (error) {

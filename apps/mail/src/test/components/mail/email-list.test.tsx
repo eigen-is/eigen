@@ -39,6 +39,7 @@ const email = (id: string, subject: string): EmailSummary => ({
     recipientsAll: 'grace@example.com',
     textShort: '',
     date: new Date('2026-01-05T14:30:00Z'),
+    receivedAt: new Date('2026-01-05T14:30:00Z'),
     isRead: true,
     isFlagged: false,
     isDraft: false,
