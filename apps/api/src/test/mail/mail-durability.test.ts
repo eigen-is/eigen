@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import {
     copyFileSync,
     existsSync,
@@ -369,20 +369,51 @@ describe('Maildir write durability', () => {
         }
     });
 
-    test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
+    const sweeper = async () => {
         const home = await getHome(userId);
-        const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
-        const tmpDir = inbox('tmp');
-        const stale = join(tmpDir, 'stale.M1P1Q1.host,S=4');
-        const fresh = join(tmpDir, 'fresh.M1P1Q1.host,S=4');
-        writeFileSync(stale, 'body');
-        writeFileSync(fresh, 'body');
-        const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
-        utimesSync(stale, old, old);
+        const { store } = home.mail as unknown as { store: { cleanupStaleTemps: () => Promise<void> } };
+        return () => store.cleanupStaleTemps();
+    };
 
-        await store.cleanupStaleDraftTemps();
+    // An import stamps its staged file with the day the message arrived, so the file's own time says nothing
+    // about how long ago it was written.
+    test('an import of an old message lands when the tmp/ sweep runs between its write and its rename', async () => {
+        const home = await getHome(userId);
+        const sweep = await sweeper();
+        const realRename = fsPromises.rename;
+        let sweeps = 0;
+        const spy = spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+            if (String(from).includes('/Maildir/tmp/')) {
+                await sweep();
+                sweeps++;
+            }
+            return realRename(from, to);
+        });
 
-        expect(existsSync(stale)).toBe(false);
-        expect(existsSync(fresh)).toBe(true);
+        try {
+            const old = makeEml('Imported from last spring', { date: new Date('2026-04-20T10:00:00Z') });
+            const { id } = await home.mail.messageImport(Buffer.from(old, 'utf-8'));
+            expect(sweeps).toBe(1);
+            expect((await home.mail.mailboxGet(MAILBOX_INBOX)).some((m) => m.id === id)).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
+        const sweep = await sweeper();
+        const left = join(inbox('tmp'), 'left.M1P1Q1.host,S=4');
+        writeFileSync(left, 'body');
+
+        await sweep();
+        expect(existsSync(left)).toBe(true);
+
+        setSystemTime(new Date(Date.now() + 37 * 60 * 60 * 1000));
+        try {
+            await sweep();
+        } finally {
+            setSystemTime();
+        }
+        expect(existsSync(left)).toBe(false);
     });
 });

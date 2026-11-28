@@ -666,7 +666,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         });
     });
 
-    test('cleanupStaleDraftTemps removes old files and keeps fresh ones', async () => {
+    test('cleanupStaleTemps removes old files and keeps fresh ones', async () => {
         // Upload two temp files via the API to ensure the temp dir structure exists
         const freshFile = new File(['fresh'], 'fresh.txt', { type: 'text/plain' });
         const freshResult = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, freshFile);
@@ -689,9 +689,9 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         const { getHome } = await import('../../lib/home');
         const home = await getHome(ctx.alice.user.id);
         const maildir = home.mail as unknown as {
-            store: { cleanupStaleDraftTemps: () => Promise<void> };
+            store: { cleanupStaleTemps: () => Promise<void> };
         };
-        await maildir.store.cleanupStaleDraftTemps();
+        await maildir.store.cleanupStaleTemps();
 
         // Fresh file should still exist (uploaded moments ago)
         const { existsSync } = await import('node:fs');

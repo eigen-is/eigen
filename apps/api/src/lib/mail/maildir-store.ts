@@ -608,22 +608,12 @@ export class MaildirStore {
     }
 
     public async cleanupDraftTemp(tempId: string): Promise<void> {
-        const tempPath = this.getDraftTempPath(tempId);
-        const metaPath = this.getDraftTempMetaPath(tempId);
-        try {
-            if (await this.storage.exists(tempPath)) {
-                await this.storage.unlink(tempPath);
-            }
-        } catch {}
-        try {
-            if (await this.storage.exists(metaPath)) {
-                await this.storage.unlink(metaPath);
-            }
-        } catch {}
+        await this.storage.unlink(this.getDraftTempPath(tempId)).catch(() => {});
+        await this.storage.unlink(this.getDraftTempMetaPath(tempId)).catch(() => {});
         await this.recountStaged();
     }
 
-    public async cleanupStaleDraftTemps(): Promise<void> {
+    public async cleanupStaleTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();
@@ -648,8 +638,9 @@ export class MaildirStore {
             for (const name of await this.storage.list(tmpDir)) {
                 const filePath = path.join(tmpDir, name);
                 try {
+                    // The change time, which no writer can set: a delivery backdates a staged file's mtime.
                     const stat = await this.storage.stat(filePath);
-                    if (now - stat.mtimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
+                    if (now - stat.ctimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
                         await this.storage.unlink(filePath);
                     }
                 } catch {}
