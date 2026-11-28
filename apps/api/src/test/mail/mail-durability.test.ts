@@ -371,8 +371,8 @@ describe('Maildir write durability', () => {
 
     const sweeper = async () => {
         const home = await getHome(userId);
-        const { store } = home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } };
-        return () => store.cleanupStaleDraftTemps();
+        const { store } = home.mail as unknown as { store: { cleanupStaleTemps: () => Promise<void> } };
+        return () => store.cleanupStaleTemps();
     };
 
     // An import stamps its staged file with the day the message arrived, so the file's own time says nothing

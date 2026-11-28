@@ -608,22 +608,12 @@ export class MaildirStore {
     }
 
     public async cleanupDraftTemp(tempId: string): Promise<void> {
-        const tempPath = this.getDraftTempPath(tempId);
-        const metaPath = this.getDraftTempMetaPath(tempId);
-        try {
-            if (await this.storage.exists(tempPath)) {
-                await this.storage.unlink(tempPath);
-            }
-        } catch {}
-        try {
-            if (await this.storage.exists(metaPath)) {
-                await this.storage.unlink(metaPath);
-            }
-        } catch {}
+        await this.storage.unlink(this.getDraftTempPath(tempId)).catch(() => {});
+        await this.storage.unlink(this.getDraftTempMetaPath(tempId)).catch(() => {});
         await this.recountStaged();
     }
 
-    public async cleanupStaleDraftTemps(): Promise<void> {
+    public async cleanupStaleTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();

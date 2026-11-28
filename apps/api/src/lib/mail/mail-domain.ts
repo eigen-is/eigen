@@ -111,7 +111,7 @@ export class Mail {
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
             if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
-        this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
+        this.store.cleanupStaleTemps().catch((err) => console.error('mail: stale temp cleanup failed', err));
     }
 
     public async size(): Promise<number> {
