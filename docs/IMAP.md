@@ -31,7 +31,7 @@ A delivery lands in `new/`. Every sync first moves what is in `new/` into `cur/`
 
 Eigen's own writes skip `new/`. A flag change, a move and a delete rename or unlink in `cur/` directly, and a saved draft lands in `cur/` with its flags already in the name. None of them takes Dovecot's `dovecot-uidlist.lock`. When both rename one file at once, the losing rename fails and the next sync reads the winner's name. A move gets a new UID in the target folder, as an IMAP MOVE (COPY plus EXPUNGE) would. For a mailbox with one owner that trade is acceptable. Each of these writes fsyncs the file and the directories it touches ([§ The files are the truth](#the-files-are-the-truth-because-dovecot-writes-them-too)).
 
-Without Dovecot nothing else sweeps a `tmp/`, so Eigen does: a file a crash stranded there is removed once it is 36 hours old, the age the Maildir spec gives.
+Without Dovecot nothing else sweeps a `tmp/`, so Eigen does: a file a crash stranded there is removed once it is 36 hours old, the age the Maildir spec gives. The sweep reads that age from the file's change time, which every write sets and no writer can choose. The mtime can't tell it, because `deliver` can backdate a staged file to the day its message arrived ([§ A message's received time is its file's mtime](#a-messages-received-time-is-its-files-mtime)).
 
 ## A filename carries the id, the size and the flags
 

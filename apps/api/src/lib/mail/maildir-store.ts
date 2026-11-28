@@ -648,8 +648,9 @@ export class MaildirStore {
             for (const name of await this.storage.list(tmpDir)) {
                 const filePath = path.join(tmpDir, name);
                 try {
+                    // The change time, which no writer can set: a delivery backdates a staged file's mtime.
                     const stat = await this.storage.stat(filePath);
-                    if (now - stat.mtimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
+                    if (now - stat.ctimeMs > STALE_MAILDIR_TEMP_MAX_AGE_MS) {
                         await this.storage.unlink(filePath);
                     }
                 } catch {}
